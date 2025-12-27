@@ -39,6 +39,30 @@ func runNudge(cmd *cobra.Command, args []string) error {
 	target := args[0]
 	message := args[1]
 
+	// Identify sender for message prefix
+	sender := "unknown"
+	if roleInfo, err := GetRole(); err == nil {
+		switch roleInfo.Role {
+		case RoleMayor:
+			sender = "mayor"
+		case RoleCrew:
+			sender = fmt.Sprintf("%s/crew/%s", roleInfo.Rig, roleInfo.Polecat)
+		case RolePolecat:
+			sender = fmt.Sprintf("%s/%s", roleInfo.Rig, roleInfo.Polecat)
+		case RoleWitness:
+			sender = fmt.Sprintf("%s/witness", roleInfo.Rig)
+		case RoleRefinery:
+			sender = fmt.Sprintf("%s/refinery", roleInfo.Rig)
+		case RoleDeacon:
+			sender = "deacon"
+		default:
+			sender = string(roleInfo.Role)
+		}
+	}
+
+	// Prefix message with sender
+	message = fmt.Sprintf("[from %s] %s", sender, message)
+
 	t := tmux.NewTmux()
 
 	// Check if target is rig/polecat format or raw session name
