@@ -111,6 +111,21 @@ Examples:
 	RunE: runRigBoot,
 }
 
+var rigRebootCmd = &cobra.Command{
+	Use:   "reboot <rig>",
+	Short: "Restart witness and refinery for a rig",
+	Long: `Restart the patrol agents (witness and refinery) for a rig.
+
+This is equivalent to 'gt rig shutdown' followed by 'gt rig boot'.
+Useful after polecats complete work and land their changes.
+
+Examples:
+  gt rig reboot gastown
+  gt rig reboot beads --force`,
+	Args: cobra.ExactArgs(1),
+	RunE: runRigReboot,
+}
+
 var rigShutdownCmd = &cobra.Command{
 	Use:   "shutdown <rig>",
 	Short: "Gracefully stop all rig agents",
@@ -155,6 +170,7 @@ func init() {
 	rigCmd.AddCommand(rigAddCmd)
 	rigCmd.AddCommand(rigBootCmd)
 	rigCmd.AddCommand(rigListCmd)
+	rigCmd.AddCommand(rigRebootCmd)
 	rigCmd.AddCommand(rigRemoveCmd)
 	rigCmd.AddCommand(rigResetCmd)
 	rigCmd.AddCommand(rigShutdownCmd)
@@ -170,6 +186,8 @@ func init() {
 
 	rigShutdownCmd.Flags().BoolVarP(&rigShutdownForce, "force", "f", false, "Force immediate shutdown")
 	rigShutdownCmd.Flags().BoolVar(&rigShutdownNuclear, "nuclear", false, "DANGER: Bypass ALL safety checks (loses uncommitted work!)")
+
+	rigRebootCmd.Flags().BoolVarP(&rigShutdownForce, "force", "f", false, "Force immediate shutdown during reboot")
 }
 
 func runRigAdd(cmd *cobra.Command, args []string) error {
@@ -729,5 +747,27 @@ func runRigShutdown(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("%s Rig %s shut down successfully\n", style.Success.Render("✓"), rigName)
+	return nil
+}
+
+func runRigReboot(cmd *cobra.Command, args []string) error {
+	rigName := args[0]
+
+	fmt.Printf("Rebooting rig %s...\n\n", style.Bold.Render(rigName))
+
+	// Shutdown first
+	if err := runRigShutdown(cmd, args); err != nil {
+		// If shutdown fails due to uncommitted work, propagate the error
+		return err
+	}
+
+	fmt.Println() // Blank line between shutdown and boot
+
+	// Boot
+	if err := runRigBoot(cmd, args); err != nil {
+		return fmt.Errorf("boot failed: %w", err)
+	}
+
+	fmt.Printf("\n%s Rig %s rebooted successfully\n", style.Success.Render("✓"), rigName)
 	return nil
 }
