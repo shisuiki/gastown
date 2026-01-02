@@ -84,50 +84,143 @@ This information guides decisions in subsequent steps.
 **Exit criteria:** Context primed, starting state documented."""
 
 [[steps]]
-id = "handle-dirty-state"
-title = "Handle uncommitted and untracked work"
+id = "handle-uncommitted"
+title = "Handle uncommitted changes"
 needs = ["assess-state"]
 description = """
-Clean up any in-flight work before syncing.
+Handle staged and unstaged changes before syncing.
+
+**Check for uncommitted changes:**
+```bash
+git status --porcelain | grep -v '^??'  # Exclude untracked
+```
+
+**If no uncommitted changes:** Skip to next step.
 
 **If uncommitted changes exist:**
 
-Option A - Commit if ready:
+**Option A - Commit if ready:**
+Changes are complete enough to commit (even as WIP):
 ```bash
 git add -A && git commit -m "WIP: <description>"
 ```
 
-Option B - Stash if not ready:
+Use this when:
+- Changes are coherent (one logical unit)
+- You want to preserve them through sync
+- They're ready for potential rebase
+
+**Option B - Stash if not ready:**
+Changes are experimental or incomplete:
 ```bash
 git stash push -m "pre-sync stash $(date +%Y%m%d-%H%M%S)"
 ```
 
-**If untracked files exist:**
+Use this when:
+- Changes are scattered/incomplete
+- You're unsure if you want to keep them
+- You need to temporarily set them aside
 
-For each untracked file, decide:
-- **Keep**: Add to .gitignore or commit
-- **Delete**: `rm <file>`
-- **Stash**: Can't stash untracked directly; commit or delete
+**Exit criteria:** No staged or unstaged changes (git status clean except untracked)."""
 
-**WARN the agent**: Report untracked files prominently. They may be:
-- WIP that should be preserved
-- Build artifacts that should be gitignored
-- Cruft that should be deleted
+[[steps]]
+id = "handle-untracked"
+title = "Handle untracked files"
+needs = ["handle-uncommitted"]
+description = """
+Review and handle untracked files before syncing.
 
-Don't auto-delete without confirmation.
-
-**If stash entries exist:**
-
-List and assess:
+**List untracked files:**
 ```bash
-git stash list
-git stash show -p stash@{0}  # Preview each
+git status --porcelain | grep '^??'
 ```
 
-Old stashes (>1 week) are likely stale. Consider dropping.
-Recent stashes may contain valuable WIP - preserve or commit.
+**If no untracked files:** Skip to next step.
 
-**Exit criteria:** Working tree clean or explicitly stashed."""
+**For each untracked file, decide:**
+
+| File Type | Action |
+|-----------|--------|
+| Build artifacts (.exe, .o, *.test) | Add to .gitignore |
+| IDE/editor files (.idea/, .vscode/) | Add to .gitignore |
+| Log files (*.log) | Delete or gitignore |
+| WIP code files | Commit or delete |
+| Config with secrets | Add to .gitignore, WARN |
+| Unknown | Ask before deleting |
+
+**Actions:**
+
+- **Keep (gitignore):**
+  ```bash
+  echo "<pattern>" >> .gitignore
+  ```
+
+- **Keep (commit):**
+  ```bash
+  git add <file>
+  git commit -m "add: <file description>"
+  ```
+
+- **Delete:**
+  ```bash
+  rm <file>
+  ```
+
+**WARN the agent**: Untracked files may contain valuable WIP.
+Never auto-delete without review. When in doubt, gitignore.
+
+**Exit criteria:** All untracked files handled (committed, gitignored, or deleted)."""
+
+[[steps]]
+id = "handle-stashes"
+title = "Review and clean stash entries"
+needs = ["handle-untracked"]
+description = """
+Review stash entries and clean up old ones.
+
+**List stashes:**
+```bash
+git stash list
+```
+
+**If no stashes:** Skip to next step.
+
+**For each stash entry:**
+
+1. **Check age:**
+   ```bash
+   git log -1 --format="%ar" stash@{N}  # "2 weeks ago"
+   ```
+
+2. **Preview contents:**
+   ```bash
+   git stash show stash@{N}           # Files changed
+   git stash show -p stash@{N}        # Full diff
+   ```
+
+**Decision matrix:**
+
+| Age | Contents | Action |
+|-----|----------|--------|
+| < 1 week | Valuable WIP | Keep or apply |
+| < 1 week | Obsolete | Drop |
+| > 1 week | Any | Likely stale, consider dropping |
+| > 1 month | Any | Almost certainly stale, drop |
+
+**Actions:**
+
+- **Keep:** Leave in stash list (no action)
+- **Apply:** `git stash apply stash@{N}` then handle as uncommitted
+- **Drop:** `git stash drop stash@{N}`
+
+**Caution:** Stash indices shift when you drop! Drop from highest index first:
+```bash
+git stash drop stash@{2}  # Drop this first
+git stash drop stash@{1}  # Then this
+git stash drop stash@{0}  # Then this
+```
+
+**Exit criteria:** Stash reviewed, old/stale entries dropped."""
 
 [[steps]]
 id = "sync-git"
@@ -374,7 +467,7 @@ However, they must be tracked.
 [[steps]]
 id = "cleanup-worktrees"
 title = "Clean up stale worktrees"
-needs = ["handle-dirty-state"]
+needs = ["handle-stashes"]
 description = """
 Remove orphaned worktrees from cross-rig work.
 
