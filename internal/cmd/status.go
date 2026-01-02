@@ -174,11 +174,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Pre-fetch all hook beads (referenced in agent beads) in a single query
+	// Use the HookBead field from the database column, not parsed from description.
 	var allHookIDs []string
 	for _, issue := range allAgentBeads {
-		fields := beads.ParseAgentFields(issue.Description)
-		if fields != nil && fields.HookBead != "" {
-			allHookIDs = append(allHookIDs, fields.HookBead)
+		if issue.HookBead != "" {
+			allHookIDs = append(allHookIDs, issue.HookBead)
 		}
 	}
 	allHookBeads, _ := agentBeads.ShowMultiple(allHookIDs)

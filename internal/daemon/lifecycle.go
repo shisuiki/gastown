@@ -654,6 +654,8 @@ func (d *Daemon) getAgentBeadInfo(agentBeadID string) (*AgentBeadInfo, error) {
 		Type        string `json:"issue_type"`
 		Description string `json:"description"`
 		UpdatedAt   string `json:"updated_at"`
+		HookBead    string `json:"hook_bead"`    // Read from database column
+		AgentState  string `json:"agent_state"` // Read from database column
 	}
 
 	if err := json.Unmarshal(output, &issues); err != nil {
@@ -669,7 +671,7 @@ func (d *Daemon) getAgentBeadInfo(agentBeadID string) (*AgentBeadInfo, error) {
 		return nil, fmt.Errorf("bead %s is not an agent bead (type=%s)", agentBeadID, issue.Type)
 	}
 
-	// Use shared parsing from beads package
+	// Parse agent fields from description for role/state info
 	fields := beads.ParseAgentFieldsFromDescription(issue.Description)
 
 	info := &AgentBeadInfo{
@@ -680,11 +682,14 @@ func (d *Daemon) getAgentBeadInfo(agentBeadID string) (*AgentBeadInfo, error) {
 
 	if fields != nil {
 		info.State = fields.AgentState
-		info.HookBead = fields.HookBead
 		info.RoleBead = fields.RoleBead
 		info.RoleType = fields.RoleType
 		info.Rig = fields.Rig
 	}
+
+	// Use HookBead from database column directly (not from description)
+	// The description may contain stale data - the slot is the source of truth.
+	info.HookBead = issue.HookBead
 
 	return info, nil
 }
@@ -872,6 +877,8 @@ func (d *Daemon) checkRigGUPPViolations(rigName string) {
 		Type        string `json:"issue_type"`
 		Description string `json:"description"`
 		UpdatedAt   string `json:"updated_at"`
+		HookBead    string `json:"hook_bead"` // Read from database column, not description
+		AgentState  string `json:"agent_state"`
 	}
 
 	if err := json.Unmarshal(output, &agents); err != nil {
@@ -885,19 +892,14 @@ func (d *Daemon) checkRigGUPPViolations(rigName string) {
 			continue
 		}
 
-		// Parse agent fields
-		fields := beads.ParseAgentFieldsFromDescription(agent.Description)
-		if fields == nil {
-			continue
-		}
-
 		// Check if agent has work on hook
-		if fields.HookBead == "" {
+		// Use HookBead from database column directly (not parsed from description)
+		if agent.HookBead == "" {
 			continue // No hooked work - no GUPP violation possible
 		}
 
 		// Check if agent is actively working
-		if fields.AgentState == "working" || fields.AgentState == "running" {
+		if agent.AgentState == "working" || agent.AgentState == "running" {
 			// Check when the agent bead was last updated
 			updatedAt, err := time.Parse(time.RFC3339, agent.UpdatedAt)
 			if err != nil {
@@ -907,10 +909,10 @@ func (d *Daemon) checkRigGUPPViolations(rigName string) {
 			age := time.Since(updatedAt)
 			if age > GUPPViolationTimeout {
 				d.logger.Printf("GUPP violation: agent %s has hook_bead=%s but hasn't updated in %v (timeout: %v)",
-					agent.ID, fields.HookBead, age.Round(time.Minute), GUPPViolationTimeout)
+					agent.ID, agent.HookBead, age.Round(time.Minute), GUPPViolationTimeout)
 
 				// Notify the witness for this rig
-				d.notifyWitnessOfGUPP(rigName, agent.ID, fields.HookBead, age)
+				d.notifyWitnessOfGUPP(rigName, agent.ID, agent.HookBead, age)
 			}
 		}
 	}
@@ -948,28 +950,31 @@ func (d *Daemon) checkOrphanedWork() {
 	}
 
 	// For each dead agent, check if they have hooked work
+	// Use HookBead from database column directly (not parsed from description)
 	for _, agent := range deadAgents {
-		fields := beads.ParseAgentFieldsFromDescription(agent.Description)
-		if fields == nil || fields.HookBead == "" {
+		if agent.HookBead == "" {
 			continue // No hooked work to orphan
 		}
 
 		d.logger.Printf("Orphaned work detected: agent %s is dead but has hook_bead=%s",
-			agent.ID, fields.HookBead)
+			agent.ID, agent.HookBead)
 
 		// Determine the rig from the agent ID (gt-polecat-<rig>-<name>)
 		rigName := d.extractRigFromAgentID(agent.ID)
 		if rigName != "" {
-			d.notifyWitnessOfOrphanedWork(rigName, agent.ID, fields.HookBead)
+			d.notifyWitnessOfOrphanedWork(rigName, agent.ID, agent.HookBead)
 		}
 	}
 }
 
+// deadAgentInfo holds info about a dead agent for orphaned work detection.
+type deadAgentInfo struct {
+	ID       string
+	HookBead string // Read from database column, not description
+}
+
 // getDeadAgents returns all agent beads with state=dead.
-func (d *Daemon) getDeadAgents() []struct {
-	ID          string
-	Description string
-} {
+func (d *Daemon) getDeadAgents() []deadAgentInfo {
 	cmd := exec.Command("bd", "list", "--type=agent", "--json")
 	cmd.Dir = d.config.TownRoot
 
@@ -979,27 +984,23 @@ func (d *Daemon) getDeadAgents() []struct {
 	}
 
 	var agents []struct {
-		ID          string `json:"id"`
-		Type        string `json:"issue_type"`
-		Description string `json:"description"`
+		ID         string `json:"id"`
+		Type       string `json:"issue_type"`
+		HookBead   string `json:"hook_bead"`    // Read from database column
+		AgentState string `json:"agent_state"` // Read from database column
 	}
 
 	if err := json.Unmarshal(output, &agents); err != nil {
 		return nil
 	}
 
-	var dead []struct {
-		ID          string
-		Description string
-	}
-
+	var dead []deadAgentInfo
 	for _, agent := range agents {
-		fields := beads.ParseAgentFieldsFromDescription(agent.Description)
-		if fields != nil && fields.AgentState == "dead" {
-			dead = append(dead, struct {
-				ID          string
-				Description string
-			}{agent.ID, agent.Description})
+		if agent.AgentState == "dead" {
+			dead = append(dead, deadAgentInfo{
+				ID:       agent.ID,
+				HookBead: agent.HookBead,
+			})
 		}
 	}
 

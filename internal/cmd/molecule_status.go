@@ -322,11 +322,13 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 		if err == nil && agentBead != nil && agentBead.Type == "agent" {
 			status.AgentBeadID = agentBeadID
 
-			// Parse hook_bead from the agent bead's description
-			agentFields := beads.ParseAgentFieldsFromDescription(agentBead.Description)
-			if agentFields != nil && agentFields.HookBead != "" {
+			// Read hook_bead from the agent bead's database field (not description!)
+			// The hook_bead column is updated by `bd slot set` in UpdateAgentState.
+			// IMPORTANT: Don't use ParseAgentFieldsFromDescription - the description
+			// field may contain stale data, causing the wrong issue to be hooked.
+			if agentBead.HookBead != "" {
 				// Fetch the bead on the hook
-				hookBead, err = b.Show(agentFields.HookBead)
+				hookBead, err = b.Show(agentBead.HookBead)
 				if err != nil {
 					// Hook bead referenced but not found - report error but continue
 					hookBead = nil
