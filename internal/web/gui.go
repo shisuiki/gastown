@@ -634,7 +634,22 @@ const dashboardHTML = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gas Town Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'gt-dark': '#1a1a2e',
+                        'gt-card': '#16213e',
+                        'gt-input': '#0f172a',
+                        'gt-border': '#333333',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -664,7 +679,7 @@ const dashboardHTML = `<!DOCTYPE html>
         .status-green { background: #4ade80; box-shadow: 0 0 10px #4ade80; }
         .status-yellow { background: #fbbf24; box-shadow: 0 0 10px #fbbf24; }
         .status-red { background: #f87171; box-shadow: 0 0 10px #f87171; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
         .card {
             background: #16213e;
             border-radius: 12px;
@@ -791,6 +806,42 @@ const dashboardHTML = `<!DOCTYPE html>
             border: 1px solid #1f2a44;
             white-space: pre-wrap;
         }
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .container { padding: 12px; }
+            header { padding: 12px 0; margin-bottom: 12px; }
+            h1 { font-size: 1.2rem; }
+            .grid { grid-template-columns: 1fr; gap: 12px; }
+            .card { padding: 15px; }
+            .card h2 { font-size: 0.9rem; margin-bottom: 10px; }
+            .terminal-output {
+                min-height: 150px;
+                max-height: 300px;
+                padding: 12px;
+                font-size: 0.75rem;
+            }
+            .chat-container { height: 300px; }
+            .chat-input input { padding: 10px 12px; }
+            .chat-input button { padding: 10px 16px; }
+            table { font-size: 0.8rem; }
+            th, td { padding: 6px 8px; }
+            /* Mayor panel mobile grid */
+            .mayor-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        @media (max-width: 480px) {
+            .container { padding: 8px; }
+            h1 { font-size: 1rem; }
+            .card { padding: 12px; border-radius: 8px; }
+            .terminal-output { font-size: 0.7rem; padding: 10px; }
+            .chat-messages { padding: 10px; }
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
     </style>
 </head>
 <body>
@@ -803,7 +854,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <!-- Mayor Control Panel - Primary Interface -->
         <div class="card" style="margin-bottom: 20px; border: 2px solid #3b82f6;">
             <h2>🏛️ Mayor Control <span class="status-indicator" id="mayor-status"></span> <span id="mayor-hook" style="font-size: 0.75rem; color: #64748b; margin-left: 10px;"></span></h2>
-            <div style="display: grid; grid-template-columns: 1fr 350px; gap: 20px;">
+            <div class="mayor-grid" style="display: grid; grid-template-columns: 1fr 350px; gap: 20px;">
                 <div>
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <span style="color: #64748b; font-size: 0.8rem;">Mayor Terminal (hq-mayor)</span>
@@ -840,14 +891,14 @@ const dashboardHTML = `<!DOCTYPE html>
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>📬 Mail Center</h2>
                 <div class="card-content">
-                    <div style="display: flex; gap: 20px; margin-bottom: 15px;">
-                        <div style="flex: 1;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+                        <div style="flex: 1; min-width: 200px;">
                             <label style="color: #64748b; font-size: 0.8rem;">View Inbox For:</label>
                             <select id="mail-agent-select" onchange="loadAgentMail()" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff; margin-top: 5px;">
                                 <option value="mayor/">Mayor</option>
                             </select>
                         </div>
-                        <div style="flex: 1;">
+                        <div style="flex: 1; min-width: 200px;">
                             <label style="color: #64748b; font-size: 0.8rem;">Send To:</label>
                             <select id="mail-to-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff; margin-top: 5px;">
                                 <option value="mayor/">Mayor</option>
