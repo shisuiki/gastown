@@ -35,6 +35,9 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/rigs", h.handleAPIRigs)
 	h.mux.HandleFunc("/api/convoys", h.handleAPIConvoys)
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
+	h.mux.HandleFunc("/api/crew", h.handleAPICrew)
+	h.mux.HandleFunc("/api/crew/attach", h.handleAPICrewAttach)
+	h.mux.HandleFunc("/api/crew/", h.handleAPICrewDetail)
 
 	return h, nil
 }
@@ -45,13 +48,14 @@ func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // StatusResponse represents the full town status.
 type StatusResponse struct {
-	Timestamp  time.Time       `json:"timestamp"`
-	Daemon     DaemonStatus    `json:"daemon"`
-	Rigs       []RigStatus     `json:"rigs"`
-	Convoys    []ConvoyRow     `json:"convoys"`
-	MergeQueue []MergeQueueRow `json:"merge_queue"`
-	Polecats   []PolecatRow    `json:"polecats"`
-	Mail       MailStatus      `json:"mail"`
+	Timestamp  time.Time          `json:"timestamp"`
+	Daemon     DaemonStatus       `json:"daemon"`
+	Rigs       []RigStatus        `json:"rigs"`
+	Convoys    []ConvoyRow        `json:"convoys"`
+	MergeQueue []MergeQueueRow    `json:"merge_queue"`
+	Polecats   []PolecatRow       `json:"polecats"`
+	Mail       MailStatus         `json:"mail"`
+	CrewWorkers []CrewWorkerStatus `json:"crew_workers"`
 }
 
 // DaemonStatus represents daemon health.
@@ -74,6 +78,16 @@ type RigStatus struct {
 type MailStatus struct {
 	Unread int `json:"unread"`
 	Total  int `json:"total"`
+}
+
+// CrewWorkerStatus represents a crew worker's status for the web UI.
+type CrewWorkerStatus struct {
+	Name       string `json:"name"`
+	Rig        string `json:"rig"`
+	Branch     string `json:"branch"`
+	Path       string `json:"path"`
+	HasSession bool   `json:"has_session"`
+	GitClean   bool   `json:"git_clean"`
 }
 
 func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +184,9 @@ func (h *GUIHandler) buildStatus() StatusResponse {
 
 	// Get mail status
 	status.Mail = h.getMailStatus()
+
+	// Get crew workers
+	status.CrewWorkers = h.getCrewWorkers()
 
 	return status
 }
@@ -290,6 +307,82 @@ func (h *GUIHandler) handleAPIConvoys(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(convoys)
 }
 
+func (h *GUIHandler) handleAPICrew(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	crewWorkers := h.getCrewWorkers()
+	json.NewEncoder(w).Encode(crewWorkers)
+}
+
+func (h *GUIHandler) handleAPICrewAttach(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Rig  string `json:"rig"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Rig == "" || req.Name == "" {
+		http.Error(w, "Missing rig or name", http.StatusBadRequest)
+		return
+	}
+
+	// Execute gt crew at <rig>/<name>
+	cmd := exec.Command("gt", "crew", "at", fmt.Sprintf("%s/%s", req.Rig, req.Name))
+	output, err := cmd.CombinedOutput()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": err == nil,
+		"output":  string(output),
+		"error":   err != nil,
+	})
+}
+
+func (h *GUIHandler) handleAPICrewDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse path: /api/crew/{rig}/{name}
+	path := strings.TrimPrefix(r.URL.Path, "/api/crew/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 {
+		http.Error(w, "Invalid path, expected /api/crew/{rig}/{name}", http.StatusBadRequest)
+		return
+	}
+	rig, name := parts[0], parts[1]
+
+	// Get all crew workers and find the matching one
+	crewWorkers := h.getCrewWorkers()
+	var found *CrewWorkerStatus
+	for _, worker := range crewWorkers {
+		if worker.Rig == rig && worker.Name == name {
+			found = &worker
+			break
+		}
+	}
+
+	if found == nil {
+		http.Error(w, "Crew worker not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(found)
+}
+
 func (h *GUIHandler) getDaemonStatus() DaemonStatus {
 	cmd := exec.Command("gt", "daemon", "status")
 	output, err := cmd.CombinedOutput()
@@ -368,6 +461,21 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 	return MailStatus{
 		Unread: unread,
 	}
+}
+
+func (h *GUIHandler) getCrewWorkers() []CrewWorkerStatus {
+	cmd := exec.Command("gt", "crew", "list", "--all", "--json")
+	output, err := cmd.Output()
+	if err != nil {
+		// If command fails (e.g., no crew workers), return empty slice
+		return nil
+	}
+
+	var crewWorkers []CrewWorkerStatus
+	if err := json.Unmarshal(output, &crewWorkers); err != nil {
+		return nil
+	}
+	return crewWorkers
 }
 
 var tmuxSessionNamePattern = regexp.MustCompile(`^gt-[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+$`)
@@ -640,6 +748,11 @@ const dashboardHTML = `<!DOCTYPE html>
             </div>
 
             <div class="card">
+                <h2>👥 Crew Workers</h2>
+                <div class="card-content" id="crew-list">Loading...</div>
+            </div>
+
+            <div class="card">
                 <h2>📬 Mail</h2>
                 <div class="card-content" id="mail-status">Loading...</div>
             </div>
@@ -724,6 +837,14 @@ const dashboardHTML = `<!DOCTYPE html>
                 : '<p>No polecats running</p>';
             document.getElementById('polecats-list').innerHTML = polecatsHtml;
             updateTerminalSessions(data.polecats || []);
+
+            // Update crew workers
+            const crewHtml = data.crew_workers && data.crew_workers.length > 0
+                ? '<table><tr><th>Name</th><th>Rig</th><th>Branch</th><th>Session</th><th>Git</th></tr>' +
+                  data.crew_workers.map(c => '<tr><td>' + c.name + '</td><td>' + c.rig + '</td><td>' + c.branch + '</td><td>' + (c.has_session ? '●' : '○') + '</td><td>' + (c.git_clean ? 'clean' : 'dirty') + '</td></tr>').join('') +
+                  '</table>'
+                : '<p>No crew workspaces found</p>';
+            document.getElementById('crew-list').innerHTML = crewHtml;
 
             // Update mail
             document.getElementById('mail-status').innerHTML =
