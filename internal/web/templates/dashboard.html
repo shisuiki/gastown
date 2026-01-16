@@ -259,7 +259,13 @@
             </div>
 
             <div class="card" style="grid-column: 1 / -1;">
+                <h2>📝 Recent Activity</h2>
+                <div class="card-content" id="activity-list" style="max-height: 250px; overflow-y: auto;">Loading...</div>
+            </div>
+
+            <div class="card" style="grid-column: 1 / -1;">
                 <h2>📬 Mail Center</h2>
+                <div id="mail-status" style="margin-bottom: 10px; color: #94a3b8;"></div>
                 <div class="card-content">
                     <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
                         <div style="flex: 1; min-width: 200px;">
@@ -723,9 +729,36 @@
         // Update mayor status every 5 seconds
         setInterval(updateMayorStatus, 5000);
 
+        // Activity/Commits functions
+        async function loadActivity() {
+            try {
+                const res = await fetch('/api/activity');
+                const data = await res.json();
+                const container = document.getElementById('activity-list');
+
+                if (data.commits && data.commits.length > 0) {
+                    container.innerHTML = '<table style="width: 100%;"><tr><th>Hash</th><th>Message</th><th>Author</th><th>Age</th></tr>' +
+                        data.commits.map(c =>
+                            '<tr><td><code style="color: #60a5fa;">' + escapeHtml(c.hash) + '</code></td>' +
+                            '<td>' + escapeHtml(c.message) + '</td>' +
+                            '<td style="color: #94a3b8;">' + escapeHtml(c.author) + '</td>' +
+                            '<td style="color: #64748b;">' + escapeHtml(c.age) + '</td></tr>'
+                        ).join('') + '</table>';
+                } else {
+                    container.innerHTML = '<p style="color: #64748b;">No recent commits</p>';
+                }
+            } catch (e) {
+                document.getElementById('activity-list').innerHTML = '<p style="color: #f87171;">Error loading activity: ' + e.message + '</p>';
+            }
+        }
+
         // Initialize
         updateMayorStatus();
         loadAgentsList();
+        loadActivity();
+
+        // Refresh activity every 30 seconds
+        setInterval(loadActivity, 30000);
 
         // Start WebSocket updates
         connectStatusSocket();
