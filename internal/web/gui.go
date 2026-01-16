@@ -38,6 +38,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/crew", h.handleAPICrew)
 	h.mux.HandleFunc("/api/crew/attach", h.handleAPICrewAttach)
 	h.mux.HandleFunc("/api/crew/", h.handleAPICrewDetail)
+	h.mux.HandleFunc("/api/beads", h.handleAPIBeads)
 
 	return h, nil
 }
@@ -564,6 +565,45 @@ func writeSSE(w http.ResponseWriter, event, data string) {
 	fmt.Fprint(w, "\n")
 }
 
+func (h *GUIHandler) handleAPIBeads(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get query parameters for filtering
+	status := r.URL.Query().Get("status")
+	beadType := r.URL.Query().Get("type")
+	limit := r.URL.Query().Get("limit")
+
+	args := []string{"list", "--json"}
+	if status != "" {
+		args = append(args, "--status", status)
+	}
+	if beadType != "" {
+		args = append(args, "--type", beadType)
+	}
+	if limit != "" {
+		args = append(args, "--limit", limit)
+	} else {
+		args = append(args, "--limit", "50")
+	}
+
+	cmd := exec.Command("bd", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"beads": []interface{}{},
+			"error": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(output)
+}
+
 const dashboardHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -917,8 +957,30 @@ const dashboardHTML = `<!DOCTYPE html>
 
                 <!-- Issues Tab -->
                 <div id="issues" class="tab-content">
-                    <h2>Issue Tracking</h2>
-                    <p>Beads issue tracking and management interface.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 style="margin: 0;">📿 Beads Issue Tracking</h2>
+                        <div style="display: flex; gap: 10px;">
+                            <select id="beads-status-filter" onchange="fetchBeads()" style="padding: 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0; border: 1px solid #333;">
+                                <option value="">All Statuses</option>
+                                <option value="open">Open</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="blocked">Blocked</option>
+                                <option value="closed">Closed</option>
+                            </select>
+                            <select id="beads-type-filter" onchange="fetchBeads()" style="padding: 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0; border: 1px solid #333;">
+                                <option value="">All Types</option>
+                                <option value="bug">Bug</option>
+                                <option value="feature">Feature</option>
+                                <option value="task">Task</option>
+                                <option value="epic">Epic</option>
+                                <option value="chore">Chore</option>
+                            </select>
+                            <button onclick="fetchBeads()" style="padding: 8px 16px; border-radius: 6px; background: #3b82f6; color: white; border: none; cursor: pointer;">Refresh</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-content" id="beads-list">Loading beads...</div>
+                    </div>
                 </div>
 
                 <!-- Convoys Tab -->
@@ -1000,6 +1062,11 @@ const dashboardHTML = `<!DOCTYPE html>
                 const newPath = tabId === 'dashboard' ? '/' : '/' + tabId;
                 history.pushState({ tab: tabId }, '', newPath);
             }
+
+            // Load tab-specific data
+            if (tabId === 'issues') {
+                fetchBeads();
+            }
         }
 
         function connectStatusSocket() {
@@ -1078,6 +1145,74 @@ const dashboardHTML = `<!DOCTYPE html>
             if (color === 'yellow' || color === 'activity-yellow') return 'yellow';
             if (color === 'red' || color === 'activity-red') return 'red';
             return 'blue';
+        }
+
+        async function fetchBeads() {
+            const beadsList = document.getElementById('beads-list');
+            if (!beadsList) return;
+
+            const statusFilter = document.getElementById('beads-status-filter');
+            const typeFilter = document.getElementById('beads-type-filter');
+
+            let url = '/api/beads?limit=50';
+            if (statusFilter && statusFilter.value) {
+                url += '&status=' + encodeURIComponent(statusFilter.value);
+            }
+            if (typeFilter && typeFilter.value) {
+                url += '&type=' + encodeURIComponent(typeFilter.value);
+            }
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) {
+                    beadsList.innerHTML = '<p style="color: #f87171;">Error: ' + data.error + '</p>';
+                    return;
+                }
+
+                if (!data || data.length === 0) {
+                    beadsList.innerHTML = '<p>No beads found matching the filters.</p>';
+                    return;
+                }
+
+                const statusBadge = (status) => {
+                    const colors = {
+                        'open': 'blue',
+                        'in_progress': 'yellow',
+                        'blocked': 'red',
+                        'closed': 'green'
+                    };
+                    return '<span class="badge badge-' + (colors[status] || 'blue') + '">' + (status || 'unknown') + '</span>';
+                };
+
+                const typeBadge = (type) => {
+                    const colors = {
+                        'bug': 'red',
+                        'feature': 'green',
+                        'task': 'blue',
+                        'epic': 'yellow',
+                        'chore': 'blue'
+                    };
+                    return '<span class="badge badge-' + (colors[type] || 'blue') + '">' + (type || '-') + '</span>';
+                };
+
+                const html = '<table><tr><th>ID</th><th>Type</th><th>Priority</th><th>Title</th><th>Status</th><th>Assignee</th></tr>' +
+                    data.map(b =>
+                        '<tr>' +
+                        '<td style="font-family: monospace; font-size: 0.8rem;">' + (b.id || '-') + '</td>' +
+                        '<td>' + typeBadge(b.type) + '</td>' +
+                        '<td>P' + (b.priority !== undefined ? b.priority : '-') + '</td>' +
+                        '<td>' + ((b.title || '').substring(0, 50) + (b.title && b.title.length > 50 ? '...' : '')) + '</td>' +
+                        '<td>' + statusBadge(b.status) + '</td>' +
+                        '<td>' + (b.assignee || '-') + '</td>' +
+                        '</tr>'
+                    ).join('') +
+                    '</table>';
+                beadsList.innerHTML = html;
+            } catch (e) {
+                beadsList.innerHTML = '<p style="color: #f87171;">Failed to load beads: ' + e.message + '</p>';
+            }
         }
 
         async function sendMessage() {
