@@ -63,6 +63,7 @@ func (h *GUIHandler) handleAPIMayorTerminal(w http.ResponseWriter, r *http.Reque
 	defer ticker.Stop()
 
 	lastFrame := ""
+	noChangeCount := 0
 	for {
 		select {
 		case <-r.Context().Done():
@@ -76,8 +77,16 @@ func (h *GUIHandler) handleAPIMayorTerminal(w http.ResponseWriter, r *http.Reque
 			}
 			frame = strings.TrimRight(frame, "\n")
 			if frame == lastFrame {
+				noChangeCount++
+				// Send keepalive every 15 seconds to prevent mobile timeout
+				if noChangeCount >= 15 {
+					writeSSE(w, "ping", "keepalive")
+					flusher.Flush()
+					noChangeCount = 0
+				}
 				continue
 			}
+			noChangeCount = 0
 			lastFrame = frame
 			writeSSE(w, "frame", frame)
 			flusher.Flush()
@@ -583,6 +592,7 @@ func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Requ
 	defer ticker.Stop()
 
 	lastFrame := ""
+	noChangeCount := 0
 	for {
 		select {
 		case <-r.Context().Done():
@@ -596,8 +606,16 @@ func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Requ
 			}
 			frame = strings.TrimRight(frame, "\n")
 			if frame == lastFrame {
+				noChangeCount++
+				// Send keepalive every 15 seconds to prevent mobile timeout
+				if noChangeCount >= 15 {
+					writeSSE(w, "ping", "keepalive")
+					flusher.Flush()
+					noChangeCount = 0
+				}
 				continue
 			}
+			noChangeCount = 0
 			lastFrame = frame
 			writeSSE(w, "frame", frame)
 			flusher.Flush()
