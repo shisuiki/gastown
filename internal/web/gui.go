@@ -31,16 +31,84 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/ws/status", h.handleStatusWS)
 	h.mux.HandleFunc("/api/mail/send", h.handleAPISendMail)
 	h.mux.HandleFunc("/api/mail/inbox", h.handleAPIMailInbox)
+	h.mux.HandleFunc("/api/mail/all", h.handleAPIMailAll)
+	h.mux.HandleFunc("/api/agents/list", h.handleAPIAgentsList)
 	h.mux.HandleFunc("/api/command", h.handleAPICommand)
 	h.mux.HandleFunc("/api/rigs", h.handleAPIRigs)
 	h.mux.HandleFunc("/api/convoys", h.handleAPIConvoys)
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
-	h.mux.HandleFunc("/api/crew", h.handleAPICrew)
-	h.mux.HandleFunc("/api/crew/attach", h.handleAPICrewAttach)
-	h.mux.HandleFunc("/api/crew/", h.handleAPICrewDetail)
-	h.mux.HandleFunc("/api/beads", h.handleAPIBeads)
+	h.mux.HandleFunc("/api/mayor/terminal", h.handleAPIMayorTerminal)
+	h.mux.HandleFunc("/api/mayor/status", h.handleAPIMayorStatus)
 
 	return h, nil
+}
+
+// handleAPIMayorTerminal streams the mayor's tmux session output
+func (h *GUIHandler) handleAPIMayorTerminal(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	lastFrame := ""
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			frame, err := captureTmuxPane("hq-mayor")
+			if err != nil {
+				writeSSE(w, "error", err.Error())
+				flusher.Flush()
+				return
+			}
+			frame = strings.TrimRight(frame, "\n")
+			if frame == lastFrame {
+				continue
+			}
+			lastFrame = frame
+			writeSSE(w, "frame", frame)
+			flusher.Flush()
+		}
+	}
+}
+
+// handleAPIMayorStatus returns mayor session status
+func (h *GUIHandler) handleAPIMayorStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check if mayor session exists
+	cmd := exec.Command("tmux", "has-session", "-t", "hq-mayor")
+	sessionExists := cmd.Run() == nil
+
+	// Get hook status
+	hookCmd := exec.Command("gt", "hook")
+	hookOutput, _ := hookCmd.Output()
+
+	// Get mail count
+	mailCmd := exec.Command("gt", "mail", "inbox", "mayor/", "--json")
+	mailOutput, _ := mailCmd.Output()
+
+	var mailCount int
+	var messages []interface{}
+	if err := json.Unmarshal(mailOutput, &messages); err == nil {
+		mailCount = len(messages)
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"session_exists": sessionExists,
+		"session_name":   "hq-mayor",
+		"hook":           strings.TrimSpace(string(hookOutput)),
+		"mail_count":     mailCount,
+	})
 }
 
 func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -49,14 +117,13 @@ func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // StatusResponse represents the full town status.
 type StatusResponse struct {
-	Timestamp  time.Time          `json:"timestamp"`
-	Daemon     DaemonStatus       `json:"daemon"`
-	Rigs       []RigStatus        `json:"rigs"`
-	Convoys    []ConvoyRow        `json:"convoys"`
-	MergeQueue []MergeQueueRow    `json:"merge_queue"`
-	Polecats   []PolecatRow       `json:"polecats"`
-	Mail       MailStatus         `json:"mail"`
-	CrewWorkers []CrewWorkerStatus `json:"crew_workers"`
+	Timestamp  time.Time       `json:"timestamp"`
+	Daemon     DaemonStatus    `json:"daemon"`
+	Rigs       []RigStatus     `json:"rigs"`
+	Convoys    []ConvoyRow     `json:"convoys"`
+	MergeQueue []MergeQueueRow `json:"merge_queue"`
+	Polecats   []PolecatRow    `json:"polecats"`
+	Mail       MailStatus      `json:"mail"`
 }
 
 // DaemonStatus represents daemon health.
@@ -81,23 +148,8 @@ type MailStatus struct {
 	Total  int `json:"total"`
 }
 
-// CrewWorkerStatus represents a crew worker's status for the web UI.
-type CrewWorkerStatus struct {
-	Name       string `json:"name"`
-	Rig        string `json:"rig"`
-	Branch     string `json:"branch"`
-	Path       string `json:"path"`
-	HasSession bool   `json:"has_session"`
-	GitClean   bool   `json:"git_clean"`
-}
-
 func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	// SPA routing: serve the dashboard HTML for all non-API paths
-	// The client-side JavaScript router handles /issues, /crew, /convoys, etc.
-	path := r.URL.Path
-
-	// Skip paths that are explicitly handled by other routes
-	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/ws/") {
+	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
@@ -191,9 +243,6 @@ func (h *GUIHandler) buildStatus() StatusResponse {
 	// Get mail status
 	status.Mail = h.getMailStatus()
 
-	// Get crew workers
-	status.CrewWorkers = h.getCrewWorkers()
-
 	return status
 }
 
@@ -254,6 +303,110 @@ func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) 
 	w.Write(output)
 }
 
+// handleAPIMailAll gets mail for any agent
+func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	agent := r.URL.Query().Get("agent")
+	if agent == "" {
+		agent = "mayor/"
+	}
+
+	// Get inbox for specific agent
+	cmd := exec.Command("gt", "mail", "inbox", agent, "--json")
+	output, err := cmd.Output()
+	if err != nil {
+		// Try without --json if it fails
+		cmd2 := exec.Command("gt", "mail", "inbox", agent)
+		output2, _ := cmd2.CombinedOutput()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"agent":   agent,
+			"raw":     string(output2),
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// Parse and forward the JSON
+	var messages interface{}
+	if err := json.Unmarshal(output, &messages); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"agent": agent,
+			"raw":   string(output),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"agent":    agent,
+		"messages": messages,
+	})
+}
+
+// handleAPIAgentsList returns all available agents for mail recipients
+func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	agents := []map[string]string{
+		{"address": "mayor/", "name": "Mayor", "type": "mayor"},
+		{"address": "deacon/", "name": "Deacon", "type": "deacon"},
+	}
+
+	// Get crew from all rigs
+	cmd := exec.Command("gt", "crew", "list", "--all")
+	output, err := cmd.Output()
+	if err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			// Parse lines like "  ● gastown/flux"
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "●") || strings.HasPrefix(line, "○") {
+				parts := strings.Fields(line)
+				if len(parts) >= 2 {
+					name := parts[1]
+					agents = append(agents, map[string]string{
+						"address": name + "/",
+						"name":    name,
+						"type":    "crew",
+					})
+				}
+			}
+		}
+	}
+
+	// Get polecats
+	cmd = exec.Command("gt", "polecat", "list", "--all")
+	output, err = cmd.Output()
+	if err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.Contains(line, "/") && !strings.HasPrefix(line, "No") {
+				parts := strings.Fields(line)
+				if len(parts) >= 1 {
+					name := parts[0]
+					agents = append(agents, map[string]string{
+						"address": name + "/",
+						"name":    name,
+						"type":    "polecat",
+					})
+				}
+			}
+		}
+	}
+
+	// Add witness and refinery for each rig
+	rigs := h.getRigs()
+	for _, rig := range rigs {
+		agents = append(agents,
+			map[string]string{"address": rig.Name + "/witness/", "name": rig.Name + " Witness", "type": "witness"},
+			map[string]string{"address": rig.Name + "/refinery/", "name": rig.Name + " Refinery", "type": "refinery"},
+		)
+	}
+
+	json.NewEncoder(w).Encode(agents)
+}
+
 func (h *GUIHandler) handleAPICommand(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -311,82 +464,6 @@ func (h *GUIHandler) handleAPIConvoys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(convoys)
-}
-
-func (h *GUIHandler) handleAPICrew(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	crewWorkers := h.getCrewWorkers()
-	json.NewEncoder(w).Encode(crewWorkers)
-}
-
-func (h *GUIHandler) handleAPICrewAttach(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		Rig  string `json:"rig"`
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if req.Rig == "" || req.Name == "" {
-		http.Error(w, "Missing rig or name", http.StatusBadRequest)
-		return
-	}
-
-	// Execute gt crew at <rig>/<name>
-	cmd := exec.Command("gt", "crew", "at", fmt.Sprintf("%s/%s", req.Rig, req.Name))
-	output, err := cmd.CombinedOutput()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": err == nil,
-		"output":  string(output),
-		"error":   err != nil,
-	})
-}
-
-func (h *GUIHandler) handleAPICrewDetail(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse path: /api/crew/{rig}/{name}
-	path := strings.TrimPrefix(r.URL.Path, "/api/crew/")
-	parts := strings.Split(path, "/")
-	if len(parts) != 2 {
-		http.Error(w, "Invalid path, expected /api/crew/{rig}/{name}", http.StatusBadRequest)
-		return
-	}
-	rig, name := parts[0], parts[1]
-
-	// Get all crew workers and find the matching one
-	crewWorkers := h.getCrewWorkers()
-	var found *CrewWorkerStatus
-	for _, worker := range crewWorkers {
-		if worker.Rig == rig && worker.Name == name {
-			found = &worker
-			break
-		}
-	}
-
-	if found == nil {
-		http.Error(w, "Crew worker not found", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(found)
 }
 
 func (h *GUIHandler) getDaemonStatus() DaemonStatus {
@@ -469,22 +546,8 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 	}
 }
 
-func (h *GUIHandler) getCrewWorkers() []CrewWorkerStatus {
-	cmd := exec.Command("gt", "crew", "list", "--all", "--json")
-	output, err := cmd.Output()
-	if err != nil {
-		// If command fails (e.g., no crew workers), return empty slice
-		return nil
-	}
-
-	var crewWorkers []CrewWorkerStatus
-	if err := json.Unmarshal(output, &crewWorkers); err != nil {
-		return nil
-	}
-	return crewWorkers
-}
-
-var tmuxSessionNamePattern = regexp.MustCompile(`^gt-[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+$`)
+// tmuxSessionNamePattern matches polecat sessions (gt-rig-name) and HQ sessions (hq-mayor, hq-deacon)
+var tmuxSessionNamePattern = regexp.MustCompile(`^(gt-[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+|hq-(mayor|deacon))$`)
 var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
 
 func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Request) {
@@ -565,45 +628,6 @@ func writeSSE(w http.ResponseWriter, event, data string) {
 	fmt.Fprint(w, "\n")
 }
 
-func (h *GUIHandler) handleAPIBeads(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Get query parameters for filtering
-	status := r.URL.Query().Get("status")
-	beadType := r.URL.Query().Get("type")
-	limit := r.URL.Query().Get("limit")
-
-	args := []string{"list", "--json"}
-	if status != "" {
-		args = append(args, "--status", status)
-	}
-	if beadType != "" {
-		args = append(args, "--type", beadType)
-	}
-	if limit != "" {
-		args = append(args, "--limit", limit)
-	} else {
-		args = append(args, "--limit", "50")
-	}
-
-	cmd := exec.Command("bd", args...)
-	output, err := cmd.Output()
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"beads": []interface{}{},
-			"error": err.Error(),
-		})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(output)
-}
-
 const dashboardHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -619,28 +643,17 @@ const dashboardHTML = `<!DOCTYPE html>
             color: #eee;
             min-height: 100vh;
         }
-        .app {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-        .app-header {
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 15px 20px;
+            padding: 20px 0;
             border-bottom: 1px solid #333;
-            background: #16213e;
-            flex-shrink: 0;
+            margin-bottom: 20px;
         }
-        .app-header h1 {
-            font-size: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .app-header h1::before { content: '🏭'; }
+        h1 { font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+        h1::before { content: '🏭'; }
         .status-indicator {
             display: inline-block;
             width: 12px;
@@ -651,61 +664,6 @@ const dashboardHTML = `<!DOCTYPE html>
         .status-green { background: #4ade80; box-shadow: 0 0 10px #4ade80; }
         .status-yellow { background: #fbbf24; box-shadow: 0 0 10px #fbbf24; }
         .status-red { background: #f87171; box-shadow: 0 0 10px #f87171; }
-        #status-time { color: #64748b; font-size: 0.8rem; }
-        .app-main {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-        .sidebar {
-            width: 240px;
-            background: #16213e;
-            border-right: 1px solid #333;
-            padding: 20px 0;
-            overflow-y: auto;
-            flex-shrink: 0;
-        }
-        .sidebar-nav {
-            list-style: none;
-        }
-        .sidebar-nav li {
-            margin-bottom: 2px;
-        }
-        .sidebar-nav a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 20px;
-            color: #94a3b8;
-            text-decoration: none;
-            transition: all 0.2s;
-            border-left: 3px solid transparent;
-        }
-        .sidebar-nav a:hover {
-            background: #1e293b;
-            color: #e2e8f0;
-        }
-        .sidebar-nav a.active {
-            background: #1e293b;
-            color: #e2e8f0;
-            border-left-color: #3b82f6;
-        }
-        .sidebar-nav .icon {
-            font-size: 1.2rem;
-            width: 24px;
-            text-align: center;
-        }
-        .content {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
         .card {
             background: #16213e;
@@ -786,6 +744,7 @@ const dashboardHTML = `<!DOCTYPE html>
         .badge-yellow { background: #854d0e; color: #fbbf24; }
         .badge-red { background: #991b1b; color: #f87171; }
         .badge-blue { background: #1e40af; color: #60a5fa; }
+        #status-time { color: #64748b; font-size: 0.8rem; }
         .terminal-container {
             grid-column: 1 / -1;
             display: flex;
@@ -832,243 +791,103 @@ const dashboardHTML = `<!DOCTYPE html>
             border: 1px solid #1f2a44;
             white-space: pre-wrap;
         }
-        @media (max-width: 768px) {
-            .app-main {
-                flex-direction: column;
-            }
-            .sidebar {
-                width: 100%;
-                border-right: none;
-                border-bottom: 1px solid #333;
-                padding: 10px 0;
-                overflow-x: auto;
-            }
-            .sidebar-nav {
-                display: flex;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                padding: 0 10px;
-            }
-            .sidebar-nav li {
-                flex: 0 0 auto;
-                margin-bottom: 0;
-                margin-right: 2px;
-            }
-            .sidebar-nav a {
-                border-left: none;
-                border-bottom: 3px solid transparent;
-                padding: 10px 15px;
-            }
-            .sidebar-nav a.active {
-                border-left-color: transparent;
-                border-bottom-color: #3b82f6;
-            }
-        }
     </style>
 </head>
 <body>
-    <div class="app">
-        <header class="app-header">
+    <div class="container">
+        <header>
             <h1>Gas Town <span class="status-indicator status-green" id="daemon-status"></span></h1>
             <span id="status-time">Loading...</span>
         </header>
 
-        <div class="app-main">
-            <nav class="sidebar">
-                <ul class="sidebar-nav">
-                    <li><a href="/" data-tab="dashboard"><span class="icon">📊</span> Dashboard</a></li>
-                    <li><a href="/crew" data-tab="crew"><span class="icon">👥</span> Crew</a></li>
-                    <li><a href="/mayor" data-tab="mayor"><span class="icon">🎩</span> Mayor</a></li>
-                    <li><a href="/polecats" data-tab="polecats"><span class="icon">🐱</span> Polecats</a></li>
-                    <li><a href="/issues" data-tab="issues"><span class="icon">📋</span> Issues</a></li>
-                    <li><a href="/convoys" data-tab="convoys"><span class="icon">🚚</span> Convoys</a></li>
-                    <li><a href="/mail" data-tab="mail"><span class="icon">📬</span> Mail</a></li>
-                    <li><a href="/history" data-tab="history"><span class="icon">📜</span> History</a></li>
-                    <li><a href="/settings" data-tab="settings"><span class="icon">⚙️</span> Settings</a></li>
-                </ul>
-            </nav>
-
-            <main class="content">
-                <!-- Dashboard Tab -->
-                <div id="dashboard" class="tab-content active">
-                    <div class="grid">
-                        <div class="card">
-                            <h2>📊 Rigs</h2>
-                            <div class="card-content" id="rigs-list">Loading...</div>
-                        </div>
-
-                        <div class="card">
-                            <h2>🚚 Convoys</h2>
-                            <div class="card-content" id="convoys-list">Loading...</div>
-                        </div>
-
-                        <div class="card">
-                            <h2>🐱 Polecats</h2>
-                            <div class="card-content" id="polecats-list">Loading...</div>
-                        </div>
-
-                        <div class="card">
-                            <h2>👥 Crew Workers</h2>
-                            <div class="card-content" id="crew-list">Loading...</div>
-                        </div>
-
-                        <div class="card">
-                            <h2>📬 Mail</h2>
-                            <div class="card-content" id="mail-status">Loading...</div>
-                        </div>
-
-                        <div class="card chat-container">
-                            <h2>💬 Talk to Mayor</h2>
-                            <div class="chat-messages" id="chat-messages"></div>
-                            <div class="chat-input">
-                                <input type="text" id="chat-input" placeholder="Send a message to Mayor..." />
-                                <button onclick="sendMessage()">Send</button>
-                            </div>
-                        </div>
-
-                        <div class="card terminal-container">
-                            <h2>🖥️ Polecat Terminal</h2>
-                            <div class="terminal-controls">
-                                <select id="terminal-session"></select>
-                                <button id="terminal-toggle" onclick="toggleTerminalStream()">Connect</button>
-                            </div>
-                            <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
-                        </div>
+        <!-- Mayor Control Panel - Primary Interface -->
+        <div class="card" style="margin-bottom: 20px; border: 2px solid #3b82f6;">
+            <h2>🏛️ Mayor Control <span class="status-indicator" id="mayor-status"></span> <span id="mayor-hook" style="font-size: 0.75rem; color: #64748b; margin-left: 10px;"></span></h2>
+            <div style="display: grid; grid-template-columns: 1fr 350px; gap: 20px;">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="color: #64748b; font-size: 0.8rem;">Mayor Terminal (hq-mayor)</span>
+                        <button id="mayor-terminal-toggle" onclick="toggleMayorTerminal()" style="padding: 6px 12px; background: #22c55e; color: #0b1220; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">Connect</button>
                     </div>
+                    <pre class="terminal-output" id="mayor-terminal" style="min-height: 300px; max-height: 400px;">Click "Connect" to view Mayor's terminal output.</pre>
                 </div>
-
-                <!-- Crew Tab -->
-                <div id="crew" class="tab-content">
-                    <h2>Crew Management</h2>
-                    <p>This section will display crew members and their status.</p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="color: #64748b; font-size: 0.8rem;">Send Mail to Mayor</div>
+                    <input type="text" id="mayor-mail-subject" placeholder="Subject" style="padding: 10px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff;" />
+                    <textarea id="mayor-mail-body" placeholder="Message to Mayor..." rows="6" style="padding: 10px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff; resize: vertical; flex: 1;"></textarea>
+                    <button onclick="sendMailToMayor()" style="padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">📨 Send to Mayor</button>
+                    <div id="mayor-mail-result" style="font-size: 0.8rem; color: #64748b;"></div>
                 </div>
+            </div>
+        </div>
 
-                <!-- Mayor Tab -->
-                <div id="mayor" class="tab-content">
-                    <h2>Mayor Interface</h2>
-                    <p>Direct interface to the Mayor coordination system.</p>
-                </div>
+        <div class="grid">
+            <div class="card">
+                <h2>📊 Rigs</h2>
+                <div class="card-content" id="rigs-list">Loading...</div>
+            </div>
 
-                <!-- Polecats Tab -->
-                <div id="polecats" class="tab-content">
-                    <h2>Polecats Monitor</h2>
-                    <p>Detailed view of all polecat sessions and their activities.</p>
-                </div>
+            <div class="card">
+                <h2>🚚 Convoys</h2>
+                <div class="card-content" id="convoys-list">Loading...</div>
+            </div>
 
-                <!-- Issues Tab -->
-                <div id="issues" class="tab-content">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h2 style="margin: 0;">📿 Beads Issue Tracking</h2>
-                        <div style="display: flex; gap: 10px;">
-                            <select id="beads-status-filter" onchange="fetchBeads()" style="padding: 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0; border: 1px solid #333;">
-                                <option value="">All Statuses</option>
-                                <option value="open">Open</option>
-                                <option value="in_progress">In Progress</option>
-                                <option value="blocked">Blocked</option>
-                                <option value="closed">Closed</option>
+            <div class="card">
+                <h2>🐱 Polecats</h2>
+                <div class="card-content" id="polecats-list">Loading...</div>
+            </div>
+
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>📬 Mail Center</h2>
+                <div class="card-content">
+                    <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                        <div style="flex: 1;">
+                            <label style="color: #64748b; font-size: 0.8rem;">View Inbox For:</label>
+                            <select id="mail-agent-select" onchange="loadAgentMail()" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff; margin-top: 5px;">
+                                <option value="mayor/">Mayor</option>
                             </select>
-                            <select id="beads-type-filter" onchange="fetchBeads()" style="padding: 8px; border-radius: 6px; background: #0f172a; color: #e2e8f0; border: 1px solid #333;">
-                                <option value="">All Types</option>
-                                <option value="bug">Bug</option>
-                                <option value="feature">Feature</option>
-                                <option value="task">Task</option>
-                                <option value="epic">Epic</option>
-                                <option value="chore">Chore</option>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="color: #64748b; font-size: 0.8rem;">Send To:</label>
+                            <select id="mail-to-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff; margin-top: 5px;">
+                                <option value="mayor/">Mayor</option>
                             </select>
-                            <button onclick="fetchBeads()" style="padding: 8px 16px; border-radius: 6px; background: #3b82f6; color: white; border: none; cursor: pointer;">Refresh</button>
                         </div>
                     </div>
-                    <div class="card">
-                        <div class="card-content" id="beads-list">Loading beads...</div>
+                    <div id="mail-inbox" style="background: #0f172a; border-radius: 8px; padding: 15px; max-height: 200px; overflow-y: auto; margin-bottom: 15px;">
+                        <p style="color: #64748b;">Select an agent to view their inbox</p>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <input type="text" id="mail-subject" placeholder="Subject" style="padding: 10px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff;" />
+                        <textarea id="mail-body" placeholder="Message body..." rows="3" style="padding: 10px; border-radius: 6px; border: 1px solid #333; background: #0f172a; color: #fff; resize: vertical;"></textarea>
+                        <button onclick="sendMailToAgent()" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">Send Mail</button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Convoys Tab -->
-                <div id="convoys" class="tab-content">
-                    <h2>Convoy Management</h2>
-                    <p>Manage and monitor convoys across rigs.</p>
+            <div class="card chat-container">
+                <h2>💬 Quick Message to Mayor</h2>
+                <div class="chat-messages" id="chat-messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="chat-input" placeholder="Send a message to Mayor..." />
+                    <button onclick="sendMessage()">Send</button>
                 </div>
+            </div>
 
-                <!-- Mail Tab -->
-                <div id="mail" class="tab-content">
-                    <h2>Mail System</h2>
-                    <p>Full mail interface with inbox, sent items, and composition.</p>
+            <div class="card terminal-container">
+                <h2>🖥️ Polecat Terminal</h2>
+                <div class="terminal-controls">
+                    <select id="terminal-session"></select>
+                    <button id="terminal-toggle" onclick="toggleTerminalStream()">Connect</button>
                 </div>
-
-                <!-- History Tab -->
-                <div id="history" class="tab-content">
-                    <h2>Activity History</h2>
-                    <p>Historical logs and activity timeline.</p>
-                </div>
-
-                <!-- Settings Tab -->
-                <div id="settings" class="tab-content">
-                    <h2>Settings</h2>
-                    <p>Gas Town configuration and preferences.</p>
-                </div>
-            </main>
+                <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
+            </div>
         </div>
     </div>
 
     <script>
         let terminalSource = null;
         let terminalConnected = false;
-
-        // Tab switching functionality with URL routing
-        function setupTabs() {
-            const tabLinks = document.querySelectorAll('.sidebar-nav a');
-            tabLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const tabId = link.getAttribute('data-tab');
-                    navigateToTab(tabId, true);
-                });
-            });
-
-            // Handle browser back/forward
-            window.addEventListener('popstate', () => {
-                const tabId = getTabFromPath();
-                navigateToTab(tabId, false);
-            });
-        }
-
-        function getTabFromPath() {
-            const path = window.location.pathname;
-            if (path === '/' || path === '') return 'dashboard';
-            // Remove leading slash and use as tab ID
-            const tabId = path.substring(1).split('/')[0];
-            // Validate tab exists
-            const validTabs = ['dashboard', 'crew', 'mayor', 'polecats', 'issues', 'convoys', 'mail', 'history', 'settings'];
-            return validTabs.includes(tabId) ? tabId : 'dashboard';
-        }
-
-        function navigateToTab(tabId, updateHistory) {
-            const tabLinks = document.querySelectorAll('.sidebar-nav a');
-
-            // Update active link
-            tabLinks.forEach(l => l.classList.remove('active'));
-            const activeLink = document.querySelector('.sidebar-nav a[data-tab="' + tabId + '"]');
-            if (activeLink) activeLink.classList.add('active');
-
-            // Show corresponding tab content
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            const tabContent = document.getElementById(tabId);
-            if (tabContent) tabContent.classList.add('active');
-
-            // Update URL
-            if (updateHistory) {
-                const newPath = tabId === 'dashboard' ? '/' : '/' + tabId;
-                history.pushState({ tab: tabId }, '', newPath);
-            }
-
-            // Load tab-specific data
-            if (tabId === 'issues') {
-                fetchBeads();
-            }
-        }
-
         function connectStatusSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
             const socket = new WebSocket(protocol + window.location.host + '/ws/status');
@@ -1127,14 +946,6 @@ const dashboardHTML = `<!DOCTYPE html>
             document.getElementById('polecats-list').innerHTML = polecatsHtml;
             updateTerminalSessions(data.polecats || []);
 
-            // Update crew workers
-            const crewHtml = data.crew_workers && data.crew_workers.length > 0
-                ? '<table><tr><th>Name</th><th>Rig</th><th>Branch</th><th>Session</th><th>Git</th></tr>' +
-                  data.crew_workers.map(c => '<tr><td>' + c.name + '</td><td>' + c.rig + '</td><td>' + c.branch + '</td><td>' + (c.has_session ? '●' : '○') + '</td><td>' + (c.git_clean ? 'clean' : 'dirty') + '</td></tr>').join('') +
-                  '</table>'
-                : '<p>No crew workspaces found</p>';
-            document.getElementById('crew-list').innerHTML = crewHtml;
-
             // Update mail
             document.getElementById('mail-status').innerHTML =
                 '<p>Unread: <strong>' + data.mail.unread + '</strong> / Total: ' + data.mail.total + '</p>';
@@ -1145,74 +956,6 @@ const dashboardHTML = `<!DOCTYPE html>
             if (color === 'yellow' || color === 'activity-yellow') return 'yellow';
             if (color === 'red' || color === 'activity-red') return 'red';
             return 'blue';
-        }
-
-        async function fetchBeads() {
-            const beadsList = document.getElementById('beads-list');
-            if (!beadsList) return;
-
-            const statusFilter = document.getElementById('beads-status-filter');
-            const typeFilter = document.getElementById('beads-type-filter');
-
-            let url = '/api/beads?limit=50';
-            if (statusFilter && statusFilter.value) {
-                url += '&status=' + encodeURIComponent(statusFilter.value);
-            }
-            if (typeFilter && typeFilter.value) {
-                url += '&type=' + encodeURIComponent(typeFilter.value);
-            }
-
-            try {
-                const res = await fetch(url);
-                const data = await res.json();
-
-                if (data.error) {
-                    beadsList.innerHTML = '<p style="color: #f87171;">Error: ' + data.error + '</p>';
-                    return;
-                }
-
-                if (!data || data.length === 0) {
-                    beadsList.innerHTML = '<p>No beads found matching the filters.</p>';
-                    return;
-                }
-
-                const statusBadge = (status) => {
-                    const colors = {
-                        'open': 'blue',
-                        'in_progress': 'yellow',
-                        'blocked': 'red',
-                        'closed': 'green'
-                    };
-                    return '<span class="badge badge-' + (colors[status] || 'blue') + '">' + (status || 'unknown') + '</span>';
-                };
-
-                const typeBadge = (type) => {
-                    const colors = {
-                        'bug': 'red',
-                        'feature': 'green',
-                        'task': 'blue',
-                        'epic': 'yellow',
-                        'chore': 'blue'
-                    };
-                    return '<span class="badge badge-' + (colors[type] || 'blue') + '">' + (type || '-') + '</span>';
-                };
-
-                const html = '<table><tr><th>ID</th><th>Type</th><th>Priority</th><th>Title</th><th>Status</th><th>Assignee</th></tr>' +
-                    data.map(b =>
-                        '<tr>' +
-                        '<td style="font-family: monospace; font-size: 0.8rem;">' + (b.id || '-') + '</td>' +
-                        '<td>' + typeBadge(b.type) + '</td>' +
-                        '<td>P' + (b.priority !== undefined ? b.priority : '-') + '</td>' +
-                        '<td>' + ((b.title || '').substring(0, 50) + (b.title && b.title.length > 50 ? '...' : '')) + '</td>' +
-                        '<td>' + statusBadge(b.status) + '</td>' +
-                        '<td>' + (b.assignee || '-') + '</td>' +
-                        '</tr>'
-                    ).join('') +
-                    '</table>';
-                beadsList.innerHTML = html;
-            } catch (e) {
-                beadsList.innerHTML = '<p style="color: #f87171;">Failed to load beads: ' + e.message + '</p>';
-            }
         }
 
         async function sendMessage() {
@@ -1343,22 +1086,228 @@ const dashboardHTML = `<!DOCTYPE html>
             toggle.classList.remove('disconnect');
         }
 
-        // Initialize on load
-        document.addEventListener('DOMContentLoaded', () => {
-            setupTabs();
+        // Handle Enter key in chat input
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
 
-            // Navigate to tab based on current URL path
-            const initialTab = getTabFromPath();
-            navigateToTab(initialTab, false);
+        // Mail Center functions
+        async function loadAgentsList() {
+            try {
+                const res = await fetch('/api/agents/list');
+                const agents = await res.json();
+                const viewSelect = document.getElementById('mail-agent-select');
+                const sendSelect = document.getElementById('mail-to-select');
 
-            // Handle Enter key in chat input
-            document.getElementById('chat-input').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') sendMessage();
+                viewSelect.innerHTML = '';
+                sendSelect.innerHTML = '';
+
+                agents.forEach(agent => {
+                    const opt1 = document.createElement('option');
+                    opt1.value = agent.address;
+                    opt1.textContent = agent.name + ' (' + agent.type + ')';
+                    viewSelect.appendChild(opt1);
+
+                    const opt2 = document.createElement('option');
+                    opt2.value = agent.address;
+                    opt2.textContent = agent.name + ' (' + agent.type + ')';
+                    sendSelect.appendChild(opt2);
+                });
+
+                // Load mayor's mail by default
+                loadAgentMail();
+            } catch (e) {
+                console.error('Failed to load agents:', e);
+            }
+        }
+
+        async function loadAgentMail() {
+            const agent = document.getElementById('mail-agent-select').value;
+            const inbox = document.getElementById('mail-inbox');
+            inbox.innerHTML = '<p style="color: #64748b;">Loading...</p>';
+
+            try {
+                const res = await fetch('/api/mail/all?agent=' + encodeURIComponent(agent));
+                const data = await res.json();
+
+                if (data.raw) {
+                    inbox.innerHTML = '<pre style="white-space: pre-wrap; color: #e2e8f0; margin: 0;">' + escapeHtml(data.raw) + '</pre>';
+                } else if (data.messages && Array.isArray(data.messages)) {
+                    if (data.messages.length === 0) {
+                        inbox.innerHTML = '<p style="color: #64748b;">No messages</p>';
+                    } else {
+                        inbox.innerHTML = data.messages.map(m =>
+                            '<div style="border-bottom: 1px solid #333; padding: 8px 0;">' +
+                            '<div style="font-weight: 500; color: #60a5fa;">' + escapeHtml(m.subject || 'No subject') + '</div>' +
+                            '<div style="font-size: 0.8rem; color: #94a3b8;">From: ' + escapeHtml(m.from || 'unknown') + '</div>' +
+                            '<div style="margin-top: 5px; color: #e2e8f0;">' + escapeHtml(m.body || m.content || '') + '</div>' +
+                            '</div>'
+                        ).join('');
+                    }
+                } else {
+                    inbox.innerHTML = '<p style="color: #64748b;">No messages for ' + agent + '</p>';
+                }
+            } catch (e) {
+                inbox.innerHTML = '<p style="color: #f87171;">Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function sendMailToAgent() {
+            const to = document.getElementById('mail-to-select').value;
+            const subject = document.getElementById('mail-subject').value.trim();
+            const body = document.getElementById('mail-body').value.trim();
+
+            if (!subject) {
+                alert('Please enter a subject');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/mail/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to, subject, body })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('Mail sent to ' + to);
+                    document.getElementById('mail-subject').value = '';
+                    document.getElementById('mail-body').value = '';
+                    loadAgentMail();
+                } else {
+                    alert('Failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // ========== Mayor Terminal Functions ==========
+        let mayorTerminalSource = null;
+        let mayorTerminalConnected = false;
+
+        function toggleMayorTerminal() {
+            if (mayorTerminalConnected) {
+                disconnectMayorTerminal();
+            } else {
+                connectMayorTerminal();
+            }
+        }
+
+        function connectMayorTerminal() {
+            const output = document.getElementById('mayor-terminal');
+            const toggle = document.getElementById('mayor-terminal-toggle');
+
+            if (mayorTerminalSource) {
+                mayorTerminalSource.close();
+            }
+
+            output.textContent = 'Connecting to hq-mayor...';
+            mayorTerminalSource = new EventSource('/api/mayor/terminal');
+            mayorTerminalConnected = true;
+            toggle.textContent = 'Disconnect';
+            toggle.style.background = '#f97316';
+
+            mayorTerminalSource.addEventListener('frame', (event) => {
+                output.textContent = event.data;
+                output.scrollTop = output.scrollHeight;
             });
 
-            // Start WebSocket updates
-            connectStatusSocket();
-        });
+            mayorTerminalSource.addEventListener('error', (event) => {
+                if (event.data) {
+                    output.textContent = 'Error: ' + event.data;
+                } else {
+                    output.textContent = 'Mayor terminal disconnected. Click Connect to retry.';
+                }
+                disconnectMayorTerminal();
+            });
+        }
+
+        function disconnectMayorTerminal() {
+            const toggle = document.getElementById('mayor-terminal-toggle');
+            if (mayorTerminalSource) {
+                mayorTerminalSource.close();
+                mayorTerminalSource = null;
+            }
+            mayorTerminalConnected = false;
+            toggle.textContent = 'Connect';
+            toggle.style.background = '#22c55e';
+        }
+
+        async function sendMailToMayor() {
+            const subject = document.getElementById('mayor-mail-subject').value.trim();
+            const body = document.getElementById('mayor-mail-body').value.trim();
+            const result = document.getElementById('mayor-mail-result');
+
+            if (!subject) {
+                result.innerHTML = '<span style="color: #f87171;">Please enter a subject</span>';
+                return;
+            }
+
+            result.innerHTML = '<span style="color: #fbbf24;">Sending...</span>';
+
+            try {
+                const res = await fetch('/api/mail/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: 'mayor/', subject, body })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    result.innerHTML = '<span style="color: #4ade80;">✓ Mail sent to Mayor</span>';
+                    document.getElementById('mayor-mail-subject').value = '';
+                    document.getElementById('mayor-mail-body').value = '';
+                    setTimeout(() => { result.innerHTML = ''; }, 3000);
+                } else {
+                    result.innerHTML = '<span style="color: #f87171;">Failed: ' + (data.error || 'Unknown error') + '</span>';
+                }
+            } catch (e) {
+                result.innerHTML = '<span style="color: #f87171;">Error: ' + e.message + '</span>';
+            }
+        }
+
+        async function updateMayorStatus() {
+            try {
+                const res = await fetch('/api/mayor/status');
+                const data = await res.json();
+                const indicator = document.getElementById('mayor-status');
+                const hookSpan = document.getElementById('mayor-hook');
+
+                if (data.session_exists) {
+                    indicator.className = 'status-indicator status-green';
+                } else {
+                    indicator.className = 'status-indicator status-red';
+                }
+
+                if (data.hook && !data.hook.includes('Nothing on hook')) {
+                    hookSpan.textContent = '🪝 Work hooked';
+                    hookSpan.style.color = '#4ade80';
+                } else {
+                    hookSpan.textContent = 'No hook';
+                    hookSpan.style.color = '#64748b';
+                }
+            } catch (e) {
+                console.error('Failed to get mayor status:', e);
+            }
+        }
+
+        // Update mayor status every 5 seconds
+        setInterval(updateMayorStatus, 5000);
+
+        // Initialize
+        updateMayorStatus();
+        loadAgentsList();
+
+        // Start WebSocket updates
+        connectStatusSocket();
     </script>
 </body>
 </html>`
