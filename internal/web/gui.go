@@ -307,16 +307,36 @@ func (h *GUIHandler) getRigs() []RigStatus {
 	}
 
 	// Parse text output (gt rig list doesn't have --json yet)
+	// Format:
+	//   Rigs in /path:
+	//
+	//     rigname
+	//       Polecats: N  Crew: M
+	//       Agents: [...]
 	var rigs []RigStatus
+	var currentRig *RigStatus
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "Rigs") {
+		if strings.HasPrefix(line, "Rigs in") || line == "" {
 			continue
 		}
-		// Parse: "  rigname\n    Polecats: N  Crew: M"
-		if !strings.HasPrefix(line, " ") && line != "" {
-			rigs = append(rigs, RigStatus{Name: line})
+		// Rig name: 2 spaces then name
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") {
+			name := strings.TrimSpace(line)
+			if name != "" {
+				rigs = append(rigs, RigStatus{Name: name})
+				currentRig = &rigs[len(rigs)-1]
+			}
+		}
+		// Rig details: 4 spaces then "Polecats: N  Crew: M"
+		if strings.HasPrefix(line, "    ") && currentRig != nil {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Polecats:") {
+				var polecats, crew int
+				fmt.Sscanf(trimmed, "Polecats: %d  Crew: %d", &polecats, &crew)
+				currentRig.Polecats = polecats
+				currentRig.Crew = crew
+			}
 		}
 	}
 	return rigs
