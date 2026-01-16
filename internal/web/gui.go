@@ -466,17 +466,28 @@ const dashboardHTML = `<!DOCTYPE html>
             color: #eee;
             min-height: 100vh;
         }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        header {
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .app-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 0;
+            padding: 15px 20px;
             border-bottom: 1px solid #333;
-            margin-bottom: 20px;
+            background: #16213e;
+            flex-shrink: 0;
         }
-        h1 { font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
-        h1::before { content: '🏭'; }
+        .app-header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .app-header h1::before { content: '🏭'; }
         .status-indicator {
             display: inline-block;
             width: 12px;
@@ -487,6 +498,61 @@ const dashboardHTML = `<!DOCTYPE html>
         .status-green { background: #4ade80; box-shadow: 0 0 10px #4ade80; }
         .status-yellow { background: #fbbf24; box-shadow: 0 0 10px #fbbf24; }
         .status-red { background: #f87171; box-shadow: 0 0 10px #f87171; }
+        #status-time { color: #64748b; font-size: 0.8rem; }
+        .app-main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 240px;
+            background: #16213e;
+            border-right: 1px solid #333;
+            padding: 20px 0;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .sidebar-nav {
+            list-style: none;
+        }
+        .sidebar-nav li {
+            margin-bottom: 2px;
+        }
+        .sidebar-nav a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 20px;
+            color: #94a3b8;
+            text-decoration: none;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar-nav a:hover {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+        .sidebar-nav a.active {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-left-color: #3b82f6;
+        }
+        .sidebar-nav .icon {
+            font-size: 1.2rem;
+            width: 24px;
+            text-align: center;
+        }
+        .content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
         .card {
             background: #16213e;
@@ -567,7 +633,6 @@ const dashboardHTML = `<!DOCTYPE html>
         .badge-yellow { background: #854d0e; color: #fbbf24; }
         .badge-red { background: #991b1b; color: #f87171; }
         .badge-blue { background: #1e40af; color: #60a5fa; }
-        #status-time { color: #64748b; font-size: 0.8rem; }
         .terminal-container {
             grid-column: 1 / -1;
             display: flex;
@@ -614,59 +679,182 @@ const dashboardHTML = `<!DOCTYPE html>
             border: 1px solid #1f2a44;
             white-space: pre-wrap;
         }
+        @media (max-width: 768px) {
+            .app-main {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #333;
+                padding: 10px 0;
+                overflow-x: auto;
+            }
+            .sidebar-nav {
+                display: flex;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                padding: 0 10px;
+            }
+            .sidebar-nav li {
+                flex: 0 0 auto;
+                margin-bottom: 0;
+                margin-right: 2px;
+            }
+            .sidebar-nav a {
+                border-left: none;
+                border-bottom: 3px solid transparent;
+                padding: 10px 15px;
+            }
+            .sidebar-nav a.active {
+                border-left-color: transparent;
+                border-bottom-color: #3b82f6;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
+    <div class="app">
+        <header class="app-header">
             <h1>Gas Town <span class="status-indicator status-green" id="daemon-status"></span></h1>
             <span id="status-time">Loading...</span>
         </header>
 
-        <div class="grid">
-            <div class="card">
-                <h2>📊 Rigs</h2>
-                <div class="card-content" id="rigs-list">Loading...</div>
-            </div>
+        <div class="app-main">
+            <nav class="sidebar">
+                <ul class="sidebar-nav">
+                    <li><a href="#" class="active" data-tab="dashboard"><span class="icon">📊</span> Dashboard</a></li>
+                    <li><a href="#" data-tab="crew"><span class="icon">👥</span> Crew</a></li>
+                    <li><a href="#" data-tab="mayor"><span class="icon">🎩</span> Mayor</a></li>
+                    <li><a href="#" data-tab="polecats"><span class="icon">🐱</span> Polecats</a></li>
+                    <li><a href="#" data-tab="issues"><span class="icon">📋</span> Issues</a></li>
+                    <li><a href="#" data-tab="convoys"><span class="icon">🚚</span> Convoys</a></li>
+                    <li><a href="#" data-tab="mail"><span class="icon">📬</span> Mail</a></li>
+                    <li><a href="#" data-tab="history"><span class="icon">📜</span> History</a></li>
+                    <li><a href="#" data-tab="settings"><span class="icon">⚙️</span> Settings</a></li>
+                </ul>
+            </nav>
 
-            <div class="card">
-                <h2>🚚 Convoys</h2>
-                <div class="card-content" id="convoys-list">Loading...</div>
-            </div>
+            <main class="content">
+                <!-- Dashboard Tab -->
+                <div id="dashboard" class="tab-content active">
+                    <div class="grid">
+                        <div class="card">
+                            <h2>📊 Rigs</h2>
+                            <div class="card-content" id="rigs-list">Loading...</div>
+                        </div>
 
-            <div class="card">
-                <h2>🐱 Polecats</h2>
-                <div class="card-content" id="polecats-list">Loading...</div>
-            </div>
+                        <div class="card">
+                            <h2>🚚 Convoys</h2>
+                            <div class="card-content" id="convoys-list">Loading...</div>
+                        </div>
 
-            <div class="card">
-                <h2>📬 Mail</h2>
-                <div class="card-content" id="mail-status">Loading...</div>
-            </div>
+                        <div class="card">
+                            <h2>🐱 Polecats</h2>
+                            <div class="card-content" id="polecats-list">Loading...</div>
+                        </div>
 
-            <div class="card chat-container">
-                <h2>💬 Talk to Mayor</h2>
-                <div class="chat-messages" id="chat-messages"></div>
-                <div class="chat-input">
-                    <input type="text" id="chat-input" placeholder="Send a message to Mayor..." />
-                    <button onclick="sendMessage()">Send</button>
+                        <div class="card">
+                            <h2>📬 Mail</h2>
+                            <div class="card-content" id="mail-status">Loading...</div>
+                        </div>
+
+                        <div class="card chat-container">
+                            <h2>💬 Talk to Mayor</h2>
+                            <div class="chat-messages" id="chat-messages"></div>
+                            <div class="chat-input">
+                                <input type="text" id="chat-input" placeholder="Send a message to Mayor..." />
+                                <button onclick="sendMessage()">Send</button>
+                            </div>
+                        </div>
+
+                        <div class="card terminal-container">
+                            <h2>🖥️ Polecat Terminal</h2>
+                            <div class="terminal-controls">
+                                <select id="terminal-session"></select>
+                                <button id="terminal-toggle" onclick="toggleTerminalStream()">Connect</button>
+                            </div>
+                            <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <div class="card terminal-container">
-                <h2>🖥️ Polecat Terminal</h2>
-                <div class="terminal-controls">
-                    <select id="terminal-session"></select>
-                    <button id="terminal-toggle" onclick="toggleTerminalStream()">Connect</button>
+                <!-- Crew Tab -->
+                <div id="crew" class="tab-content">
+                    <h2>Crew Management</h2>
+                    <p>This section will display crew members and their status.</p>
                 </div>
-                <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
-            </div>
+
+                <!-- Mayor Tab -->
+                <div id="mayor" class="tab-content">
+                    <h2>Mayor Interface</h2>
+                    <p>Direct interface to the Mayor coordination system.</p>
+                </div>
+
+                <!-- Polecats Tab -->
+                <div id="polecats" class="tab-content">
+                    <h2>Polecats Monitor</h2>
+                    <p>Detailed view of all polecat sessions and their activities.</p>
+                </div>
+
+                <!-- Issues Tab -->
+                <div id="issues" class="tab-content">
+                    <h2>Issue Tracking</h2>
+                    <p>Beads issue tracking and management interface.</p>
+                </div>
+
+                <!-- Convoys Tab -->
+                <div id="convoys" class="tab-content">
+                    <h2>Convoy Management</h2>
+                    <p>Manage and monitor convoys across rigs.</p>
+                </div>
+
+                <!-- Mail Tab -->
+                <div id="mail" class="tab-content">
+                    <h2>Mail System</h2>
+                    <p>Full mail interface with inbox, sent items, and composition.</p>
+                </div>
+
+                <!-- History Tab -->
+                <div id="history" class="tab-content">
+                    <h2>Activity History</h2>
+                    <p>Historical logs and activity timeline.</p>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings" class="tab-content">
+                    <h2>Settings</h2>
+                    <p>Gas Town configuration and preferences.</p>
+                </div>
+            </main>
         </div>
     </div>
 
     <script>
         let terminalSource = null;
         let terminalConnected = false;
+
+        // Tab switching functionality
+        function setupTabs() {
+            const tabLinks = document.querySelectorAll('.sidebar-nav a');
+            tabLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const tabId = link.getAttribute('data-tab');
+
+                    // Update active link
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    link.classList.add('active');
+
+                    // Show corresponding tab content
+                    document.querySelectorAll('.tab-content').forEach(tab => {
+                        tab.classList.remove('active');
+                    });
+                    document.getElementById(tabId).classList.add('active');
+                });
+            });
+        }
+
         function connectStatusSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
             const socket = new WebSocket(protocol + window.location.host + '/ws/status');
@@ -865,13 +1053,18 @@ const dashboardHTML = `<!DOCTYPE html>
             toggle.classList.remove('disconnect');
         }
 
-        // Handle Enter key in chat input
-        document.getElementById('chat-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setupTabs();
 
-        // Start WebSocket updates
-        connectStatusSocket();
+            // Handle Enter key in chat input
+            document.getElementById('chat-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            // Start WebSocket updates
+            connectStatusSocket();
+        });
     </script>
 </body>
 </html>`
