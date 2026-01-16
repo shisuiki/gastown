@@ -2,10 +2,14 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // GUIHandler handles the main Gas Town web GUI.
@@ -24,11 +28,13 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	// Setup routes
 	h.mux.HandleFunc("/", h.handleDashboard)
 	h.mux.HandleFunc("/api/status", h.handleAPIStatus)
+	h.mux.HandleFunc("/ws/status", h.handleStatusWS)
 	h.mux.HandleFunc("/api/mail/send", h.handleAPISendMail)
 	h.mux.HandleFunc("/api/mail/inbox", h.handleAPIMailInbox)
 	h.mux.HandleFunc("/api/command", h.handleAPICommand)
 	h.mux.HandleFunc("/api/rigs", h.handleAPIRigs)
 	h.mux.HandleFunc("/api/convoys", h.handleAPIConvoys)
+	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
 
 	return h, nil
 }
@@ -83,6 +89,60 @@ func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	status := h.buildStatus()
+	json.NewEncoder(w).Encode(status)
+}
+
+var statusWSUpgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func (h *GUIHandler) handleStatusWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := statusWSUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	sendStatus := func() error {
+		status := h.buildStatus()
+		return conn.WriteJSON(status)
+	}
+
+	if err := sendStatus(); err != nil {
+		return
+	}
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			if err := sendStatus(); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (h *GUIHandler) buildStatus() StatusResponse {
 	status := StatusResponse{
 		Timestamp: time.Now(),
 	}
@@ -111,7 +171,7 @@ func (h *GUIHandler) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	// Get mail status
 	status.Mail = h.getMailStatus()
 
-	json.NewEncoder(w).Encode(status)
+	return status
 }
 
 func (h *GUIHandler) handleAPISendMail(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +350,87 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 	}
 }
 
+var tmuxSessionNamePattern = regexp.MustCompile(`^gt-[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+$`)
+var ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+
+func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Request) {
+	session := r.URL.Query().Get("session")
+	if session == "" || !tmuxSessionNamePattern.MatchString(session) {
+		http.Error(w, "Invalid session", http.StatusBadRequest)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	lastFrame := ""
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			frame, err := captureTmuxPane(session)
+			if err != nil {
+				writeSSE(w, "error", err.Error())
+				flusher.Flush()
+				return
+			}
+			frame = strings.TrimRight(frame, "\n")
+			if frame == lastFrame {
+				continue
+			}
+			lastFrame = frame
+			writeSSE(w, "frame", frame)
+			flusher.Flush()
+		}
+	}
+}
+
+func captureTmuxPane(session string) (string, error) {
+	cmd := exec.Command("tmux", "capture-pane", "-t", session, "-p", "-J", "-S", "-2000")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return sanitizeTerminalOutput(string(output)), nil
+}
+
+func sanitizeTerminalOutput(s string) string {
+	s = ansiEscapePattern.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\t':
+			return r
+		default:
+			if r < 32 {
+				return -1
+			}
+			return r
+		}
+	}, s)
+}
+
+func writeSSE(w http.ResponseWriter, event, data string) {
+	if event != "" {
+		fmt.Fprintf(w, "event: %s\n", event)
+	}
+	for _, line := range strings.Split(data, "\n") {
+		fmt.Fprintf(w, "data: %s\n", line)
+	}
+	fmt.Fprint(w, "\n")
+}
+
 const dashboardHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -407,6 +548,52 @@ const dashboardHTML = `<!DOCTYPE html>
         .badge-red { background: #991b1b; color: #f87171; }
         .badge-blue { background: #1e40af; color: #60a5fa; }
         #status-time { color: #64748b; font-size: 0.8rem; }
+        .terminal-container {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .terminal-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .terminal-controls select {
+            flex: 1;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+        .terminal-controls button {
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: none;
+            background: #22c55e;
+            color: #0b1220;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .terminal-controls button.disconnect {
+            background: #f97316;
+            color: #0b1220;
+        }
+        .terminal-output {
+            background: #0b1120;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 16px;
+            min-height: 220px;
+            max-height: 420px;
+            overflow-y: auto;
+            font-family: "Menlo", "Monaco", "Courier New", monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            border: 1px solid #1f2a44;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
@@ -445,18 +632,42 @@ const dashboardHTML = `<!DOCTYPE html>
                     <button onclick="sendMessage()">Send</button>
                 </div>
             </div>
+
+            <div class="card terminal-container">
+                <h2>🖥️ Polecat Terminal</h2>
+                <div class="terminal-controls">
+                    <select id="terminal-session"></select>
+                    <button id="terminal-toggle" onclick="toggleTerminalStream()">Connect</button>
+                </div>
+                <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
+            </div>
         </div>
     </div>
 
     <script>
-        async function fetchStatus() {
-            try {
-                const res = await fetch('/api/status');
-                const data = await res.json();
-                updateUI(data);
-            } catch (e) {
-                console.error('Failed to fetch status:', e);
-            }
+        let terminalSource = null;
+        let terminalConnected = false;
+        function connectStatusSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const socket = new WebSocket(protocol + window.location.host + '/ws/status');
+
+            socket.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateUI(data);
+                } catch (e) {
+                    console.error('Failed to parse status update:', e);
+                }
+            });
+
+            socket.addEventListener('close', () => {
+                document.getElementById('status-time').textContent = 'Disconnected';
+                setTimeout(connectStatusSocket, 2000);
+            });
+
+            socket.addEventListener('error', () => {
+                socket.close();
+            });
         }
 
         function updateUI(data) {
@@ -492,6 +703,7 @@ const dashboardHTML = `<!DOCTYPE html>
                   '</table>'
                 : '<p>No polecats running</p>';
             document.getElementById('polecats-list').innerHTML = polecatsHtml;
+            updateTerminalSessions(data.polecats || []);
 
             // Update mail
             document.getElementById('mail-status').innerHTML =
@@ -544,14 +756,102 @@ const dashboardHTML = `<!DOCTYPE html>
             messages.scrollTop = messages.scrollHeight;
         }
 
+        function updateTerminalSessions(polecats) {
+            const select = document.getElementById('terminal-session');
+            if (!select) return;
+
+            const previous = select.value;
+            const sessions = polecats
+                .filter(p => p.SessionID)
+                .map(p => ({
+                    id: p.SessionID,
+                    label: p.Rig + '/' + p.Name
+                }));
+
+            select.innerHTML = '';
+            if (sessions.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No active polecat sessions';
+                select.appendChild(option);
+                return;
+            }
+
+            sessions.forEach(session => {
+                const option = document.createElement('option');
+                option.value = session.id;
+                option.textContent = session.label + ' (' + session.id + ')';
+                select.appendChild(option);
+            });
+
+            if (previous && sessions.some(s => s.id === previous)) {
+                select.value = previous;
+                return;
+            }
+            select.selectedIndex = 0;
+        }
+
+        function toggleTerminalStream() {
+            if (terminalConnected) {
+                disconnectTerminalStream();
+            } else {
+                connectTerminalStream();
+            }
+        }
+
+        function connectTerminalStream() {
+            const select = document.getElementById('terminal-session');
+            const output = document.getElementById('terminal-output');
+            const toggle = document.getElementById('terminal-toggle');
+            const session = select.value;
+            if (!session) {
+                output.textContent = 'No session selected.';
+                return;
+            }
+
+            if (terminalSource) {
+                terminalSource.close();
+            }
+
+            output.textContent = 'Connecting to ' + session + '...';
+            terminalSource = new EventSource('/api/terminal/stream?session=' + encodeURIComponent(session));
+            terminalConnected = true;
+            toggle.textContent = 'Disconnect';
+            toggle.classList.add('disconnect');
+
+            terminalSource.addEventListener('frame', (event) => {
+                output.textContent = event.data;
+                output.scrollTop = output.scrollHeight;
+            });
+
+            terminalSource.addEventListener('error', (event) => {
+                if (event.data) {
+                    output.textContent = 'Error: ' + event.data;
+                } else {
+                    output.textContent = 'Stream disconnected.';
+                }
+                disconnectTerminalStream();
+            });
+        }
+
+        function disconnectTerminalStream() {
+            const toggle = document.getElementById('terminal-toggle');
+            if (terminalSource) {
+                terminalSource.close();
+                terminalSource = null;
+            }
+            terminalConnected = false;
+            toggle.textContent = 'Connect';
+            toggle.classList.remove('disconnect');
+        }
+
         // Handle Enter key in chat input
         document.getElementById('chat-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Initial fetch and auto-refresh every 30 seconds
-        fetchStatus();
-        setInterval(fetchStatus, 30000);
+        // Start WebSocket updates
+        connectStatusSocket();
     </script>
 </body>
 </html>`
