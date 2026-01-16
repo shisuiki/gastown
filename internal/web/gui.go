@@ -91,7 +91,12 @@ type CrewWorkerStatus struct {
 }
 
 func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	// SPA routing: serve the dashboard HTML for all non-API paths
+	// The client-side JavaScript router handles /issues, /crew, /convoys, etc.
+	path := r.URL.Path
+
+	// Skip paths that are explicitly handled by other routes
+	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/ws/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -831,15 +836,15 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="app-main">
             <nav class="sidebar">
                 <ul class="sidebar-nav">
-                    <li><a href="#" class="active" data-tab="dashboard"><span class="icon">📊</span> Dashboard</a></li>
-                    <li><a href="#" data-tab="crew"><span class="icon">👥</span> Crew</a></li>
-                    <li><a href="#" data-tab="mayor"><span class="icon">🎩</span> Mayor</a></li>
-                    <li><a href="#" data-tab="polecats"><span class="icon">🐱</span> Polecats</a></li>
-                    <li><a href="#" data-tab="issues"><span class="icon">📋</span> Issues</a></li>
-                    <li><a href="#" data-tab="convoys"><span class="icon">🚚</span> Convoys</a></li>
-                    <li><a href="#" data-tab="mail"><span class="icon">📬</span> Mail</a></li>
-                    <li><a href="#" data-tab="history"><span class="icon">📜</span> History</a></li>
-                    <li><a href="#" data-tab="settings"><span class="icon">⚙️</span> Settings</a></li>
+                    <li><a href="/" data-tab="dashboard"><span class="icon">📊</span> Dashboard</a></li>
+                    <li><a href="/crew" data-tab="crew"><span class="icon">👥</span> Crew</a></li>
+                    <li><a href="/mayor" data-tab="mayor"><span class="icon">🎩</span> Mayor</a></li>
+                    <li><a href="/polecats" data-tab="polecats"><span class="icon">🐱</span> Polecats</a></li>
+                    <li><a href="/issues" data-tab="issues"><span class="icon">📋</span> Issues</a></li>
+                    <li><a href="/convoys" data-tab="convoys"><span class="icon">🚚</span> Convoys</a></li>
+                    <li><a href="/mail" data-tab="mail"><span class="icon">📬</span> Mail</a></li>
+                    <li><a href="/history" data-tab="history"><span class="icon">📜</span> History</a></li>
+                    <li><a href="/settings" data-tab="settings"><span class="icon">⚙️</span> Settings</a></li>
                 </ul>
             </nav>
 
@@ -947,25 +952,54 @@ const dashboardHTML = `<!DOCTYPE html>
         let terminalSource = null;
         let terminalConnected = false;
 
-        // Tab switching functionality
+        // Tab switching functionality with URL routing
         function setupTabs() {
             const tabLinks = document.querySelectorAll('.sidebar-nav a');
             tabLinks.forEach(link => {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
                     const tabId = link.getAttribute('data-tab');
-
-                    // Update active link
-                    tabLinks.forEach(l => l.classList.remove('active'));
-                    link.classList.add('active');
-
-                    // Show corresponding tab content
-                    document.querySelectorAll('.tab-content').forEach(tab => {
-                        tab.classList.remove('active');
-                    });
-                    document.getElementById(tabId).classList.add('active');
+                    navigateToTab(tabId, true);
                 });
             });
+
+            // Handle browser back/forward
+            window.addEventListener('popstate', () => {
+                const tabId = getTabFromPath();
+                navigateToTab(tabId, false);
+            });
+        }
+
+        function getTabFromPath() {
+            const path = window.location.pathname;
+            if (path === '/' || path === '') return 'dashboard';
+            // Remove leading slash and use as tab ID
+            const tabId = path.substring(1).split('/')[0];
+            // Validate tab exists
+            const validTabs = ['dashboard', 'crew', 'mayor', 'polecats', 'issues', 'convoys', 'mail', 'history', 'settings'];
+            return validTabs.includes(tabId) ? tabId : 'dashboard';
+        }
+
+        function navigateToTab(tabId, updateHistory) {
+            const tabLinks = document.querySelectorAll('.sidebar-nav a');
+
+            // Update active link
+            tabLinks.forEach(l => l.classList.remove('active'));
+            const activeLink = document.querySelector('.sidebar-nav a[data-tab="' + tabId + '"]');
+            if (activeLink) activeLink.classList.add('active');
+
+            // Show corresponding tab content
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            const tabContent = document.getElementById(tabId);
+            if (tabContent) tabContent.classList.add('active');
+
+            // Update URL
+            if (updateHistory) {
+                const newPath = tabId === 'dashboard' ? '/' : '/' + tabId;
+                history.pushState({ tab: tabId }, '', newPath);
+            }
         }
 
         function connectStatusSocket() {
@@ -1177,6 +1211,10 @@ const dashboardHTML = `<!DOCTYPE html>
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             setupTabs();
+
+            // Navigate to tab based on current URL path
+            const initialTab = getTabFromPath();
+            navigateToTab(initialTab, false);
 
             // Handle Enter key in chat input
             document.getElementById('chat-input').addEventListener('keypress', (e) => {
