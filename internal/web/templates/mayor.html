@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mayor Control - Gas Town</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { 'gt-dark': '#1a1a2e', 'gt-card': '#16213e', 'gt-input': '#0f172a', 'gt-border': '#333333' } } }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .nav-bar { background: #16213e; border-bottom: 1px solid #333; padding: 0 20px; }
+        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; height: 56px; }
+        .nav-brand { font-size: 1.25rem; font-weight: 600; color: #eee; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .nav-brand::before { content: '🏭'; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-link { padding: 8px 16px; color: #94a3b8; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
+        .nav-link:hover { background: #1a1a2e; color: #eee; }
+        .nav-link.active { background: #3b82f6; color: #fff; }
+        .nav-toggle { display: none; background: none; border: none; color: #eee; font-size: 1.5rem; cursor: pointer; padding: 8px; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 8px; }
+        .status-green { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+        .status-red { background: #f87171; box-shadow: 0 0 8px #f87171; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #333; }
+        .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
+        th { color: #64748b; font-weight: 500; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .badge-green { background: #166534; color: #4ade80; }
+        .badge-yellow { background: #854d0e; color: #fbbf24; }
+        .input-field { width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 8px; background: #0f172a; color: #fff; font-size: 0.9rem; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 0.9rem; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #22c55e; color: #0b1220; }
+        .btn-warning { background: #f97316; color: #0b1220; }
+        .terminal-output { background: #0b1120; color: #e2e8f0; border-radius: 10px; padding: 16px; min-height: 220px; max-height: 500px; overflow-y: auto; font-family: "Menlo", monospace; font-size: 0.85rem; line-height: 1.4; border: 1px solid #1f2a44; white-space: pre-wrap; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; background: #0f172a; border-radius: 8px; margin-bottom: 10px; max-height: 200px; }
+        .message { padding: 10px 15px; margin: 5px 0; border-radius: 8px; max-width: 80%; }
+        .message.sent { background: #3b82f6; margin-left: auto; }
+        .message.received { background: #334155; }
+        .mayor-grid { display: grid; grid-template-columns: 1fr 350px; gap: 20px; }
+        @media (max-width: 768px) {
+            .container { padding: 12px; }
+            .grid { grid-template-columns: 1fr; }
+            .mayor-grid { grid-template-columns: 1fr; }
+            .nav-toggle { display: block; }
+            .nav-links { display: none; position: absolute; top: 56px; left: 0; right: 0; background: #16213e; flex-direction: column; padding: 10px; border-bottom: 1px solid #333; }
+            .nav-links.open { display: flex; }
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">Gas Town <span class="status-indicator status-green" id="daemon-status"></span></a>
+            <button class="nav-toggle" onclick="document.getElementById('nav-links').classList.toggle('open')">☰</button>
+            <div class="nav-links" id="nav-links">
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/mayor" class="nav-link active">Mayor</a>
+                <a href="/mail" class="nav-link">Mail</a>
+                <a href="/terminals" class="nav-link">Terminals</a>
+                <a href="/activity" class="nav-link">Activity</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card" style="border: 2px solid #3b82f6; margin-bottom: 20px;">
+            <h2>🏛️ Mayor Control <span class="status-indicator" id="mayor-status"></span> <span id="mayor-hook" style="font-size: 0.75rem; color: #64748b; margin-left: 10px;"></span></h2>
+            <div class="mayor-grid">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="color: #64748b; font-size: 0.8rem;">Mayor Terminal (hq-mayor)</span>
+                        <button id="mayor-terminal-toggle" onclick="toggleMayorTerminal()" class="btn btn-success" style="padding: 6px 12px; font-size: 0.8rem;">Connect</button>
+                    </div>
+                    <pre class="terminal-output" id="mayor-terminal" style="min-height: 400px;">Click "Connect" to view Mayor's terminal output.</pre>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="color: #64748b; font-size: 0.8rem;">Send Mail to Mayor</div>
+                    <input type="text" id="mayor-mail-subject" placeholder="Subject" class="input-field" />
+                    <textarea id="mayor-mail-body" placeholder="Message to Mayor..." rows="8" class="input-field" style="resize: vertical; flex: 1;"></textarea>
+                    <button onclick="sendMailToMayor()" class="btn btn-primary">📨 Send to Mayor</button>
+                    <div id="mayor-mail-result" style="font-size: 0.8rem; color: #64748b;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>📊 Mayor Status</h2>
+                <table>
+                    <tr><th>Session</th><td id="session-status">Checking...</td></tr>
+                    <tr><th>Hook Status</th><td id="hook-status">Checking...</td></tr>
+                    <tr><th>Pending Mail</th><td id="mail-count">Checking...</td></tr>
+                </table>
+            </div>
+            <div class="card">
+                <h2>💬 Quick Message</h2>
+                <div class="chat-messages" id="chat-messages"></div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="chat-input" placeholder="Message to Mayor..." class="input-field" style="flex: 1;" />
+                    <button onclick="sendMessage()" class="btn btn-primary">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mayorTerminalSource = null;
+        let mayorTerminalConnected = false;
+
+        function toggleMayorTerminal() {
+            mayorTerminalConnected ? disconnectMayorTerminal() : connectMayorTerminal();
+        }
+
+        function connectMayorTerminal() {
+            const output = document.getElementById('mayor-terminal');
+            const toggle = document.getElementById('mayor-terminal-toggle');
+            if (mayorTerminalSource) mayorTerminalSource.close();
+            output.textContent = 'Connecting to hq-mayor...';
+            mayorTerminalSource = new EventSource('/api/mayor/terminal');
+            mayorTerminalConnected = true;
+            toggle.textContent = 'Disconnect';
+            toggle.className = 'btn btn-warning';
+            toggle.style.padding = '6px 12px';
+            toggle.style.fontSize = '0.8rem';
+
+            mayorTerminalSource.addEventListener('frame', (e) => {
+                output.textContent = e.data;
+                output.scrollTop = output.scrollHeight;
+            });
+            mayorTerminalSource.addEventListener('error', () => {
+                output.textContent = 'Mayor terminal disconnected. Click Connect to retry.';
+                disconnectMayorTerminal();
+            });
+        }
+
+        function disconnectMayorTerminal() {
+            const toggle = document.getElementById('mayor-terminal-toggle');
+            if (mayorTerminalSource) { mayorTerminalSource.close(); mayorTerminalSource = null; }
+            mayorTerminalConnected = false;
+            toggle.textContent = 'Connect';
+            toggle.className = 'btn btn-success';
+            toggle.style.padding = '6px 12px';
+            toggle.style.fontSize = '0.8rem';
+        }
+
+        async function sendMailToMayor() {
+            const subject = document.getElementById('mayor-mail-subject').value.trim();
+            const body = document.getElementById('mayor-mail-body').value.trim();
+            const result = document.getElementById('mayor-mail-result');
+            if (!subject) { result.innerHTML = '<span style="color: #f87171;">Please enter a subject</span>'; return; }
+            result.innerHTML = '<span style="color: #fbbf24;">Sending...</span>';
+            try {
+                const res = await fetch('/api/mail/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: 'mayor/', subject, body }) });
+                const data = await res.json();
+                if (data.success) {
+                    result.innerHTML = '<span style="color: #4ade80;">✓ Mail sent to Mayor</span>';
+                    document.getElementById('mayor-mail-subject').value = '';
+                    document.getElementById('mayor-mail-body').value = '';
+                    setTimeout(() => { result.innerHTML = ''; updateMayorStatus(); }, 2000);
+                } else {
+                    result.innerHTML = '<span style="color: #f87171;">Failed: ' + (data.error || 'Unknown error') + '</span>';
+                }
+            } catch (e) { result.innerHTML = '<span style="color: #f87171;">Error: ' + e.message + '</span>'; }
+        }
+
+        async function updateMayorStatus() {
+            try {
+                const res = await fetch('/api/mayor/status');
+                const data = await res.json();
+                document.getElementById('mayor-status').className = 'status-indicator ' + (data.session_exists ? 'status-green' : 'status-red');
+                document.getElementById('session-status').innerHTML = data.session_exists ? '<span class="badge badge-green">Active</span>' : '<span class="badge" style="background:#991b1b;color:#f87171;">Inactive</span>';
+                const hookSpan = document.getElementById('mayor-hook');
+                if (data.hook && !data.hook.includes('Nothing on hook')) {
+                    hookSpan.textContent = '🪝 Work hooked'; hookSpan.style.color = '#4ade80';
+                    document.getElementById('hook-status').innerHTML = '<span class="badge badge-green">Hooked</span>';
+                } else {
+                    hookSpan.textContent = 'No hook'; hookSpan.style.color = '#64748b';
+                    document.getElementById('hook-status').innerHTML = '<span class="badge badge-yellow">Empty</span>';
+                }
+                document.getElementById('mail-count').textContent = data.mail_count || '0';
+            } catch (e) { console.error('Failed to get mayor status:', e); }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            addMessage(message, 'sent');
+            input.value = '';
+            try {
+                const res = await fetch('/api/mail/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: 'mayor/', subject: 'Web GUI Message', body: message }) });
+                const data = await res.json();
+                addMessage(data.success ? 'Message sent to Mayor' : 'Error: ' + data.error, 'received');
+            } catch (e) { addMessage('Failed: ' + e.message, 'received'); }
+        }
+
+        function addMessage(text, type) {
+            const messages = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.className = 'message ' + type;
+            div.textContent = text;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+        updateMayorStatus();
+        setInterval(updateMayorStatus, 5000);
+    </script>
+</body>
+</html>

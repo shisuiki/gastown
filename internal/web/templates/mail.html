@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail Center - Gas Town</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { 'gt-dark': '#1a1a2e', 'gt-card': '#16213e', 'gt-input': '#0f172a', 'gt-border': '#333333' } } }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .nav-bar { background: #16213e; border-bottom: 1px solid #333; padding: 0 20px; }
+        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; height: 56px; }
+        .nav-brand { font-size: 1.25rem; font-weight: 600; color: #eee; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .nav-brand::before { content: '🏭'; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-link { padding: 8px 16px; color: #94a3b8; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
+        .nav-link:hover { background: #1a1a2e; color: #eee; }
+        .nav-link.active { background: #3b82f6; color: #fff; }
+        .nav-toggle { display: none; background: none; border: none; color: #eee; font-size: 1.5rem; cursor: pointer; padding: 8px; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 8px; }
+        .status-green { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #333; }
+        .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .input-field { width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 8px; background: #0f172a; color: #fff; font-size: 0.9rem; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 0.9rem; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        @media (max-width: 768px) {
+            .container { padding: 12px; }
+            .grid { grid-template-columns: 1fr; }
+            .nav-toggle { display: block; }
+            .nav-links { display: none; position: absolute; top: 56px; left: 0; right: 0; background: #16213e; flex-direction: column; padding: 10px; border-bottom: 1px solid #333; }
+            .nav-links.open { display: flex; }
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">Gas Town <span class="status-indicator status-green" id="daemon-status"></span></a>
+            <button class="nav-toggle" onclick="document.getElementById('nav-links').classList.toggle('open')">☰</button>
+            <div class="nav-links" id="nav-links">
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/mayor" class="nav-link">Mayor</a>
+                <a href="/mail" class="nav-link active">Mail</a>
+                <a href="/terminals" class="nav-link">Terminals</a>
+                <a href="/activity" class="nav-link">Activity</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>📬 Mail Center</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
+                <div style="flex: 1; min-width: 200px;">
+                    <label style="color: #64748b; font-size: 0.8rem;">View Inbox For:</label>
+                    <select id="mail-agent-select" onchange="loadAgentMail()" class="input-field" style="margin-top: 5px;"></select>
+                </div>
+                <div style="flex: 1; min-width: 200px;">
+                    <label style="color: #64748b; font-size: 0.8rem;">Send To:</label>
+                    <select id="mail-to-select" class="input-field" style="margin-top: 5px;"></select>
+                </div>
+            </div>
+            <div id="mail-inbox" style="background: #0f172a; border-radius: 8px; padding: 15px; max-height: 400px; overflow-y: auto; margin-bottom: 15px;">
+                <p style="color: #64748b;">Loading agents...</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <input type="text" id="mail-subject" placeholder="Subject" class="input-field" />
+                <textarea id="mail-body" placeholder="Message body..." rows="4" class="input-field" style="resize: vertical;"></textarea>
+                <button onclick="sendMailToAgent()" class="btn btn-primary">Send Mail</button>
+                <div id="mail-result" style="font-size: 0.8rem; color: #64748b;"></div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>⚡ Quick Actions</h2>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button onclick="quickMessageToMayor()" class="btn btn-primary" style="text-align: left;">
+                        📨 Message Mayor
+                    </button>
+                    <button onclick="refreshInbox()" class="btn" style="background: #334155; color: #e2e8f0; text-align: left;">
+                        🔄 Refresh Inbox
+                    </button>
+                    <p style="color: #64748b; font-size: 0.8rem; margin-top: 10px;">
+                        Use the Mail Center above to compose and send messages to any agent.
+                    </p>
+                </div>
+            </div>
+            <div class="card">
+                <h2>📊 Mail Stats</h2>
+                <div id="mail-stats"><p style="color: #64748b;">Select an agent to view stats</p></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+
+        async function loadAgentsList() {
+            try {
+                const res = await fetch('/api/agents/list');
+                const agents = await res.json();
+                const viewSelect = document.getElementById('mail-agent-select');
+                const sendSelect = document.getElementById('mail-to-select');
+                viewSelect.innerHTML = '';
+                sendSelect.innerHTML = '';
+                agents.forEach(agent => {
+                    viewSelect.innerHTML += '<option value="' + agent.address + '">' + agent.name + ' (' + agent.type + ')</option>';
+                    sendSelect.innerHTML += '<option value="' + agent.address + '">' + agent.name + ' (' + agent.type + ')</option>';
+                });
+                loadAgentMail();
+            } catch (e) {
+                document.getElementById('mail-inbox').innerHTML = '<p style="color: #f87171;">Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function loadAgentMail() {
+            const agent = document.getElementById('mail-agent-select').value;
+            const inbox = document.getElementById('mail-inbox');
+            const stats = document.getElementById('mail-stats');
+            inbox.innerHTML = '<p style="color: #64748b;">Loading...</p>';
+            try {
+                const res = await fetch('/api/mail/all?agent=' + encodeURIComponent(agent));
+                const data = await res.json();
+                if (data.raw) {
+                    inbox.innerHTML = '<pre style="white-space: pre-wrap; color: #e2e8f0; margin: 0;">' + escapeHtml(data.raw) + '</pre>';
+                } else if (data.messages && Array.isArray(data.messages)) {
+                    if (data.messages.length === 0) {
+                        inbox.innerHTML = '<p style="color: #64748b;">No messages</p>';
+                    } else {
+                        inbox.innerHTML = data.messages.map(m =>
+                            '<div style="border-bottom: 1px solid #333; padding: 12px 0;">' +
+                            '<div style="font-weight: 500; color: #60a5fa;">' + escapeHtml(m.subject || 'No subject') + '</div>' +
+                            '<div style="font-size: 0.8rem; color: #94a3b8;">From: ' + escapeHtml(m.from || 'unknown') + '</div>' +
+                            '<div style="margin-top: 8px; color: #e2e8f0;">' + escapeHtml(m.body || m.content || '') + '</div></div>'
+                        ).join('');
+                    }
+                    stats.innerHTML = '<p>Agent: <strong>' + escapeHtml(agent) + '</strong></p><p>Messages: <strong>' + data.messages.length + '</strong></p>';
+                } else {
+                    inbox.innerHTML = '<p style="color: #64748b;">No messages for ' + escapeHtml(agent) + '</p>';
+                }
+            } catch (e) { inbox.innerHTML = '<p style="color: #f87171;">Error: ' + e.message + '</p>'; }
+        }
+
+        async function sendMailToAgent() {
+            const to = document.getElementById('mail-to-select').value;
+            const subject = document.getElementById('mail-subject').value.trim();
+            const body = document.getElementById('mail-body').value.trim();
+            const result = document.getElementById('mail-result');
+            if (!subject) { result.innerHTML = '<span style="color: #f87171;">Please enter a subject</span>'; return; }
+            result.innerHTML = '<span style="color: #fbbf24;">Sending...</span>';
+            try {
+                const res = await fetch('/api/mail/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to, subject, body }) });
+                const data = await res.json();
+                if (data.success) {
+                    result.innerHTML = '<span style="color: #4ade80;">✓ Mail sent to ' + escapeHtml(to) + '</span>';
+                    document.getElementById('mail-subject').value = '';
+                    document.getElementById('mail-body').value = '';
+                    setTimeout(() => { result.innerHTML = ''; loadAgentMail(); }, 2000);
+                } else {
+                    result.innerHTML = '<span style="color: #f87171;">Failed: ' + (data.error || 'Unknown error') + '</span>';
+                }
+            } catch (e) { result.innerHTML = '<span style="color: #f87171;">Error: ' + e.message + '</span>'; }
+        }
+
+        function quickMessageToMayor() {
+            // Set recipient to Mayor and focus the subject field
+            const sendSelect = document.getElementById('mail-to-select');
+            for (let i = 0; i < sendSelect.options.length; i++) {
+                if (sendSelect.options[i].value === 'mayor/' ||
+                    sendSelect.options[i].text.toLowerCase().includes('mayor')) {
+                    sendSelect.selectedIndex = i;
+                    break;
+                }
+            }
+            document.getElementById('mail-subject').focus();
+            document.getElementById('mail-result').innerHTML = '<span style="color: #60a5fa;">Recipient set to Mayor - compose your message above</span>';
+        }
+
+        function refreshInbox() {
+            loadAgentMail();
+        }
+
+        loadAgentsList();
+    </script>
+</body>
+</html>
