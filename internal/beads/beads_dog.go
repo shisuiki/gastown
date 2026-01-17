@@ -22,6 +22,7 @@ func (b *Beads) CreateDogAgentBead(name, location string) (*Issue, error) {
 
 	args := []string{
 		"create", "--json",
+		"--type=agent",
 		"--role-type=dog",
 		"--title=" + title,
 		"--labels=" + strings.Join(labels, ","),
