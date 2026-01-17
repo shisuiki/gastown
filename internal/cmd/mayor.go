@@ -174,7 +174,7 @@ func runMayorAttach(cmd *cobra.Command, args []string) error {
 	} else {
 		// Session exists - check if runtime is still running (hq-95xfq)
 		// If runtime exited or sitting at shell, restart with proper context
-		agentCfg, _, err := config.ResolveAgentConfigWithOverride(townRoot, "", mayorAgentOverride)
+		agentCfg, _, err := config.ResolveAgentConfigWithOverride(townRoot, townRoot, mayorAgentOverride)
 		if err != nil {
 			return fmt.Errorf("resolving agent: %w", err)
 		}
