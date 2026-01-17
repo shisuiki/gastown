@@ -51,6 +51,11 @@
                 <div class="card-content" id="system-info">Loading...</div>
             </div>
 
+            <div class="card">
+                <h2>🤖 Claude Usage</h2>
+                <div class="card-content" id="claude-usage">Loading...</div>
+            </div>
+
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>📋 Active Issues</h2>
                 <div class="card-content" id="issues-list" style="max-height: 250px; overflow-y: auto;">Loading...</div>
@@ -261,9 +266,11 @@
         loadActivity();
         loadIssues();
         loadSystemInfo('system-info');
+        loadClaudeUsage('claude-usage');
         setInterval(loadActivity, 30000);
         setInterval(loadIssues, 30000);
         setInterval(() => loadSystemInfo('system-info'), 60000);
+        setInterval(() => loadClaudeUsage('claude-usage'), 60000);
         connectStatusSocket();
     </script>
 </body>

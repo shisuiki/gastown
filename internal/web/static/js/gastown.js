@@ -457,6 +457,74 @@ async function loadSystemInfo(elementId) {
 }
 
 // ============================================================================
+// Claude Usage Monitoring
+// ============================================================================
+
+/**
+ * Format large numbers with K/M suffix
+ * @param {number} num - Number to format
+ * @returns {string} Formatted string
+ */
+function formatTokens(num) {
+    if (!num) return '0';
+    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+}
+
+/**
+ * Render Claude usage info card content
+ * @param {object} usage - Usage info from /api/claude/usage
+ * @returns {string} HTML content
+ */
+function renderClaudeUsage(usage) {
+    if (!usage || usage.error) {
+        return '<p class="text-muted">' + escapeHtml(usage?.error || 'Unable to load Claude usage') + '</p>';
+    }
+
+    let html = '<div class="system-stats">' +
+        '<div class="sys-row"><span class="sys-label">Sessions</span><span class="sys-value">' + (usage.total_sessions || 0) + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">Messages</span><span class="sys-value">' + formatTokens(usage.total_messages) + '</span></div>';
+
+    // Model usage breakdown
+    if (usage.model_usage) {
+        for (const [model, stats] of Object.entries(usage.model_usage)) {
+            // Shorten model name for display
+            const shortName = model.replace('claude-', '').replace('-20251101', '');
+            const totalTokens = (stats.input_tokens || 0) + (stats.output_tokens || 0) + (stats.cache_read || 0);
+            if (totalTokens > 0) {
+                html += '<div class="sys-section"><span class="sys-label">' + escapeHtml(shortName) + '</span>' +
+                    '<span class="sys-value">' + formatTokens(totalTokens) + ' tokens</span></div>';
+            }
+        }
+    }
+
+    html += '</div>';
+    return html;
+}
+
+/**
+ * Fetch and update Claude usage display
+ * @param {string} elementId - ID of element to update
+ */
+async function loadClaudeUsage(elementId) {
+    try {
+        const res = await fetch('/api/claude/usage');
+        const data = await res.json();
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = renderClaudeUsage(data);
+        }
+    } catch (e) {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+}
+
+// ============================================================================
 // Initialize on page load
 // ============================================================================
 

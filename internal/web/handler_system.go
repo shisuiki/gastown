@@ -470,6 +470,114 @@ func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ClaudeUsage represents Claude Code usage statistics.
+type ClaudeUsage struct {
+	TotalSessions int            `json:"total_sessions"`
+	TotalMessages int            `json:"total_messages"`
+	ModelUsage    map[string]ModelUsage `json:"model_usage"`
+	DailyActivity []DailyActivity `json:"daily_activity,omitempty"`
+}
+
+// ModelUsage represents token usage for a single model.
+type ModelUsage struct {
+	InputTokens   int64 `json:"input_tokens"`
+	OutputTokens  int64 `json:"output_tokens"`
+	CacheRead     int64 `json:"cache_read"`
+	CacheCreation int64 `json:"cache_creation"`
+}
+
+// DailyActivity represents daily activity stats.
+type DailyActivity struct {
+	Date          string `json:"date"`
+	MessageCount  int    `json:"message_count"`
+	SessionCount  int    `json:"session_count"`
+	ToolCallCount int    `json:"tool_call_count"`
+}
+
+// handleAPIClaudeUsage returns Claude Code usage statistics.
+func (h *GUIHandler) handleAPIClaudeUsage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Check cache first
+	if cached := h.cache.Get("claude:usage"); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
+	// Read stats-cache.json from ~/.claude/
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Cannot determine home directory",
+		})
+		return
+	}
+
+	statsPath := filepath.Join(homeDir, ".claude", "stats-cache.json")
+	data, err := os.ReadFile(statsPath)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Cannot read Claude stats: " + err.Error(),
+		})
+		return
+	}
+
+	// Parse the stats file
+	var rawStats struct {
+		TotalSessions int `json:"totalSessions"`
+		TotalMessages int `json:"totalMessages"`
+		ModelUsage    map[string]struct {
+			InputTokens            int64 `json:"inputTokens"`
+			OutputTokens           int64 `json:"outputTokens"`
+			CacheReadInputTokens   int64 `json:"cacheReadInputTokens"`
+			CacheCreationInputTokens int64 `json:"cacheCreationInputTokens"`
+		} `json:"modelUsage"`
+		DailyActivity []struct {
+			Date          string `json:"date"`
+			MessageCount  int    `json:"messageCount"`
+			SessionCount  int    `json:"sessionCount"`
+			ToolCallCount int    `json:"toolCallCount"`
+		} `json:"dailyActivity"`
+	}
+
+	if err := json.Unmarshal(data, &rawStats); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Cannot parse Claude stats: " + err.Error(),
+		})
+		return
+	}
+
+	// Convert to our response format
+	usage := ClaudeUsage{
+		TotalSessions: rawStats.TotalSessions,
+		TotalMessages: rawStats.TotalMessages,
+		ModelUsage:    make(map[string]ModelUsage),
+	}
+
+	for model, stats := range rawStats.ModelUsage {
+		usage.ModelUsage[model] = ModelUsage{
+			InputTokens:   stats.InputTokens,
+			OutputTokens:  stats.OutputTokens,
+			CacheRead:     stats.CacheReadInputTokens,
+			CacheCreation: stats.CacheCreationInputTokens,
+		}
+	}
+
+	for _, day := range rawStats.DailyActivity {
+		usage.DailyActivity = append(usage.DailyActivity, DailyActivity{
+			Date:          day.Date,
+			MessageCount:  day.MessageCount,
+			SessionCount:  day.SessionCount,
+			ToolCallCount: day.ToolCallCount,
+		})
+	}
+
+	// Cache for 60 seconds
+	h.cache.Set("claude:usage", usage, 60*time.Second)
+
+	json.NewEncoder(w).Encode(usage)
+}
+
 func formatBytes(b int64) string {
 	const unit = 1024
 	if b < unit {
