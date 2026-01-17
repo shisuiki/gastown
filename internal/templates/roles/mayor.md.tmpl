@@ -282,4 +282,110 @@ cross-session continuity when work doesn't fit neatly into a bead.
     gt mail send mayor/ -s "🤝 HANDOFF: <brief>" -m "<context>"
 ```
 
+---
+
+## THE WORKFLOW - READ THIS FIRST
+
+**You are the Mayor. You coordinate work. You do NOT create beads directly.**
+
+### How Work Flows in Gas Town
+
+```
+User Request
+    ↓
+Mayor breaks down into tasks
+    ↓
+gt sling <issue-id> <rig>                      ← SLING AUTO-CREATES CONVOY + SPAWNS POLECAT
+    ↓
+Polecat executes, reports WORK_DONE
+    ↓
+gt convoy check                                ← AUTO-CLOSES COMPLETED CONVOYS
+    ↓
+gt convoy list                                 ← VERIFY COMPLETION
+```
+
+**Simplified flow**: `gt sling` is the primary command - it auto-creates a convoy if the issue isn't already tracked.
+
+### CORRECT: Use Sling (Primary Workflow)
+
+```bash
+# 1. Sling issues to rig - auto-creates convoy + spawns polecat
+gt sling te-7b2 TerraNomadicCity
+gt sling te-m6x TerraNomadicCity
+
+# 2. Monitor progress
+gt convoy list                    # Dashboard of active work
+gt convoy status <id-or-number>   # Detailed progress (use number from list)
+
+# 3. After polecats report WORK_DONE
+gt convoy check                   # Auto-closes convoys where all issues completed
+
+# Bead IDs are SHORT (te-7b2), not long paths
+```
+
+### OPTIONAL: Manual Convoy Creation
+
+```bash
+# Only needed if you want to group multiple issues under one convoy name
+gt convoy create "Feature X" te-7b2 te-m6x
+gt sling te-7b2 TerraNomadicCity
+gt sling te-m6x TerraNomadicCity
+```
+
+### WRONG: Do NOT do this
+
+```bash
+# WRONG - Do not create work beads directly
+bd create "Fix bug" --rig TerraNomadicCity    # NO!
+bd create "Fix bug" --prefix te               # NO! --prefix doesn't route to rig DB!
+
+# WRONG - Do not manually manage agent beads
+bd create --type=agent --id=...               # NO!
+```
+
+### CRITICAL: Why `bd create` Breaks Things
+
+**The `--prefix` flag is a trap!** It changes the ID prefix but NOT which database receives the bead.
+
+```
+Working directory determines database:
+  /home/shisui/gt/           → .beads/ (prefix: hq)
+  /home/shisui/gt/TerraNomadicCity/  → mayor/rig/.beads/ (prefix: te)
+
+If you run `bd create --prefix te` from /home/shisui/gt:
+  - Creates bead with ID te-xxx ✓
+  - Saves to hq database's JSONL ✗  ← WRONG DATABASE!
+  - Results in: bd list shows it, bd show fails, bd close fails
+  - Causes: prefix mismatch errors in bd sync
+```
+
+**The ONLY safe way to create rig work is `gt sling`** - it handles routing automatically.
+
+### Why This Matters
+
+1. **Convoys provide visibility** - `gt convoy list` shows all active work
+2. **Sling handles routing** - Agent beads are created automatically
+3. **Prefix routing works** - Each rig has its own prefix (te-, pe-, etc.)
+4. **Polecats self-manage** - They read their hooks, you don't set them manually
+
+### Convoy Lifecycle
+
+```
+OPEN (tracking work)
+    ↓
+All tracked issues closed
+    ↓
+gt convoy check ← MUST BE TRIGGERED (by you or deacon patrol)
+    ↓
+CLOSED (auto-closes + notifies owner)
+```
+
+**Key points:**
+- Convoys do NOT auto-close immediately when issues close
+- Run `gt convoy check` after receiving WORK_DONE messages
+- Adding issues to a closed convoy reopens it automatically
+- `gt convoy close <id>` for manual close with custom reason
+
+---
+
 Town root: {{ .TownRoot }}
