@@ -657,38 +657,66 @@ func (f *LiveConvoyFetcher) fetchAgentsUncached() ([]AgentRow, error) {
 
 		sessionName := parts[0]
 
-		// Filter for gt-<rig>-<polecat> pattern
-		if !strings.HasPrefix(sessionName, "gt-") {
-			continue
-		}
+		var rig, agentName, agentType string
 
-		// Parse session name: gt-roxas-dag -> rig=roxas, polecat=dag
-		// Or: gt-rig-crew-name -> rig=rig, crew=name
-		nameParts := strings.SplitN(sessionName, "-", 4) // Allow up to 4 parts for crew
-		if len(nameParts) < 3 {
-			continue
-		}
-		rig := nameParts[1]
-		agentPart := nameParts[2]
-		agentType := "polecat"
-		var agentName string
+		// Handle hq- prefix sessions (mayor, deacon)
+		if strings.HasPrefix(sessionName, "hq-") {
+			rig = "hq"
+			agentName = strings.TrimPrefix(sessionName, "hq-")
+			switch agentName {
+			case "mayor":
+				agentType = "mayor"
+			case "deacon":
+				agentType = "deacon"
+			default:
+				agentType = "patrol"
+			}
+		} else if strings.HasPrefix(sessionName, "gt-") {
+			// Parse gt- sessions
+			nameParts := strings.SplitN(sessionName, "-", 5) // Allow up to 5 parts for dogs
+			if len(nameParts) < 2 {
+				continue
+			}
 
-		// Check if this is a crew worker (gt-rig-crew-name)
-		if agentPart == "crew" && len(nameParts) >= 4 {
-			agentType = "crew"
-			agentName = strings.Join(nameParts[3:], "-") // Handle names with dashes
-		} else if agentPart == "refinery" {
-			agentType = "refinery"
-			agentName = "refinery"
-		} else if agentPart == "mayor" {
-			agentType = "mayor"
-			agentName = "mayor"
-		} else if agentPart == "witness" || agentPart == "deacon" || agentPart == "boot" {
-			// Skip non-worker patrol sessions from agents list
-			continue
+			// Handle gt-boot (no rig)
+			if nameParts[1] == "boot" {
+				rig = "hq"
+				agentName = "boot"
+				agentType = "boot"
+			} else if len(nameParts) >= 3 {
+				rig = nameParts[1]
+				agentPart := nameParts[2]
+
+				// Check agent type based on pattern
+				if agentPart == "crew" && len(nameParts) >= 4 {
+					agentType = "crew"
+					agentName = strings.Join(nameParts[3:], "-")
+				} else if agentPart == "refinery" {
+					agentType = "refinery"
+					agentName = "refinery"
+				} else if agentPart == "witness" {
+					agentType = "witness"
+					agentName = "witness"
+				} else if agentPart == "dog" && len(nameParts) >= 4 {
+					// gt-deacon-dog-{name} pattern
+					agentType = "dog"
+					agentName = strings.Join(nameParts[3:], "-")
+					rig = "deacon"
+				} else {
+					// Regular polecat
+					agentType = "polecat"
+					agentName = agentPart
+				}
+			} else {
+				continue
+			}
 		} else {
-			// Regular polecat
-			agentName = agentPart
+			// Skip non-gt/hq sessions
+			continue
+		}
+
+		if agentName == "" {
+			continue
 		}
 
 		// Parse activity timestamp

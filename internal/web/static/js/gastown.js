@@ -41,6 +41,11 @@ function agentTypeIcon(type) {
         case 'crew': return '👷';
         case 'refinery': return '🏭';
         case 'polecat': return '🐱';
+        case 'mayor': return '🏛️';
+        case 'deacon': return '⛪';
+        case 'witness': return '👁️';
+        case 'boot': return '🥾';
+        case 'dog': return '🐕';
         case 'patrol': return '🛡️';
         default: return '🤖';
     }
