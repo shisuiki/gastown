@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>Workflow - Gas Town</title>
+    <style>
+        .hook-status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .hook-empty {
+            background: rgba(100, 100, 100, 0.2);
+            border: 1px dashed var(--border);
+        }
+        .hook-active {
+            background: rgba(74, 222, 128, 0.15);
+            border: 1px solid var(--green);
+        }
+        .hook-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+        .hook-content {
+            font-size: 1.1rem;
+        }
+        .hook-id {
+            font-family: monospace;
+            color: var(--green);
+        }
+        .priority-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        .priority-1 { background: var(--red); color: var(--bg-dark); }
+        .priority-2 { background: var(--yellow); color: var(--bg-dark); }
+        .priority-3 { background: var(--green); color: var(--bg-dark); }
+        .priority-4 { background: var(--text-secondary); color: var(--bg-dark); }
+        .type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            margin-right: 5px;
+        }
+        .issue-row {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .issue-row:last-child {
+            border-bottom: none;
+        }
+        .issue-row:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .issue-id {
+            font-family: monospace;
+            color: var(--text-primary);
+            min-width: 80px;
+        }
+        .issue-title {
+            flex: 1;
+            color: var(--text-secondary);
+        }
+        .section-icon {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    {{template "nav" .}}
+
+    <div class="container">
+        <div class="card" style="margin-bottom: 20px;">
+            <h2><span class="section-icon">🪝</span>Current Hook</h2>
+            <div id="hook-status">
+                <div class="hook-status hook-empty">
+                    <div class="hook-label">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2><span class="section-icon">📋</span>Ready Issues</h2>
+                <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 10px;">Issues with no blockers</p>
+                <div id="ready-issues">Loading...</div>
+            </div>
+            <div class="card">
+                <h2><span class="section-icon">🚚</span>Active Convoys</h2>
+                <div id="convoys-list">Loading...</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2><span class="section-icon">📝</span>Recent Commits</h2>
+            <div id="commits-list" style="max-height: 300px; overflow-y: auto;">Loading...</div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        // ================================================================
+        // Workflow Page JavaScript
+        // ================================================================
+
+        function renderHookStatus(status) {
+            if (!status.has_work) {
+                return `
+                    <div class="hook-status hook-empty">
+                        <div class="hook-label">Hook Status</div>
+                        <div class="hook-content">No work currently hooked</div>
+                        <p class="text-muted" style="margin-top: 10px; font-size: 0.85rem;">
+                            Check mail or use <code>gt sling</code> to assign work
+                        </p>
+                    </div>
+                `;
+            }
+
+            const typeIcon = status.work_type === 'molecule' ? '📦' : '📬';
+            const typeLabel = status.work_type === 'molecule' ? 'Molecule' : 'Mail';
+
+            return `
+                <div class="hook-status hook-active">
+                    <div class="hook-label">${typeIcon} ${typeLabel} Hooked</div>
+                    <div class="hook-content">
+                        <span class="hook-id">${escapeHtml(status.work_id)}</span>
+                        ${status.work_title ? '<br><span class="text-secondary">' + escapeHtml(status.work_title) + '</span>' : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderReadyIssues(issues) {
+            if (!issues || issues.length === 0) {
+                return '<p class="text-muted">No ready issues</p>';
+            }
+
+            return issues.map(issue => `
+                <div class="issue-row">
+                    <span class="priority-badge priority-${issue.priority}">P${issue.priority}</span>
+                    <span class="type-badge">${escapeHtml(issue.type)}</span>
+                    <span class="issue-id">${escapeHtml(issue.id)}</span>
+                    <span class="issue-title">${escapeHtml(issue.title)}</span>
+                </div>
+            `).join('');
+        }
+
+        async function loadHookStatus() {
+            try {
+                const res = await fetch('/api/workflow/hook');
+                const status = await res.json();
+                document.getElementById('hook-status').innerHTML = renderHookStatus(status);
+            } catch (e) {
+                document.getElementById('hook-status').innerHTML =
+                    '<div class="hook-status hook-empty"><div class="hook-content text-danger">Error: ' + escapeHtml(e.message) + '</div></div>';
+            }
+        }
+
+        async function loadReadyIssues() {
+            try {
+                const res = await fetch('/api/workflow/ready');
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('ready-issues').innerHTML =
+                        '<p class="text-muted">' + escapeHtml(data.error) + '</p>';
+                    return;
+                }
+
+                document.getElementById('ready-issues').innerHTML = renderReadyIssues(data.issues);
+            } catch (e) {
+                document.getElementById('ready-issues').innerHTML =
+                    '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
+            }
+        }
+
+        async function loadConvoys() {
+            try {
+                const res = await fetch('/api/convoys');
+                const convoys = await res.json();
+
+                if (convoys.error) {
+                    document.getElementById('convoys-list').innerHTML =
+                        '<p class="text-danger">Error: ' + escapeHtml(convoys.error) + '</p>';
+                    return;
+                }
+
+                document.getElementById('convoys-list').innerHTML = renderConvoysTable(convoys);
+            } catch (e) {
+                document.getElementById('convoys-list').innerHTML =
+                    '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
+            }
+        }
+
+        async function loadCommits() {
+            try {
+                const res = await fetch('/api/activity');
+                const data = await res.json();
+                document.getElementById('commits-list').innerHTML = renderCommitsTable(data.commits);
+            } catch (e) {
+                document.getElementById('commits-list').innerHTML =
+                    '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
+            }
+        }
+
+        // Initialize
+        loadHookStatus();
+        loadReadyIssues();
+        loadConvoys();
+        loadCommits();
+
+        // Refresh periodically
+        setInterval(loadHookStatus, 10000);
+        setInterval(loadReadyIssues, 30000);
+        setInterval(loadConvoys, 30000);
+        setInterval(loadCommits, 60000);
+    </script>
+</body>
+</html>

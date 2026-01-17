@@ -63,7 +63,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/mayor", h.handleMayor)
 	h.mux.HandleFunc("/mail", h.handleMail)
 	h.mux.HandleFunc("/terminals", h.handleTerminals)
-	h.mux.HandleFunc("/activity", h.handleActivity)
+	h.mux.HandleFunc("/workflow", h.handleWorkflow)
+	h.mux.HandleFunc("/activity", h.handleWorkflow) // Legacy redirect
 
 	// Dashboard API routes
 	h.mux.HandleFunc("/api/status", h.handleAPIStatus)
@@ -84,8 +85,10 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
 	h.mux.HandleFunc("/api/terminal/send", h.handleAPITerminalSend)
 
-	// Activity API routes
-	h.mux.HandleFunc("/api/activity", h.handleAPIActivity)
+	// Workflow API routes
+	h.mux.HandleFunc("/api/activity", h.handleAPIActivity)        // Legacy: git commits
+	h.mux.HandleFunc("/api/workflow/hook", h.handleAPIWorkflowHook)
+	h.mux.HandleFunc("/api/workflow/ready", h.handleAPIWorkflowReady)
 
 	// Shared API routes
 	h.mux.HandleFunc("/api/command", h.handleAPICommand)
