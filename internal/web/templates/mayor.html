@@ -35,23 +35,13 @@
             </div>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <h2>📊 Mayor Status</h2>
-                <table>
-                    <tr><th>Session</th><td id="session-status">Checking...</td></tr>
-                    <tr><th>Hook Status</th><td id="hook-status">Checking...</td></tr>
-                    <tr><th>Pending Mail</th><td id="mail-count">Checking...</td></tr>
-                </table>
-            </div>
-            <div class="card">
-                <h2>💬 Quick Message</h2>
-                <div class="chat-messages" id="chat-messages"></div>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="chat-input" placeholder="Message to Mayor..." class="input-field" style="flex: 1;">
-                    <button onclick="sendMessage()" class="btn btn-primary">Send</button>
-                </div>
-            </div>
+        <div class="card" style="margin-top: 20px;">
+            <h2>📊 Mayor Status</h2>
+            <table>
+                <tr><th>Session</th><td id="session-status">Checking...</td></tr>
+                <tr><th>Hook Status</th><td id="hook-status">Checking...</td></tr>
+                <tr><th>Pending Mail</th><td id="mail-count">Checking...</td></tr>
+            </table>
         </div>
     </div>
 
@@ -135,41 +125,6 @@
                 console.error('Failed to get mayor status:', e);
             }
         }
-
-        async function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const message = input.value.trim();
-            if (!message) return;
-
-            addMessage(message, 'sent');
-            input.value = '';
-
-            try {
-                const res = await fetch('/api/mail/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: 'mayor/', subject: 'Web GUI Message', body: message })
-                });
-                const data = await res.json();
-                addMessage(data.success ? 'Message sent to Mayor' : 'Error: ' + data.error, 'received');
-            } catch (e) {
-                addMessage('Failed: ' + e.message, 'received');
-            }
-        }
-
-        function addMessage(text, type) {
-            const messages = document.getElementById('chat-messages');
-            const div = document.createElement('div');
-            div.className = 'message ' + type;
-            div.textContent = text;
-            messages.appendChild(div);
-            messages.scrollTop = messages.scrollHeight;
-        }
-
-        // Event listeners
-        document.getElementById('chat-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
 
         // Initialize
         updateMayorStatus();
