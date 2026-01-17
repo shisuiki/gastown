@@ -340,6 +340,11 @@ func (s *Server) executeCommand(command string) string {
 		return s.runCmd("git", args...)
 
 	case "run", "sh", "bash":
+		// SECURITY: Shell execution is gated by GT_SSH_ALLOW_SHELL env var.
+		// This prevents arbitrary command execution unless explicitly enabled.
+		if os.Getenv("GT_SSH_ALLOW_SHELL") != "1" {
+			return "Shell commands disabled. Set GT_SSH_ALLOW_SHELL=1 to enable.\n"
+		}
 		// Execute arbitrary shell command via bash -c
 		// This allows full shell syntax including &&, |, ;, etc.
 		if len(args) == 0 {
@@ -401,7 +406,12 @@ func (s *Server) runShell(command string) string {
 }
 
 func (s *Server) helpText() string {
-	return `Gas Town SSH Commands:
+	shellStatus := "disabled"
+	if os.Getenv("GT_SSH_ALLOW_SHELL") == "1" {
+		shellStatus = "enabled"
+	}
+
+	return fmt.Sprintf(`Gas Town SSH Commands:
   status     - Show daemon status
   mail       - Check inbox (mail inbox, mail send, etc.)
   hook       - Show current hook status
@@ -418,13 +428,13 @@ func (s *Server) helpText() string {
   cat <file> - Show file contents
   git <cmd>  - Run git commands
 
-  run <cmd>  - Execute shell command (supports &&, |, etc.)
-               Example: run ls -la && pwd
+  run <cmd>  - Execute shell command [%s]
+               (requires GT_SSH_ALLOW_SHELL=1)
                Aliases: sh, bash
 
   help       - Show this help
   exit       - Disconnect
-`
+`, shellStatus)
 }
 
 func (s *Server) publicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
@@ -442,13 +452,10 @@ func (s *Server) publicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*s
 }
 
 func (s *Server) passwordCallback(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
-	// For simplicity, accept any password in development
-	// In production, this should validate against a real auth system
-	return &ssh.Permissions{
-		Extensions: map[string]string{
-			"user": conn.User(),
-		},
-	}, nil
+	// SECURITY: Password authentication is disabled.
+	// Only public key authentication is allowed.
+	log.Printf("SSH password auth rejected for user %q from %s", conn.User(), conn.RemoteAddr())
+	return nil, fmt.Errorf("password authentication disabled, use public key")
 }
 
 func loadOrGenerateHostKey(path string) (ssh.Signer, error) {
