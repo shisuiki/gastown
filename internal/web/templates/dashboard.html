@@ -13,6 +13,18 @@
             <span id="status-time" class="text-muted" style="font-size: 0.8rem;">Loading...</span>
         </div>
 
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>⚡ Quick Actions</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                <button class="btn btn-success" onclick="runAction('daemon-status')">Daemon Status</button>
+                <button class="btn" onclick="runAction('bd-sync')">Sync Beads</button>
+                <button class="btn" onclick="runAction('bd-ready')">Show Ready</button>
+                <button class="btn btn-info" onclick="showCreateDialog('convoy')">+ Convoy</button>
+                <button class="btn btn-info" onclick="showCreateDialog('issue')">+ Issue</button>
+            </div>
+            <pre id="action-output" class="terminal-output" style="display: none; margin-top: 15px; max-height: 200px;"></pre>
+        </div>
+
         <div class="grid">
             <div class="card">
                 <h2>📊 Rigs</h2>
@@ -130,6 +142,82 @@
                 document.getElementById('issues-list').innerHTML = renderIssuesTable(data.issues);
             } catch (e) {
                 document.getElementById('issues-list').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
+            }
+        }
+
+        // Quick Actions
+        async function runAction(action) {
+            const outputEl = document.getElementById('action-output');
+            outputEl.style.display = 'block';
+            outputEl.textContent = 'Running ' + action + '...';
+
+            try {
+                const res = await fetch('/api/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action })
+                });
+                const data = await res.json();
+                outputEl.textContent = data.output || data.error || 'Done';
+            } catch (e) {
+                outputEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        function showCreateDialog(type) {
+            if (type === 'convoy') {
+                const title = prompt('Enter convoy title:');
+                if (title) {
+                    createConvoy(title);
+                }
+            } else if (type === 'issue') {
+                const title = prompt('Enter issue title:');
+                if (title) {
+                    const issueType = prompt('Type (task/bug/feature/doc):', 'task') || 'task';
+                    createIssue(title, issueType);
+                }
+            }
+        }
+
+        async function createConvoy(title) {
+            const outputEl = document.getElementById('action-output');
+            outputEl.style.display = 'block';
+            outputEl.textContent = 'Creating convoy...';
+
+            try {
+                const res = await fetch('/api/convoy/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title })
+                });
+                const data = await res.json();
+                outputEl.textContent = data.output || data.error || 'Convoy created';
+                if (data.success) {
+                    loadIssues(); // Refresh
+                }
+            } catch (e) {
+                outputEl.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function createIssue(title, type) {
+            const outputEl = document.getElementById('action-output');
+            outputEl.style.display = 'block';
+            outputEl.textContent = 'Creating issue...';
+
+            try {
+                const res = await fetch('/api/bead/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title, type: type, priority: 2 })
+                });
+                const data = await res.json();
+                outputEl.textContent = data.output || data.error || 'Issue created';
+                if (data.success) {
+                    loadIssues(); // Refresh
+                }
+            } catch (e) {
+                outputEl.textContent = 'Error: ' + e.message;
             }
         }
 

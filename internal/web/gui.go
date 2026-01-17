@@ -98,6 +98,11 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/convoy/", h.handleAPIConvoyDetail)
 	h.mux.HandleFunc("/api/bead/", h.handleAPIBeadDetail)
 
+	// Quick action API routes
+	h.mux.HandleFunc("/api/action", h.handleAPIActions)
+	h.mux.HandleFunc("/api/convoy/create", h.handleAPICreateConvoy)
+	h.mux.HandleFunc("/api/bead/create", h.handleAPICreateBead)
+
 	// Shared API routes
 	h.mux.HandleFunc("/api/command", h.handleAPICommand)
 	h.mux.HandleFunc("/api/rigs", h.handleAPIRigs)
