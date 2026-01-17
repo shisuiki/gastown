@@ -65,6 +65,8 @@ func createAutoConvoy(beadID, beadTitle string) (string, error) {
 	}
 
 	townBeads := filepath.Join(townRoot, ".beads")
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
 
 	// Generate convoy ID with hq-cv- prefix for visual distinction
 	// The hq-cv- prefix is registered in routes during gt install
@@ -76,6 +78,7 @@ func createAutoConvoy(beadID, beadTitle string) (string, error) {
 
 	createArgs := []string{
 		"create",
+		"--db=" + dbPath,
 		"--type=convoy",
 		"--id=" + convoyID,
 		"--title=" + convoyTitle,
@@ -95,7 +98,7 @@ func createAutoConvoy(beadID, beadTitle string) (string, error) {
 
 	// Add tracking relation: convoy tracks the issue
 	trackBeadID := formatTrackBeadID(beadID)
-	depArgs := []string{"--no-daemon", "dep", "add", convoyID, trackBeadID, "--type=tracks"}
+	depArgs := []string{"--no-daemon", "--db=" + dbPath, "dep", "add", convoyID, trackBeadID, "--type=tracks"}
 	depCmd := exec.Command("bd", depArgs...)
 	depCmd.Dir = townBeads
 	depCmd.Stderr = os.Stderr

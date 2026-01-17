@@ -312,7 +312,11 @@ func runConvoyCreate(cmd *cobra.Command, args []string) error {
 	// Generate convoy ID with cv- prefix
 	convoyID := fmt.Sprintf("hq-cv-%s", generateShortID())
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	createArgs := []string{
+		"--db=" + dbPath,
 		"create",
 		"--type=convoy",
 		"--id=" + convoyID,
@@ -341,7 +345,8 @@ func runConvoyCreate(cmd *cobra.Command, args []string) error {
 	trackedCount := 0
 	for _, issueID := range trackedIssues {
 		// Use --type=tracks for non-blocking tracking relation
-		depArgs := []string{"dep", "add", convoyID, issueID, "--type=tracks"}
+		// Include --db flag to target town database explicitly
+		depArgs := []string{"--db=" + dbPath, "dep", "add", convoyID, issueID, "--type=tracks"}
 		depCmd := exec.Command("bd", depArgs...)
 		depCmd.Dir = townBeads
 		var depStderr bytes.Buffer
@@ -389,8 +394,11 @@ func runConvoyAdd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// Validate convoy exists and get its status
-	showArgs := []string{"show", convoyID, "--json"}
+	showArgs := []string{"--db=" + dbPath, "show", convoyID, "--json"}
 	showCmd := exec.Command("bd", showArgs...)
 	showCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -424,7 +432,7 @@ func runConvoyAdd(cmd *cobra.Command, args []string) error {
 	// If convoy is closed, reopen it
 	reopened := false
 	if convoy.Status == "closed" {
-		reopenArgs := []string{"update", convoyID, "--status=open"}
+		reopenArgs := []string{"--db=" + dbPath, "update", convoyID, "--status=open"}
 		reopenCmd := exec.Command("bd", reopenArgs...)
 		reopenCmd.Dir = townBeads
 		if err := reopenCmd.Run(); err != nil {
@@ -437,7 +445,7 @@ func runConvoyAdd(cmd *cobra.Command, args []string) error {
 	// Add 'tracks' relations for each issue
 	addedCount := 0
 	for _, issueID := range issuesToAdd {
-		depArgs := []string{"dep", "add", convoyID, issueID, "--type=tracks"}
+		depArgs := []string{"--db=" + dbPath, "dep", "add", convoyID, issueID, "--type=tracks"}
 		depCmd := exec.Command("bd", depArgs...)
 		depCmd.Dir = townBeads
 		var depStderr bytes.Buffer
@@ -497,8 +505,11 @@ func runConvoyClose(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// Get convoy details
-	showArgs := []string{"show", convoyID, "--json"}
+	showArgs := []string{"--db=" + dbPath, "show", convoyID, "--json"}
 	showCmd := exec.Command("bd", showArgs...)
 	showCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -543,7 +554,7 @@ func runConvoyClose(cmd *cobra.Command, args []string) error {
 	}
 
 	// Close the convoy
-	closeArgs := []string{"close", convoyID, "-r", reason}
+	closeArgs := []string{"--db=" + dbPath, "close", convoyID, "-r", reason}
 	closeCmd := exec.Command("bd", closeArgs...)
 	closeCmd.Dir = townBeads
 
@@ -640,11 +651,14 @@ func runConvoyStranded(cmd *cobra.Command, args []string) error {
 func findStrandedConvoys(townBeads string) ([]strandedConvoyInfo, error) {
 	var stranded []strandedConvoyInfo
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// Get blocked issues (we need this to filter out blocked issues)
-	blockedIssues := getBlockedIssueIDs()
+	blockedIssues := getBlockedIssueIDs(dbPath)
 
 	// List all open convoys
-	listArgs := []string{"list", "--type=convoy", "--status=open", "--json"}
+	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--status=open", "--json"}
 	listCmd := exec.Command("bd", listArgs...)
 	listCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -691,11 +705,11 @@ func findStrandedConvoys(townBeads string) ([]strandedConvoyInfo, error) {
 }
 
 // getBlockedIssueIDs returns a set of issue IDs that are currently blocked.
-func getBlockedIssueIDs() map[string]bool {
+func getBlockedIssueIDs(dbPath string) map[string]bool {
 	blocked := make(map[string]bool)
 
-	// Run bd blocked --json
-	blockedCmd := exec.Command("bd", "blocked", "--json")
+	// Run bd blocked --json with explicit database
+	blockedCmd := exec.Command("bd", "--db="+dbPath, "blocked", "--json")
 	var stdout bytes.Buffer
 	blockedCmd.Stdout = &stdout
 
@@ -759,8 +773,11 @@ func isReadyIssue(t trackedIssueInfo, blockedIssues map[string]bool) bool {
 func checkAndCloseCompletedConvoys(townBeads string) ([]struct{ ID, Title string }, error) {
 	var closed []struct{ ID, Title string }
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// List all open convoys
-	listArgs := []string{"list", "--type=convoy", "--status=open", "--json"}
+	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--status=open", "--json"}
 	listCmd := exec.Command("bd", listArgs...)
 	listCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -796,7 +813,7 @@ func checkAndCloseCompletedConvoys(townBeads string) ([]struct{ ID, Title string
 
 		if allClosed {
 			// Close the convoy
-			closeArgs := []string{"close", convoy.ID, "-r", "All tracked issues completed"}
+			closeArgs := []string{"--db=" + dbPath, "close", convoy.ID, "-r", "All tracked issues completed"}
 			closeCmd := exec.Command("bd", closeArgs...)
 			closeCmd.Dir = townBeads
 
@@ -817,8 +834,11 @@ func checkAndCloseCompletedConvoys(townBeads string) ([]struct{ ID, Title string
 
 // notifyConvoyCompletion sends notifications to owner and any notify addresses.
 func notifyConvoyCompletion(townBeads, convoyID, title string) {
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// Get convoy description to find owner and notify addresses
-	showArgs := []string{"show", convoyID, "--json"}
+	showArgs := []string{"--db=" + dbPath, "show", convoyID, "--json"}
 	showCmd := exec.Command("bd", showArgs...)
 	showCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -865,16 +885,19 @@ func runConvoyStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// If no ID provided, show all active convoys
 	if len(args) == 0 {
-		return showAllConvoyStatus(townBeads)
+		return showAllConvoyStatus(townBeads, dbPath)
 	}
 
 	convoyID := args[0]
 
 	// Check if it's a numeric shortcut (e.g., "1" instead of "hq-cv-xyz")
 	if n, err := strconv.Atoi(convoyID); err == nil && n > 0 {
-		resolved, err := resolveConvoyNumber(townBeads, n)
+		resolved, err := resolveConvoyNumber(townBeads, dbPath, n)
 		if err != nil {
 			return err
 		}
@@ -882,7 +905,7 @@ func runConvoyStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get convoy details
-	showArgs := []string{"show", convoyID, "--json"}
+	showArgs := []string{"--db=" + dbPath, "show", convoyID, "--json"}
 	showCmd := exec.Command("bd", showArgs...)
 	showCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -999,9 +1022,9 @@ func runConvoyStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func showAllConvoyStatus(townBeads string) error {
+func showAllConvoyStatus(townBeads, dbPath string) error {
 	// List all convoy-type issues
-	listArgs := []string{"list", "--type=convoy", "--status=open", "--json"}
+	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--status=open", "--json"}
 	listCmd := exec.Command("bd", listArgs...)
 	listCmd.Dir = townBeads
 	var stdout bytes.Buffer
@@ -1047,8 +1070,11 @@ func runConvoyList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Explicit database path to avoid prefix mismatch when running from rig context
+	dbPath := filepath.Join(townBeads, "beads.db")
+
 	// List convoy-type issues
-	listArgs := []string{"list", "--type=convoy", "--json"}
+	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--json"}
 	if convoyListStatus != "" {
 		listArgs = append(listArgs, "--status="+convoyListStatus)
 	} else if convoyListAll {
@@ -1535,9 +1561,9 @@ func runConvoyTUI() error {
 
 // resolveConvoyNumber converts a numeric shortcut (1, 2, 3...) to a convoy ID.
 // Numbers correspond to the order shown in 'gt convoy list'.
-func resolveConvoyNumber(townBeads string, n int) (string, error) {
+func resolveConvoyNumber(townBeads, dbPath string, n int) (string, error) {
 	// Get convoy list (same query as runConvoyList)
-	listArgs := []string{"list", "--type=convoy", "--json"}
+	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--json"}
 	listCmd := exec.Command("bd", listArgs...)
 	listCmd.Dir = townBeads
 	var stdout bytes.Buffer
