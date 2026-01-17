@@ -148,12 +148,12 @@
             }
 
             return issues.map(issue => `
-                <div class="issue-row">
+                <a href="/bead/${escapeHtml(issue.id)}" class="issue-row" style="text-decoration: none; color: inherit;">
                     <span class="priority-badge priority-${issue.priority}">P${issue.priority}</span>
                     <span class="type-badge">${escapeHtml(issue.type)}</span>
                     <span class="issue-id">${escapeHtml(issue.id)}</span>
                     <span class="issue-title">${escapeHtml(issue.title)}</span>
-                </div>
+                </a>
             `).join('');
         }
 

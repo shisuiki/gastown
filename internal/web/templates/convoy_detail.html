@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>{{.Title}} - Gas Town</title>
+    <style>
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .detail-icon {
+            font-size: 2rem;
+        }
+        .detail-title {
+            flex: 1;
+        }
+        .detail-title h1 {
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        .detail-title .subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .detail-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .meta-item {
+            background: var(--bg-card);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .meta-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+        .meta-value {
+            font-size: 1.1rem;
+        }
+        .raw-output {
+            background: var(--bg-input);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 0.85rem;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            margin-bottom: 15px;
+        }
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    {{template "nav" .}}
+
+    <div class="container">
+        <a href="/" class="back-link">&larr; Back to Dashboard</a>
+
+        <div class="card">
+            <div class="detail-header">
+                <span class="detail-icon">🚚</span>
+                <div class="detail-title">
+                    <h1 id="convoy-title">Loading...</h1>
+                    <span class="subtitle" id="convoy-id">{{.ID}}</span>
+                </div>
+            </div>
+
+            <div class="detail-meta" id="convoy-meta">
+                <div class="meta-item">
+                    <div class="meta-label">Status</div>
+                    <div class="meta-value" id="meta-status">-</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Progress</div>
+                    <div class="meta-value" id="meta-progress">-</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Created</div>
+                    <div class="meta-value" id="meta-created">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2>Raw Output</h2>
+            <pre class="raw-output" id="raw-output">Loading...</pre>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        const convoyId = '{{.ID}}';
+
+        async function loadConvoyDetail() {
+            try {
+                const res = await fetch('/api/convoy/' + convoyId);
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('convoy-title').textContent = 'Error';
+                    document.getElementById('raw-output').textContent = data.error;
+                    return;
+                }
+
+                document.getElementById('convoy-title').textContent = data.title || convoyId;
+                document.getElementById('meta-status').textContent = data.status || '-';
+                document.getElementById('meta-progress').textContent = data.progress || '-';
+                document.getElementById('meta-created').textContent = data.created || '-';
+                document.getElementById('raw-output').textContent = data.raw_output || 'No data';
+            } catch (e) {
+                document.getElementById('convoy-title').textContent = 'Error';
+                document.getElementById('raw-output').textContent = 'Error: ' + e.message;
+            }
+        }
+
+        loadConvoyDetail();
+    </script>
+</body>
+</html>
