@@ -1,93 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{template "head" .}}
     <title>Dashboard - Gas Town</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'gt-dark': '#1a1a2e',
-                        'gt-card': '#16213e',
-                        'gt-input': '#0f172a',
-                        'gt-border': '#333333',
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
-            background: #1a1a2e;
-            color: #eee;
-            min-height: 100vh;
-        }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .nav-bar { background: #16213e; border-bottom: 1px solid #333; padding: 0 20px; }
-        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; height: 56px; }
-        .nav-brand { font-size: 1.25rem; font-weight: 600; color: #eee; text-decoration: none; display: flex; align-items: center; gap: 8px; }
-        .nav-brand::before { content: '🏭'; }
-        .nav-links { display: flex; gap: 4px; }
-        .nav-link { padding: 8px 16px; color: #94a3b8; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
-        .nav-link:hover { background: #1a1a2e; color: #eee; }
-        .nav-link.active { background: #3b82f6; color: #fff; }
-        .nav-toggle { display: none; background: none; border: none; color: #eee; font-size: 1.5rem; cursor: pointer; padding: 8px; }
-        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 8px; }
-        .status-green { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
-        .status-yellow { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
-        .status-red { background: #f87171; box-shadow: 0 0 8px #f87171; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
-        .card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #333; }
-        .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-        .card-content { font-size: 0.9rem; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
-        th { color: #64748b; font-weight: 500; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
-        .badge-green { background: #166534; color: #4ade80; }
-        .badge-yellow { background: #854d0e; color: #fbbf24; }
-        .badge-red { background: #991b1b; color: #f87171; }
-        .badge-blue { background: #1e40af; color: #60a5fa; }
-        @media (max-width: 768px) {
-            .container { padding: 12px; }
-            .grid { grid-template-columns: 1fr; gap: 12px; }
-            .card { padding: 15px; }
-            .nav-toggle { display: block; }
-            .nav-links { display: none; position: absolute; top: 56px; left: 0; right: 0; background: #16213e; flex-direction: column; padding: 10px; border-bottom: 1px solid #333; }
-            .nav-links.open { display: flex; }
-            table { font-size: 0.8rem; }
-            th, td { padding: 6px 8px; }
-        }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #1a1a2e; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-    </style>
 </head>
 <body>
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="/" class="nav-brand">Gas Town <span class="status-indicator status-green" id="daemon-status"></span></a>
-            <button class="nav-toggle" onclick="document.getElementById('nav-links').classList.toggle('open')">☰</button>
-            <div class="nav-links" id="nav-links">
-                <a href="/" class="nav-link active">Dashboard</a>
-                <a href="/mayor" class="nav-link">Mayor</a>
-                <a href="/mail" class="nav-link">Mail</a>
-                <a href="/terminals" class="nav-link">Terminals</a>
-                <a href="/activity" class="nav-link">Activity</a>
-            </div>
-        </div>
-    </nav>
+    {{template "nav" .}}
 
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <h1 style="font-size: 1.2rem; color: #94a3b8;">Overview</h1>
-            <span id="status-time" style="color: #64748b; font-size: 0.8rem;">Loading...</span>
+            <span id="status-time" class="text-muted" style="font-size: 0.8rem;">Loading...</span>
         </div>
 
         <div class="grid">
@@ -102,8 +25,8 @@
             </div>
 
             <div class="card">
-                <h2>🐱 Crew &amp; Polecats</h2>
-                <div class="card-content" id="polecats-list">Loading...</div>
+                <h2>🤖 Active Agents</h2>
+                <div class="card-content" id="agents-list">Loading...</div>
             </div>
 
             <div class="card">
@@ -123,29 +46,20 @@
         </div>
     </div>
 
+    {{template "scripts" .}}
     <script>
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function getColorClass(color) {
-            if (color === 'green' || color === 'activity-green') return 'green';
-            if (color === 'yellow' || color === 'activity-yellow') return 'yellow';
-            if (color === 'red' || color === 'activity-red') return 'red';
-            return 'blue';
-        }
+        // ================================================================
+        // Dashboard-specific JavaScript
+        // ================================================================
 
         let reconnectAttempts = 0;
-        const maxReconnectDelay = 30000; // 30 seconds max
+        const maxReconnectDelay = 30000;
 
         function connectStatusSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
             const socket = new WebSocket(protocol + window.location.host + '/ws/status');
 
             socket.addEventListener('open', () => {
-                // Reset backoff on successful connection
                 reconnectAttempts = 0;
                 document.getElementById('status-time').textContent = 'Connected';
             });
@@ -161,7 +75,6 @@
 
             socket.addEventListener('close', () => {
                 document.getElementById('status-time').textContent = 'Disconnected - reconnecting...';
-                // Exponential backoff with jitter
                 reconnectAttempts++;
                 const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
                 const jitter = Math.random() * 1000;
@@ -172,7 +85,6 @@
 
             socket.addEventListener('error', (e) => {
                 console.error('WebSocket error:', e);
-                // Don't close here - let the close event handle reconnection
             });
         }
 
@@ -186,59 +98,28 @@
                     (data.daemon.running ? 'status-green' : 'status-red');
             }
 
-            const rigsHtml = data.rigs && data.rigs.length > 0
-                ? '<table><tr><th>Name</th><th>Polecats</th><th>Crew</th></tr>' +
-                  data.rigs.map(r => '<tr><td>' + escapeHtml(r.name) + '</td><td>' + (r.polecats||0) + '</td><td>' + (r.crew||0) + '</td></tr>').join('') +
-                  '</table>'
-                : '<p style="color: #64748b;">No rigs configured</p>';
-            document.getElementById('rigs-list').innerHTML = rigsHtml;
+            // Rigs
+            document.getElementById('rigs-list').innerHTML = renderRigsTable(data.rigs);
 
-            const convoysHtml = data.convoys && data.convoys.length > 0
-                ? '<table><tr><th>ID</th><th>Title</th><th>Progress</th></tr>' +
-                  data.convoys.map(c => '<tr><td>' + escapeHtml(c.ID) + '</td><td>' + escapeHtml(c.Title) + '</td><td>' + escapeHtml(c.Progress) + '</td></tr>').join('') +
-                  '</table>'
-                : '<p style="color: #64748b;">No active convoys</p>';
-            document.getElementById('convoys-list').innerHTML = convoysHtml;
+            // Convoys
+            document.getElementById('convoys-list').innerHTML = renderConvoysTable(data.convoys);
 
-            const agentTypeIcon = (type) => {
-                switch (type) {
-                    case 'crew': return '👷';
-                    case 'refinery': return '🏭';
-                    case 'polecat': return '🐱';
-                    default: return '🤖';
-                }
-            };
-            const polecatsHtml = data.polecats && data.polecats.length > 0
-                ? '<table><tr><th>Type</th><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
-                  data.polecats.map(p => '<tr><td>' + agentTypeIcon(p.AgentType) + '</td><td>' + escapeHtml(p.Name) + '</td><td>' + escapeHtml(p.Rig) + '</td><td><span class="badge badge-' + getColorClass(p.LastActivity.ColorClass) + '">' + escapeHtml(p.LastActivity.FormattedAge) + '</span></td></tr>').join('') +
-                  '</table>'
-                : '<p style="color: #64748b;">No agents running</p>';
-            document.getElementById('polecats-list').innerHTML = polecatsHtml;
+            // Agents (formerly polecats)
+            document.getElementById('agents-list').innerHTML = renderAgentsTable(data.polecats);
 
+            // Mail status
             document.getElementById('mail-status').innerHTML =
                 '<p>Unread: <strong>' + (data.mail.unread || 0) + '</strong></p>' +
-                '<p style="margin-top: 8px;"><a href="/mail" style="color: #60a5fa;">Open Mail Center →</a></p>';
+                '<p style="margin-top: 8px;"><a href="/mail">Open Mail Center →</a></p>';
         }
 
         async function loadActivity() {
             try {
                 const res = await fetch('/api/activity');
                 const data = await res.json();
-                const container = document.getElementById('activity-list');
-
-                if (data.commits && data.commits.length > 0) {
-                    container.innerHTML = '<table style="width: 100%;"><tr><th>Hash</th><th>Message</th><th>Author</th><th>Age</th></tr>' +
-                        data.commits.slice(0, 10).map(c =>
-                            '<tr><td><code style="color: #60a5fa;">' + escapeHtml(c.hash) + '</code></td>' +
-                            '<td>' + escapeHtml(c.message) + '</td>' +
-                            '<td style="color: #94a3b8;">' + escapeHtml(c.author) + '</td>' +
-                            '<td style="color: #64748b;">' + escapeHtml(c.age) + '</td></tr>'
-                        ).join('') + '</table>';
-                } else {
-                    container.innerHTML = '<p style="color: #64748b;">No recent commits</p>';
-                }
+                document.getElementById('activity-list').innerHTML = renderCommitsTable(data.commits);
             } catch (e) {
-                document.getElementById('activity-list').innerHTML = '<p style="color: #f87171;">Error: ' + e.message + '</p>';
+                document.getElementById('activity-list').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
             }
         }
 
@@ -246,32 +127,13 @@
             try {
                 const res = await fetch('/api/issues?status=open');
                 const data = await res.json();
-                const container = document.getElementById('issues-list');
-
-                if (data.issues && data.issues.length > 0) {
-                    const priorityBadge = (p) => {
-                        const colors = { 1: 'red', 2: 'yellow', 3: 'blue', 4: 'green' };
-                        return '<span class="badge badge-' + (colors[p] || 'blue') + '">P' + p + '</span>';
-                    };
-                    const typeIcon = (t) => {
-                        const icons = { 'task': '📋', 'bug': '🐛', 'feature': '✨', 'doc': '📖' };
-                        return icons[t] || '📌';
-                    };
-                    container.innerHTML = '<table style="width: 100%;"><tr><th>ID</th><th>Title</th><th>Priority</th><th>Type</th></tr>' +
-                        data.issues.slice(0, 15).map(i =>
-                            '<tr><td><code style="color: #60a5fa;">' + escapeHtml(i.id) + '</code></td>' +
-                            '<td>' + escapeHtml(i.title) + '</td>' +
-                            '<td>' + priorityBadge(i.priority) + '</td>' +
-                            '<td>' + typeIcon(i.issue_type) + '</td></tr>'
-                        ).join('') + '</table>';
-                } else {
-                    container.innerHTML = '<p style="color: #64748b;">No open issues</p>';
-                }
+                document.getElementById('issues-list').innerHTML = renderIssuesTable(data.issues);
             } catch (e) {
-                document.getElementById('issues-list').innerHTML = '<p style="color: #f87171;">Error: ' + e.message + '</p>';
+                document.getElementById('issues-list').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
             }
         }
 
+        // Initialize
         loadActivity();
         loadIssues();
         setInterval(loadActivity, 30000);

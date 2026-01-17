@@ -1,251 +1,82 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{template "head" .}}
     <title>Terminals - Gas Town</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script>
-        tailwind.config = {
-            theme: { extend: { colors: { 'gt-dark': '#1a1a2e', 'gt-card': '#16213e', 'gt-input': '#0f172a', 'gt-border': '#333333' } } }
-        }
-    </script>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: #1a1a2e; color: #eee; min-height: 100vh; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .nav-bar { background: #16213e; border-bottom: 1px solid #333; padding: 0 20px; }
-        .nav-container { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; height: 56px; }
-        .nav-brand { font-size: 1.25rem; font-weight: 600; color: #eee; text-decoration: none; display: flex; align-items: center; gap: 8px; }
-        .nav-brand::before { content: '🏭'; }
-        .nav-links { display: flex; gap: 4px; }
-        .nav-link { padding: 8px 16px; color: #94a3b8; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
-        .nav-link:hover { background: #1a1a2e; color: #eee; }
-        .nav-link.active { background: #3b82f6; color: #fff; }
-        .nav-toggle { display: none; background: none; border: none; color: #eee; font-size: 1.5rem; cursor: pointer; padding: 8px; }
-        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 8px; }
-        .status-green { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
-        .card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #333; }
-        .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
-        th { color: #64748b; font-weight: 500; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
-        .badge-green { background: #166534; color: #4ade80; }
-        .badge-yellow { background: #854d0e; color: #fbbf24; }
-        .badge-red { background: #991b1b; color: #f87171; }
-        .badge-blue { background: #1e40af; color: #60a5fa; }
-        .input-field { width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 8px; background: #0f172a; color: #fff; font-size: 0.9rem; }
-        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 0.9rem; }
-        .btn-success { background: #22c55e; color: #0b1220; }
-        .btn-warning { background: #f97316; color: #0b1220; }
-        .terminal-output { background: #0b1120; color: #e2e8f0; border-radius: 10px; padding: 16px; min-height: 400px; max-height: 600px; overflow-y: auto; font-family: "Menlo", monospace; font-size: 0.85rem; line-height: 1.4; border: 1px solid #1f2a44; white-space: pre-wrap; }
-        @media (max-width: 768px) {
-            .container { padding: 12px; }
-            .grid { grid-template-columns: 1fr; }
-            .nav-toggle { display: block; }
-            .nav-links { display: none; position: absolute; top: 56px; left: 0; right: 0; background: #16213e; flex-direction: column; padding: 10px; border-bottom: 1px solid #333; }
-            .nav-links.open { display: flex; }
-            .terminal-output { min-height: 250px; max-height: 400px; font-size: 0.75rem; }
-        }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1a1a2e; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-    </style>
 </head>
 <body>
-    <nav class="nav-bar">
-        <div class="nav-container">
-            <a href="/" class="nav-brand">Gas Town <span class="status-indicator status-green" id="daemon-status"></span></a>
-            <button class="nav-toggle" onclick="document.getElementById('nav-links').classList.toggle('open')">☰</button>
-            <div class="nav-links" id="nav-links">
-                <a href="/" class="nav-link">Dashboard</a>
-                <a href="/mayor" class="nav-link">Mayor</a>
-                <a href="/mail" class="nav-link">Mail</a>
-                <a href="/terminals" class="nav-link active">Terminals</a>
-                <a href="/activity" class="nav-link">Activity</a>
-            </div>
-        </div>
-    </nav>
+    {{template "nav" .}}
 
     <div class="container">
         <div class="card" style="margin-bottom: 20px;">
-            <h2>🖥️ Polecat Terminal Viewer</h2>
+            <h2>🖥️ Agent Terminal Viewer</h2>
             <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
                 <select id="terminal-session" class="input-field" style="flex: 1;"></select>
-                <button id="terminal-toggle" onclick="toggleTerminalStream()" class="btn btn-success">Connect</button>
+                <button id="terminal-toggle" class="btn btn-success">Connect</button>
             </div>
-            <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
+            <pre class="terminal-output" id="terminal-output">Select an agent session to view its terminal output.</pre>
             <div id="terminal-input-area" style="display: none; margin-top: 10px;">
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter..." onkeydown="if(event.key==='Enter')sendTerminalInput()">
-                    <button onclick="sendTerminalInput()" class="btn btn-success" style="padding: 10px 15px;">Send</button>
-                    <button onclick="sendTerminalKey('C-c')" class="btn" style="background: #ef4444; color: white; padding: 10px 15px;">Ctrl+C</button>
-                    <button onclick="sendTerminalKey('Enter')" class="btn" style="background: #6366f1; color: white; padding: 10px 15px;">Enter</button>
+                    <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter...">
+                    <button onclick="terminal.sendInput()" class="btn btn-success" style="padding: 10px 15px;">Send</button>
+                    <button onclick="terminal.sendKey('C-c')" class="btn btn-danger" style="padding: 10px 15px;">Ctrl+C</button>
+                    <button onclick="terminal.sendKey('Enter')" class="btn" style="background: #6366f1; color: white; padding: 10px 15px;">Enter</button>
                 </div>
             </div>
         </div>
 
         <div class="grid">
             <div class="card">
-                <h2>🐱 Active Polecats</h2>
-                <div id="polecats-list">Loading...</div>
+                <h2>🤖 Active Agents</h2>
+                <div id="agents-list">Loading...</div>
             </div>
             <div class="card">
                 <h2>📊 Session Info</h2>
-                <div id="session-info"><p style="color: #64748b;">Select a session to view details</p></div>
+                <div id="session-info"><p class="text-muted">Select a session to view details</p></div>
             </div>
         </div>
     </div>
 
+    {{template "scripts" .}}
+    <script src="/static/js/terminal.js"></script>
     <script>
-        let terminalSource = null;
-        let terminalConnected = false;
-        let lastPing = 0;
-        let currentSession = '';
+        // ================================================================
+        // Terminals Page JavaScript
+        // ================================================================
 
-        function updateSessionInfoWithPing() {
-            if (!currentSession) return;
-            const timeSince = lastPing ? Math.floor((Date.now() - lastPing) / 1000) + 's ago' : 'never';
-            document.getElementById('session-info').innerHTML = '<table><tr><th>Session ID</th><td>' + escapeHtml(currentSession) + '</td></tr><tr><th>Status</th><td><span class="badge badge-green">Connected</span></td></tr><tr><th>Last Data</th><td>' + timeSince + '</td></tr></table>';
-        }
+        // Initialize terminal widget
+        const terminal = new TerminalWidget({
+            container: '.container',
+            outputEl: '#terminal-output',
+            toggleBtn: '#terminal-toggle',
+            inputEl: '#terminal-input',
+            inputArea: '#terminal-input-area',
+            sessionInfoEl: '#session-info',
+            sessionSelectEl: '#terminal-session',
+        });
 
-        function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
-        function getColorClass(color) {
-            if (color === 'green' || color === 'activity-green') return 'green';
-            if (color === 'yellow' || color === 'activity-yellow') return 'yellow';
-            if (color === 'red' || color === 'activity-red') return 'red';
-            return 'blue';
-        }
-
-        function toggleTerminalStream() {
-            terminalConnected ? disconnectTerminalStream() : connectTerminalStream();
-        }
-
-        function connectTerminalStream() {
-            const select = document.getElementById('terminal-session');
-            const output = document.getElementById('terminal-output');
-            const toggle = document.getElementById('terminal-toggle');
-            const session = select.value;
-            if (!session) { output.textContent = 'No session selected.'; return; }
-            if (terminalSource) terminalSource.close();
-            output.textContent = 'Connecting to ' + session + '...';
-            currentSession = session;
-            lastPing = Date.now();
-            terminalSource = new EventSource('/api/terminal/stream?session=' + encodeURIComponent(session));
-            terminalConnected = true;
-            toggle.textContent = 'Disconnect';
-            toggle.className = 'btn btn-warning';
-            updateSessionInfoWithPing();
-
-            terminalSource.addEventListener('frame', (e) => { output.textContent = e.data; output.scrollTop = output.scrollHeight; lastPing = Date.now(); });
-            terminalSource.addEventListener('ping', (e) => { lastPing = Date.now(); updateSessionInfoWithPing(); });
-            terminalSource.addEventListener('error', (e) => {
-                const data = e.data || '';
-                if (data.startsWith('session_ended:')) {
-                    // Session ended - stop reconnecting
-                    output.textContent = 'Session ended: ' + data.substring(14);
-                    disconnectTerminalStream();
-                } else if (data.startsWith('transient:')) {
-                    // Transient error - keep stream alive, show warning
-                    console.warn('Terminal transient error:', data);
-                    // Don't disconnect - let SSE auto-retry
-                } else if (data === 'max_errors_reached') {
-                    output.textContent = 'Too many errors - disconnecting.';
-                    disconnectTerminalStream();
-                } else {
-                    // Generic error - let EventSource auto-reconnect
-                    console.log('Terminal SSE error, auto-reconnecting...');
-                    document.getElementById('session-info').innerHTML = '<table><tr><th>Session ID</th><td>' + escapeHtml(session) + '</td></tr><tr><th>Status</th><td><span class="badge badge-yellow">Reconnecting...</span></td></tr></table>';
-                }
-            });
-            terminalSource.addEventListener('open', () => {
-                updateSessionInfoWithPing();
-                document.getElementById('terminal-input-area').style.display = 'block';
-            });
-        }
-
-        function disconnectTerminalStream() {
-            const toggle = document.getElementById('terminal-toggle');
-            if (terminalSource) { terminalSource.close(); terminalSource = null; }
-            terminalConnected = false;
-            currentSession = '';
-            toggle.textContent = 'Connect';
-            toggle.className = 'btn btn-success';
-            document.getElementById('terminal-input-area').style.display = 'none';
-        }
-
-        async function sendTerminalInput() {
-            const input = document.getElementById('terminal-input');
-            const text = input.value;
-            if (!text || !currentSession) return;
-            try {
-                const res = await fetch('/api/terminal/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session: currentSession, text: text, enter: true })
-                });
-                if (res.ok) input.value = '';
-                else console.error('Failed to send input:', await res.text());
-            } catch (e) { console.error('Error sending input:', e); }
-        }
-
-        async function sendTerminalKey(key) {
-            if (!currentSession) return;
-            try {
-                await fetch('/api/terminal/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session: currentSession, key: key })
-                });
-            } catch (e) { console.error('Error sending key:', e); }
-        }
-
-        function agentTypeIcon(type) {
-            switch (type) {
-                case 'crew': return '👷';
-                case 'refinery': return '🏭';
-                case 'polecat': return '🐱';
-                default: return '🤖';
-            }
-        }
-
-        function updatePolecatsList(polecats) {
-            const list = document.getElementById('polecats-list');
-            if (!polecats || polecats.length === 0) {
-                list.innerHTML = '<p style="color: #64748b;">No agents running</p>';
-                return;
-            }
-            list.innerHTML = '<table><tr><th>Type</th><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
-                polecats.map(p => '<tr><td>' + agentTypeIcon(p.AgentType) + '</td><td>' + escapeHtml(p.Name) + '</td><td>' + escapeHtml(p.Rig) + '</td><td><span class="badge badge-' + getColorClass(p.LastActivity.ColorClass) + '">' + escapeHtml(p.LastActivity.FormattedAge) + '</span></td></tr>').join('') + '</table>';
-        }
-
-        function updateTerminalSessions(polecats) {
-            const select = document.getElementById('terminal-session');
-            const previous = select.value;
-            const sessions = (polecats || []).filter(p => p.SessionID).map(p => ({ id: p.SessionID, label: p.Rig + '/' + p.Name }));
-            select.innerHTML = '';
-            if (sessions.length === 0) {
-                select.innerHTML = '<option value="">No active polecat sessions</option>';
-                return;
-            }
-            sessions.forEach(s => { select.innerHTML += '<option value="' + s.id + '">' + s.label + ' (' + s.id + ')</option>'; });
-            if (previous && sessions.some(s => s.id === previous)) select.value = previous;
-        }
-
-        async function loadPolecats() {
+        // Load agents and populate session dropdown
+        async function loadAgents() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-                updatePolecatsList(data.polecats);
-                updateTerminalSessions(data.polecats);
-            } catch (e) { console.error('Failed to load polecats:', e); }
+
+                // Update agents list
+                document.getElementById('agents-list').innerHTML = renderAgentsTable(data.polecats);
+
+                // Update session dropdown
+                const sessions = (data.polecats || [])
+                    .filter(p => p.SessionID)
+                    .map(p => ({ id: p.SessionID, label: p.Rig + '/' + p.Name }));
+                terminal.updateSessionSelect(sessions);
+            } catch (e) {
+                console.error('Failed to load agents:', e);
+            }
         }
 
-        loadPolecats();
-        setInterval(loadPolecats, 5000);
+        // Initialize
+        loadAgents();
+        setInterval(loadAgents, 5000);
     </script>
 </body>
 </html>

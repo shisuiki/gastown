@@ -1,0 +1,173 @@
+/**
+ * Gas Town WebUI - Shared Styles
+ * All common CSS extracted from individual templates
+ */
+
+/* ================================================================
+   Reset & Base
+   ================================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+}
+
+/* ================================================================
+   Layout
+   ================================================================ */
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+
+/* ================================================================
+   Navigation
+   ================================================================ */
+.nav-bar { background: #16213e; border-bottom: 1px solid #333; padding: 0 20px; }
+.nav-container { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; height: 56px; }
+.nav-brand { font-size: 1.25rem; font-weight: 600; color: #eee; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+.nav-brand::before { content: '🏭'; }
+.nav-links { display: flex; gap: 4px; }
+.nav-link { padding: 8px 16px; color: #94a3b8; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
+.nav-link:hover { background: #1a1a2e; color: #eee; }
+.nav-link.active { background: #3b82f6; color: #fff; }
+.nav-toggle { display: none; background: none; border: none; color: #eee; font-size: 1.5rem; cursor: pointer; padding: 8px; }
+
+/* ================================================================
+   Status Indicators
+   ================================================================ */
+.status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 8px; }
+.status-green { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+.status-yellow { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+.status-red { background: #f87171; box-shadow: 0 0 8px #f87171; }
+
+/* ================================================================
+   Cards
+   ================================================================ */
+.card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #333; }
+.card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+.card-content { font-size: 0.9rem; }
+.card-highlight { border: 2px solid #3b82f6; }
+
+/* ================================================================
+   Tables
+   ================================================================ */
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
+th { color: #64748b; font-weight: 500; }
+
+/* ================================================================
+   Badges
+   ================================================================ */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+.badge-green { background: #166534; color: #4ade80; }
+.badge-yellow { background: #854d0e; color: #fbbf24; }
+.badge-red { background: #991b1b; color: #f87171; }
+.badge-blue { background: #1e40af; color: #60a5fa; }
+
+/* ================================================================
+   Form Elements
+   ================================================================ */
+.input-field { width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 8px; background: #0f172a; color: #fff; font-size: 0.9rem; }
+.input-field:focus { outline: none; border-color: #3b82f6; }
+textarea.input-field { resize: vertical; }
+
+.btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 0.9rem; transition: all 0.2s; }
+.btn-primary { background: #3b82f6; color: white; }
+.btn-primary:hover { background: #2563eb; }
+.btn-success { background: #22c55e; color: #0b1220; }
+.btn-success:hover { background: #16a34a; }
+.btn-warning { background: #f97316; color: #0b1220; }
+.btn-warning:hover { background: #ea580c; }
+.btn-danger { background: #ef4444; color: white; }
+.btn-danger:hover { background: #dc2626; }
+.btn-secondary { background: #334155; color: #e2e8f0; }
+.btn-secondary:hover { background: #475569; }
+.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+/* ================================================================
+   Terminal Output
+   ================================================================ */
+.terminal-output {
+    background: #0b1120;
+    color: #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+    font-family: "Menlo", "Monaco", "Consolas", monospace;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    border: 1px solid #1f2a44;
+    white-space: pre-wrap;
+}
+
+/* ================================================================
+   Chat/Messages
+   ================================================================ */
+.chat-messages { flex: 1; overflow-y: auto; padding: 15px; background: #0f172a; border-radius: 8px; margin-bottom: 10px; max-height: 200px; }
+.message { padding: 10px 15px; margin: 5px 0; border-radius: 8px; max-width: 80%; }
+.message.sent { background: #3b82f6; margin-left: auto; }
+.message.received { background: #334155; }
+
+/* ================================================================
+   Text Utilities
+   ================================================================ */
+.text-muted { color: #64748b; }
+.text-secondary { color: #94a3b8; }
+.text-link { color: #60a5fa; }
+.text-success { color: #4ade80; }
+.text-warning { color: #fbbf24; }
+.text-danger { color: #f87171; }
+
+/* ================================================================
+   Links
+   ================================================================ */
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ================================================================
+   Code
+   ================================================================ */
+code { font-family: "Menlo", "Monaco", "Consolas", monospace; }
+
+/* ================================================================
+   Scrollbars
+   ================================================================ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #1a1a2e; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* ================================================================
+   Mayor-specific Layouts
+   ================================================================ */
+.mayor-grid { display: grid; grid-template-columns: 1fr 350px; gap: 20px; }
+
+/* ================================================================
+   Mobile Responsive
+   ================================================================ */
+@media (max-width: 768px) {
+    .container { padding: 12px; }
+    .grid { grid-template-columns: 1fr; gap: 12px; }
+    .card { padding: 15px; }
+    .nav-toggle { display: block; }
+    .nav-links {
+        display: none;
+        position: absolute;
+        top: 56px;
+        left: 0;
+        right: 0;
+        background: #16213e;
+        flex-direction: column;
+        padding: 10px;
+        border-bottom: 1px solid #333;
+        z-index: 100;
+    }
+    .nav-links.open { display: flex; }
+    table { font-size: 0.8rem; }
+    th, td { padding: 6px 8px; }
+    .terminal-output { min-height: 250px; max-height: 400px; font-size: 0.75rem; }
+    .mayor-grid { grid-template-columns: 1fr; }
+}

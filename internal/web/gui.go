@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 
 //go:embed templates/*.html
 var templatesFS embed.FS
+
+//go:embed static/*
+var staticFS embed.FS
 
 // Cookie name for session authentication
 const sessionCookieName = "gt_session"
@@ -42,6 +46,13 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 		fetcher: fetcher,
 		mux:     http.NewServeMux(),
 	}
+
+	// Static files (CSS, JS)
+	staticSub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		return nil, err
+	}
+	h.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 
 	// Auth routes (these bypass the auth middleware)
 	h.mux.HandleFunc("/login", h.handleLogin)

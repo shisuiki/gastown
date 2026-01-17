@@ -1,0 +1,44 @@
+{{/* Shared template partials for Gas Town WebUI */}}
+
+{{define "head"}}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'gt-dark': '#1a1a2e',
+                        'gt-card': '#16213e',
+                        'gt-input': '#0f172a',
+                        'gt-border': '#333333',
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/static/css/gastown.css">
+{{end}}
+
+{{define "nav"}}
+<nav class="nav-bar">
+    <div class="nav-container">
+        <a href="/" class="nav-brand">Gas Town <span class="status-indicator status-green" id="daemon-status"></span></a>
+        <button class="nav-toggle" onclick="toggleNav()">☰</button>
+        <div class="nav-links" id="nav-links">
+            <a href="/" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}">Dashboard</a>
+            <a href="/mayor" class="nav-link{{if eq .ActivePage "mayor"}} active{{end}}">Mayor</a>
+            <a href="/mail" class="nav-link{{if eq .ActivePage "mail"}} active{{end}}">Mail</a>
+            <a href="/terminals" class="nav-link{{if eq .ActivePage "terminals"}} active{{end}}">Terminals</a>
+            <a href="/activity" class="nav-link{{if eq .ActivePage "activity"}} active{{end}}">Activity</a>
+        </div>
+    </div>
+</nav>
+{{end}}
+
+{{define "scripts"}}
+<script src="/static/js/gastown.js"></script>
+{{end}}
