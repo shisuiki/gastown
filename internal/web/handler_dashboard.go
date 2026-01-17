@@ -248,14 +248,26 @@ func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Get status filter from query params
 	status := r.URL.Query().Get("status")
-	cacheKey := "issues:" + status
+	cacheKey := "issues_" + status
 
-	// Check cache first
-	if cached := h.cache.Get(cacheKey); cached != nil {
+	// Use stale-while-revalidate
+	cached := h.cache.GetStaleOrRefresh(cacheKey, IssuesCacheTTL, func() interface{} {
+		return h.fetchIssues(status)
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously
+	result := h.fetchIssues(status)
+	h.cache.Set(cacheKey, result, IssuesCacheTTL)
+	json.NewEncoder(w).Encode(result)
+}
+
+// fetchIssues gets issues from beads.
+func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 	args := []string{"list", "--json"}
 	if status != "" {
 		args = append(args, "--status="+status)
@@ -264,20 +276,18 @@ func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 	cmd := exec.Command("bd", args...)
 	output, err := cmd.Output()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"error":  "Failed to fetch issues",
 			"issues": []IssueRow{},
-		})
-		return
+		}
 	}
 
 	var issues []IssueRow
 	if err := json.Unmarshal(output, &issues); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"error":  "Failed to parse issues",
 			"issues": []IssueRow{},
-		})
-		return
+		}
 	}
 
 	// Limit to first 20 issues for dashboard
@@ -285,12 +295,7 @@ func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 		issues = issues[:20]
 	}
 
-	result := map[string]interface{}{
+	return map[string]interface{}{
 		"issues": issues,
 	}
-
-	// Cache the result
-	h.cache.Set(cacheKey, result, IssuesCacheTTL)
-
-	json.NewEncoder(w).Encode(result)
 }

@@ -46,29 +46,33 @@ func (h *GUIHandler) handleWorkflow(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPIWorkflowHook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first (short TTL for hook status)
-	if cached := h.cache.Get("workflow:hook"); cached != nil {
+	// Use stale-while-revalidate (short TTL for hook status)
+	cached := h.cache.GetStaleOrRefresh("workflow_hook", 5*time.Second, func() interface{} {
+		return h.fetchHookStatus()
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously
+	status := h.fetchHookStatus()
+	h.cache.Set("workflow_hook", status, 5*time.Second)
+	json.NewEncoder(w).Encode(status)
+}
+
+// fetchHookStatus gets hook status from gt hook.
+func (h *GUIHandler) fetchHookStatus() HookStatus {
 	cmd := exec.Command("gt", "hook")
 	output, err := cmd.Output()
 	if err != nil {
-		json.NewEncoder(w).Encode(HookStatus{
+		return HookStatus{
 			HasWork:   false,
 			RawOutput: "Error: " + err.Error(),
-		})
-		return
+		}
 	}
-
-	outStr := string(output)
-	status := parseHookOutput(outStr)
-
-	// Cache for 5 seconds
-	h.cache.Set("workflow:hook", status, 5*time.Second)
-
-	json.NewEncoder(w).Encode(status)
+	return parseHookOutput(string(output))
 }
 
 // parseHookOutput parses the gt hook command output.
@@ -121,31 +125,35 @@ func parseHookOutput(output string) HookStatus {
 func (h *GUIHandler) handleAPIWorkflowReady(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first
-	if cached := h.cache.Get("workflow:ready"); cached != nil {
+	// Use stale-while-revalidate
+	cached := h.cache.GetStaleOrRefresh("workflow_ready", 15*time.Second, func() interface{} {
+		return h.fetchReadyIssues()
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously
+	result := h.fetchReadyIssues()
+	h.cache.Set("workflow_ready", result, 15*time.Second)
+	json.NewEncoder(w).Encode(result)
+}
+
+// fetchReadyIssues gets ready issues from bd ready.
+func (h *GUIHandler) fetchReadyIssues() map[string]interface{} {
 	cmd := exec.Command("bd", "ready")
 	output, err := cmd.Output()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"issues": []interface{}{},
 			"error":  err.Error(),
-		})
-		return
+		}
 	}
-
-	issues := parseReadyOutput(string(output))
-	result := map[string]interface{}{
-		"issues": issues,
+	return map[string]interface{}{
+		"issues": parseReadyOutput(string(output)),
 	}
-
-	// Cache for 15 seconds
-	h.cache.Set("workflow:ready", result, 15*time.Second)
-
-	json.NewEncoder(w).Encode(result)
 }
 
 // parseReadyOutput parses the bd ready command output.
@@ -209,14 +217,25 @@ func parseReadyOutput(output string) []ReadyIssue {
 func (h *GUIHandler) handleAPIActivity(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first
-	if cached := h.cache.Get("workflow:activity"); cached != nil {
+	// Use stale-while-revalidate
+	cached := h.cache.GetStaleOrRefresh("workflow_activity", 30*time.Second, func() interface{} {
+		return h.fetchActivity()
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously
+	result := h.fetchActivity()
+	h.cache.Set("workflow_activity", result, 30*time.Second)
+	json.NewEncoder(w).Encode(result)
+}
+
+// fetchActivity gets recent git commits.
+func (h *GUIHandler) fetchActivity() map[string]interface{} {
 	// Get recent commits from the current rig's repo
-	// Try to find the current rig directory
 	rigDir := "/home/shisui/gt"
 
 	// Check if GT_ROOT is set
@@ -230,11 +249,10 @@ func (h *GUIHandler) handleAPIActivity(w http.ResponseWriter, r *http.Request) {
 	cmd.Dir = rigDir
 	output, err := cmd.Output()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"commits": []interface{}{},
 			"error":   err.Error(),
-		})
-		return
+		}
 	}
 
 	var commits []map[string]string
@@ -251,12 +269,7 @@ func (h *GUIHandler) handleAPIActivity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result := map[string]interface{}{
+	return map[string]interface{}{
 		"commits": commits,
 	}
-
-	// Cache for 30 seconds
-	h.cache.Set("workflow:activity", result, 30*time.Second)
-
-	json.NewEncoder(w).Encode(result)
 }

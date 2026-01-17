@@ -72,26 +72,41 @@ func (h *GUIHandler) handleAPISendMail(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first
-	if cached := h.cache.Get("mail:inbox"); cached != nil {
-		w.Write(cached.([]byte))
+	// Use stale-while-revalidate
+	cached := h.cache.GetStaleOrRefresh("mail_inbox", 10*time.Second, func() interface{} {
+		return h.fetchMailInbox()
+	})
+
+	if cached != nil {
+		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously
+	result := h.fetchMailInbox()
+	h.cache.Set("mail_inbox", result, 10*time.Second)
+	json.NewEncoder(w).Encode(result)
+}
+
+// fetchMailInbox gets mail inbox data.
+func (h *GUIHandler) fetchMailInbox() interface{} {
 	cmd := exec.Command("gt", "mail", "inbox", "--json")
 	output, err := cmd.Output()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"messages": []interface{}{},
 			"error":    err.Error(),
-		})
-		return
+		}
 	}
 
-	// Cache for 10 seconds
-	h.cache.Set("mail:inbox", output, 10*time.Second)
-
-	w.Write(output)
+	var result interface{}
+	if err := json.Unmarshal(output, &result); err != nil {
+		return map[string]interface{}{
+			"messages": []interface{}{},
+			"error":    "parse error",
+		}
+	}
+	return result
 }
 
 // handleAPIMailAll gets mail for any agent.
@@ -103,60 +118,89 @@ func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
 		agent = "mayor/"
 	}
 
-	cacheKey := "mail:agent:" + agent
+	cacheKey := "mail_agent_" + sanitizeAgentKey(agent)
 
-	// Check cache first
-	if cached := h.cache.Get(cacheKey); cached != nil {
+	// Use stale-while-revalidate
+	cached := h.cache.GetStaleOrRefresh(cacheKey, 10*time.Second, func() interface{} {
+		return h.fetchMailForAgent(agent)
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
-	// Get inbox for specific agent
+	// No cache - fetch synchronously
+	result := h.fetchMailForAgent(agent)
+	h.cache.Set(cacheKey, result, 10*time.Second)
+	json.NewEncoder(w).Encode(result)
+}
+
+// sanitizeAgentKey converts agent address to safe cache key.
+func sanitizeAgentKey(agent string) string {
+	safe := ""
+	for _, r := range agent {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+			safe += string(r)
+		} else {
+			safe += "_"
+		}
+	}
+	return safe
+}
+
+// fetchMailForAgent gets mail for a specific agent.
+func (h *GUIHandler) fetchMailForAgent(agent string) map[string]interface{} {
 	cmd := exec.Command("gt", "mail", "inbox", agent, "--json")
 	output, err := cmd.Output()
 	if err != nil {
 		// Try without --json if it fails
 		cmd2 := exec.Command("gt", "mail", "inbox", agent)
 		output2, _ := cmd2.CombinedOutput()
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"agent": agent,
 			"raw":   string(output2),
 			"error": err.Error(),
-		})
-		return
+		}
 	}
 
 	// Parse and forward the JSON
 	var messages interface{}
 	if err := json.Unmarshal(output, &messages); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"agent": agent,
 			"raw":   string(output),
-		})
-		return
+		}
 	}
 
-	result := map[string]interface{}{
+	return map[string]interface{}{
 		"agent":    agent,
 		"messages": messages,
 	}
-
-	// Cache for 10 seconds
-	h.cache.Set(cacheKey, result, 10*time.Second)
-
-	json.NewEncoder(w).Encode(result)
 }
 
 // handleAPIAgentsList returns all available agents for mail recipients.
 func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first (agents list changes rarely)
-	if cached := h.cache.Get("mail:agents"); cached != nil {
+	// Use stale-while-revalidate (agents list changes rarely, 60s TTL)
+	cached := h.cache.GetStaleOrRefresh("mail_agents", 60*time.Second, func() interface{} {
+		return h.fetchAgentsList()
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously
+	result := h.fetchAgentsList()
+	h.cache.Set("mail_agents", result, 60*time.Second)
+	json.NewEncoder(w).Encode(result)
+}
+
+// fetchAgentsList gets available agents for mail.
+func (h *GUIHandler) fetchAgentsList() []map[string]string {
 	agents := []map[string]string{
 		{"address": "mayor/", "name": "Mayor", "type": "mayor"},
 		{"address": "deacon/", "name": "Deacon", "type": "deacon"},
@@ -214,10 +258,7 @@ func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	// Cache for 60 seconds (agents list changes rarely)
-	h.cache.Set("mail:agents", agents, 60*time.Second)
-
-	json.NewEncoder(w).Encode(agents)
+	return agents
 }
 
 // filterEnv returns a copy of env with the specified key removed.

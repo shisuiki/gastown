@@ -183,12 +183,24 @@ func (h *GUIHandler) handleAPIVersion(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPISystem(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first
-	if cached := h.cache.Get("system"); cached != nil {
+	// Use stale-while-revalidate: return cached data immediately, refresh in background
+	cached := h.cache.GetStaleOrRefresh("system", SystemCacheTTL, func() interface{} {
+		return h.fetchSystemInfo()
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously (first request only)
+	info := h.fetchSystemInfo()
+	h.cache.Set("system", info, SystemCacheTTL)
+	json.NewEncoder(w).Encode(info)
+}
+
+// fetchSystemInfo gathers system information.
+func (h *GUIHandler) fetchSystemInfo() SystemInfo {
 	info := SystemInfo{
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,
@@ -270,10 +282,7 @@ func (h *GUIHandler) handleAPISystem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Cache the result
-	h.cache.Set("system", info, SystemCacheTTL)
-
-	json.NewEncoder(w).Encode(info)
+	return info
 }
 
 // handleAPIGitRigs returns rigs with their git repository information.
@@ -524,12 +533,24 @@ type BillingBlock struct {
 func (h *GUIHandler) handleAPIClaudeUsage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check cache first
-	if cached := h.cache.Get("claude:usage"); cached != nil {
+	// Use stale-while-revalidate: return cached data immediately, refresh in background
+	cached := h.cache.GetStaleOrRefresh("claude_usage", ClaudeUsageCacheTTL, func() interface{} {
+		return h.fetchClaudeUsage()
+	})
+
+	if cached != nil {
 		json.NewEncoder(w).Encode(cached)
 		return
 	}
 
+	// No cache - fetch synchronously (first request only)
+	usage := h.fetchClaudeUsage()
+	h.cache.Set("claude_usage", usage, ClaudeUsageCacheTTL)
+	json.NewEncoder(w).Encode(usage)
+}
+
+// fetchClaudeUsage gets Claude usage from ccusage CLI.
+func (h *GUIHandler) fetchClaudeUsage() ClaudeUsage {
 	usage := ClaudeUsage{}
 
 	// Get daily usage from ccusage
@@ -646,10 +667,7 @@ func (h *GUIHandler) handleAPIClaudeUsage(w http.ResponseWriter, r *http.Request
 		usage.Error = "ccusage not available"
 	}
 
-	// Cache for 60 seconds
-	h.cache.Set("claude:usage", usage, 60*time.Second)
-
-	json.NewEncoder(w).Encode(usage)
+	return usage
 }
 
 func formatBytes(b int64) string {
