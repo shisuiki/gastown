@@ -420,7 +420,7 @@ func (m *Manager) AddRig(opts AddRigOptions) (*Rig, error) {
 			cmd := exec.Command("bd", "init", "--prefix", opts.BeadsPrefix) // opts.BeadsPrefix validated earlier
 			cmd.Dir = mayorRigPath
 			if output, err := cmd.CombinedOutput(); err != nil {
-				fmt.Printf("  Warning: Could not init bd database: %v (%s)\n", err, strings.TrimSpace(string(output)))
+				return nil, fmt.Errorf("tracked .beads repo requires beads.db initialization, but 'bd init' failed: %w\nOutput: %s", err, strings.TrimSpace(string(output)))
 			}
 			// Configure custom types for Gas Town (beads v0.46.0+)
 			configCmd := exec.Command("bd", "config", "set", "types.custom", constants.BeadsCustomTypes)

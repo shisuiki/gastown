@@ -85,6 +85,21 @@ func createTrackedBeadsRepoWithIssues(t *testing.T, path, prefix string, numIssu
 		}
 	}
 
+	// Create issues.jsonl manually with the test issues
+	// bd export seems to have issues in test environments, so we create the file manually
+	// This ensures prefix detection will work when the repo is cloned.
+	issuesPath := filepath.Join(beadsDir, "issues.jsonl")
+	var issuesContent strings.Builder
+	for i := 1; i <= numIssues; i++ {
+		// Create a minimal JSONL entry with the issue ID (prefix-hash format)
+		// The detectBeadsPrefixFromConfig function will parse these to extract the prefix
+		fmt.Fprintf(&issuesContent, `{"id":"%s-test%03d","title":"Test issue %d","type":"task","status":"open"}`+"\n", prefix, i, i)
+	}
+	if err := os.WriteFile(issuesPath, []byte(issuesContent.String()), 0644); err != nil {
+		t.Fatalf("write issues.jsonl: %v", err)
+	}
+	t.Logf("Created issues.jsonl with %d issues (prefix: %s)", numIssues, prefix)
+
 	// Add .beads to git (simulating tracked beads)
 	cmd = exec.Command("git", "add", ".beads")
 	cmd.Dir = path
@@ -144,7 +159,28 @@ func TestBeadsDbInitAfterClone(t *testing.T) {
 		cmd = exec.Command(gtBinary, "rig", "add", "myrig", existingRepo)
 		cmd.Dir = townRoot
 		cmd.Env = append(os.Environ(), "HOME="+tmpDir)
-		if output, err := cmd.CombinedOutput(); err != nil {
+		output, err := cmd.CombinedOutput()
+
+		// Debug: Check what's in .beads after cloning
+		mayorBeadsDir := filepath.Join(townRoot, "myrig", "mayor", "rig", ".beads")
+		if entries, readErr := os.ReadDir(mayorBeadsDir); readErr == nil {
+			var fileNames []string
+			for _, e := range entries {
+				fileNames = append(fileNames, e.Name())
+			}
+			t.Logf("Files in .beads after clone: %v", fileNames)
+			if issuesContent, readErr := os.ReadFile(filepath.Join(mayorBeadsDir, "issues.jsonl")); readErr == nil {
+				preview := string(issuesContent)
+				if len(preview) > 200 {
+					preview = preview[:200] + "..."
+				}
+				t.Logf("issues.jsonl content (%d bytes): %s", len(issuesContent), preview)
+			} else {
+				t.Logf("issues.jsonl read error: %v", readErr)
+			}
+		}
+
+		if err != nil {
 			t.Fatalf("gt rig add failed: %v\nOutput: %s", err, output)
 		}
 
@@ -164,7 +200,7 @@ func TestBeadsDbInitAfterClone(t *testing.T) {
 		cmd = exec.Command("bd", "--no-daemon", "--json", "-q", "create",
 			"--type", "task", "--title", "test-from-rig")
 		cmd.Dir = rigPath
-		output, err := cmd.CombinedOutput()
+		output, err = cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("bd create failed (bug!): %v\nOutput: %s\n\nThis is the bug: beads.db doesn't exist after clone because bd init was never run", err, output)
 		}
@@ -417,3 +453,207 @@ func createTrackedBeadsRepoWithNoIssues(t *testing.T, path, prefix string) {
 		t.Fatalf("remove beads.db: %v", err)
 	}
 }
+
+// TestRigAddFailsWhenBdInitFails tests that rig add returns a fatal error
+// when bd init fails for tracked .beads repos, rather than proceeding with a warning.
+// This is the fix for hq-1ge.
+func TestRigAddFailsWhenBdInitFails(t *testing.T) {
+	// Skip if bd is not available
+	if _, err := exec.LookPath("bd"); err != nil {
+		t.Skip("bd not installed, skipping test")
+	}
+
+	tmpDir := t.TempDir()
+	gtBinary := buildGT(t)
+
+	t.Run("MissingBdExecutable", func(t *testing.T) {
+		// Test that rig add fails when bd executable fails (simulating missing bd).
+		// We create a wrapper that passes version check but fails on init.
+
+		townRoot := filepath.Join(tmpDir, "town-missing-bd")
+		reposDir := filepath.Join(tmpDir, "repos-missing-bd")
+		os.MkdirAll(reposDir, 0755)
+
+		// Create a tracked beads repo
+		trackedRepo := filepath.Join(reposDir, "tracked-repo")
+		createTrackedBeadsRepoWithIssues(t, trackedRepo, "test-prefix", 1)
+
+		// Install town
+		cmd := exec.Command(gtBinary, "install", townRoot, "--name", "missing-bd-test")
+		cmd.Env = append(os.Environ(), "HOME="+tmpDir)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("gt install failed: %v\nOutput: %s", err, output)
+		}
+
+		// Create a fake bd that passes version check but fails on init
+		fakeBinDir := filepath.Join(tmpDir, "fake-bin")
+		os.MkdirAll(fakeBinDir, 0755)
+		fakeBd := filepath.Join(fakeBinDir, "bd")
+		fakeBdScript := `#!/bin/sh
+# Pass version check
+if [ "$1" = "version" ]; then
+    echo "bd version 0.44.0"
+    exit 0
+fi
+# Fail on init (simulating missing bd or permission error)
+if [ "$1" = "init" ]; then
+    echo "bd: command not found (simulated)" >&2
+    exit 127
+fi
+# Pass through other commands to real bd
+exec bd "$@"
+`
+		if err := os.WriteFile(fakeBd, []byte(fakeBdScript), 0755); err != nil {
+			t.Fatalf("create fake bd: %v", err)
+		}
+
+		// Add rig with PATH that has fake bd first
+		cmd = exec.Command(gtBinary, "rig", "add", "testrig", trackedRepo)
+		cmd.Dir = townRoot
+		// Prepend fake bin dir to PATH to shadow real bd
+		oldPath := os.Getenv("PATH")
+		newPath := fakeBinDir + string(os.PathListSeparator) + oldPath
+		cmd.Env = append(os.Environ(), "HOME="+tmpDir, "PATH="+newPath)
+		output, err := cmd.CombinedOutput()
+
+		// Should fail
+		if err == nil {
+			t.Fatalf("gt rig add should have failed when bd init fails, but succeeded.\nOutput: %s", output)
+		}
+
+		// Verify error message mentions bd init failure
+		outputStr := string(output)
+		if !strings.Contains(outputStr, "bd init") {
+			t.Errorf("expected 'bd init' in error message, got:\n%s", outputStr)
+		}
+		if !strings.Contains(outputStr, "command not found") || !strings.Contains(outputStr, "Output:") {
+			t.Errorf("expected bd output in error message, got:\n%s", outputStr)
+		}
+	})
+
+	t.Run("BdInitNonzeroExit", func(t *testing.T) {
+		// Test that rig add fails when bd init returns a nonzero exit code
+		// (e.g., due to invalid arguments or internal error).
+
+		townRoot := filepath.Join(tmpDir, "town-bd-fail")
+		reposDir := filepath.Join(tmpDir, "repos-bd-fail")
+		os.MkdirAll(reposDir, 0755)
+
+		// Create a tracked beads repo with config.yaml but no beads.db
+		// We'll manually create the .beads directory structure
+		trackedRepo := filepath.Join(reposDir, "bd-fail-repo")
+		if err := os.MkdirAll(trackedRepo, 0755); err != nil {
+			t.Fatalf("mkdir repo: %v", err)
+		}
+
+		// Initialize git repo
+		cmds := [][]string{
+			{"git", "init", "--initial-branch=main"},
+			{"git", "config", "user.email", "test@test.com"},
+			{"git", "config", "user.name", "Test User"},
+		}
+		for _, args := range cmds {
+			cmd := exec.Command(args[0], args[1:]...)
+			cmd.Dir = trackedRepo
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+
+		// Create README and commit
+		readmePath := filepath.Join(trackedRepo, "README.md")
+		if err := os.WriteFile(readmePath, []byte("# Test Repo\n"), 0644); err != nil {
+			t.Fatalf("write README: %v", err)
+		}
+		for _, args := range [][]string{{"git", "add", "."}, {"git", "commit", "-m", "Initial commit"}} {
+			cmd := exec.Command(args[0], args[1:]...)
+			cmd.Dir = trackedRepo
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+
+		// Create .beads directory with config but WITHOUT beads.db
+		// This simulates a tracked beads repo
+		beadsDir := filepath.Join(trackedRepo, ".beads")
+		if err := os.MkdirAll(beadsDir, 0755); err != nil {
+			t.Fatalf("mkdir .beads: %v", err)
+		}
+
+		// Create a config.yaml with invalid syntax that might cause bd init to fail
+		// Actually, we'll use a valid config but then modify bd behavior via wrapper
+		configPath := filepath.Join(beadsDir, "config.yaml")
+		configContent := "prefix: test-prefix\n"
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			t.Fatalf("write config.yaml: %v", err)
+		}
+
+		// Create issues.jsonl so it looks like a real tracked beads repo
+		issuesPath := filepath.Join(beadsDir, "issues.jsonl")
+		issueContent := `{"id":"test-prefix-abc123","title":"Test Issue","type":"task"}` + "\n"
+		if err := os.WriteFile(issuesPath, []byte(issueContent), 0644); err != nil {
+			t.Fatalf("write issues.jsonl: %v", err)
+		}
+
+		// Commit .beads
+		for _, args := range [][]string{{"git", "add", ".beads"}, {"git", "commit", "-m", "Add beads"}} {
+			cmd := exec.Command(args[0], args[1:]...)
+			cmd.Dir = trackedRepo
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+
+		// Install town
+		cmd := exec.Command(gtBinary, "install", townRoot, "--name", "bd-fail-test")
+		cmd.Env = append(os.Environ(), "HOME="+tmpDir)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("gt install failed: %v\nOutput: %s", err, output)
+		}
+
+		// Create a wrapper script that makes bd init fail with nonzero exit
+		wrapperDir := filepath.Join(tmpDir, "bd-wrapper")
+		os.MkdirAll(wrapperDir, 0755)
+		wrapperScript := filepath.Join(wrapperDir, "bd")
+		wrapperContent := `#!/bin/sh
+# Pass version check
+if [ "$1" = "version" ]; then
+    echo "bd version 0.44.0"
+    exit 0
+fi
+# Wrapper that fails only for 'bd init' commands
+if [ "$1" = "init" ]; then
+    echo "simulated bd init failure" >&2
+    exit 1
+fi
+# Pass through other bd commands to real bd
+exec bd "$@"
+`
+		if err := os.WriteFile(wrapperScript, []byte(wrapperContent), 0755); err != nil {
+			t.Fatalf("create wrapper script: %v", err)
+		}
+
+		// Add rig with wrapper bd in PATH
+		cmd = exec.Command(gtBinary, "rig", "add", "failrig", trackedRepo)
+		cmd.Dir = townRoot
+		oldPath := os.Getenv("PATH")
+		newPath := wrapperDir + string(os.PathListSeparator) + oldPath
+		cmd.Env = append(os.Environ(), "HOME="+tmpDir, "PATH="+newPath)
+		output, err := cmd.CombinedOutput()
+
+		// Should fail
+		if err == nil {
+			t.Fatalf("gt rig add should have failed when bd init returns nonzero exit, but succeeded.\nOutput: %s", output)
+		}
+
+		// Verify error message includes bd init failure and output
+		outputStr := string(output)
+		if !strings.Contains(outputStr, "bd init") {
+			t.Errorf("expected 'bd init' in error message, got:\n%s", outputStr)
+		}
+		if !strings.Contains(outputStr, "simulated bd init failure") || !strings.Contains(outputStr, "Output:") {
+			t.Errorf("expected bd output in error message, got:\n%s", outputStr)
+		}
+	})
+}
+
