@@ -339,6 +339,32 @@ func (s *Server) executeCommand(command string) string {
 	case "git":
 		return s.runCmd("git", args...)
 
+	case "run", "sh", "bash":
+		// Execute arbitrary shell command via bash -c
+		// This allows full shell syntax including &&, |, ;, etc.
+		if len(args) == 0 {
+			return "Usage: run <command>\nExample: run ls -la && pwd\n"
+		}
+		// Join args back into a single command string
+		shellCmd := strings.Join(args, " ")
+		return s.runShell(shellCmd)
+
+	case "cd":
+		// Change working directory for subsequent commands
+		if len(args) == 0 {
+			return "Usage: cd <directory>\n"
+		}
+		newDir := args[0]
+		if !filepath.IsAbs(newDir) {
+			newDir = filepath.Join(s.workDir, newDir)
+		}
+		// Verify directory exists
+		if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
+			return fmt.Sprintf("cd: %s: No such directory\n", args[0])
+		}
+		s.workDir = newDir
+		return ""
+
 	default:
 		return fmt.Sprintf("Unknown command: %s\nType 'help' for available commands\n", cmd)
 	}
@@ -364,6 +390,16 @@ func (s *Server) runCmd(name string, args ...string) string {
 	return string(output)
 }
 
+func (s *Server) runShell(command string) string {
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = s.workDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("%s\nError: %v\n", output, err)
+	}
+	return string(output)
+}
+
 func (s *Server) helpText() string {
 	return `Gas Town SSH Commands:
   status     - Show daemon status
@@ -377,9 +413,14 @@ func (s *Server) helpText() string {
 
   pwd        - Show working directory
   whoami     - Show agent identity
+  cd <dir>   - Change working directory
   ls [path]  - List files
   cat <file> - Show file contents
   git <cmd>  - Run git commands
+
+  run <cmd>  - Execute shell command (supports &&, |, etc.)
+               Example: run ls -la && pwd
+               Aliases: sh, bash
 
   help       - Show this help
   exit       - Disconnect
