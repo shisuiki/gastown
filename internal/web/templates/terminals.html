@@ -78,6 +78,14 @@
                 <button id="terminal-toggle" onclick="toggleTerminalStream()" class="btn btn-success">Connect</button>
             </div>
             <pre class="terminal-output" id="terminal-output">Select a polecat session to view its terminal output.</pre>
+            <div id="terminal-input-area" style="display: none; margin-top: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter..." onkeydown="if(event.key==='Enter')sendTerminalInput()">
+                    <button onclick="sendTerminalInput()" class="btn btn-success" style="padding: 10px 15px;">Send</button>
+                    <button onclick="sendTerminalKey('C-c')" class="btn" style="background: #ef4444; color: white; padding: 10px 15px;">Ctrl+C</button>
+                    <button onclick="sendTerminalKey('Enter')" class="btn" style="background: #6366f1; color: white; padding: 10px 15px;">Enter</button>
+                </div>
+            </div>
         </div>
 
         <div class="grid">
@@ -95,6 +103,14 @@
     <script>
         let terminalSource = null;
         let terminalConnected = false;
+        let lastPing = 0;
+        let currentSession = '';
+
+        function updateSessionInfoWithPing() {
+            if (!currentSession) return;
+            const timeSince = lastPing ? Math.floor((Date.now() - lastPing) / 1000) + 's ago' : 'never';
+            document.getElementById('session-info').innerHTML = '<table><tr><th>Session ID</th><td>' + escapeHtml(currentSession) + '</td></tr><tr><th>Status</th><td><span class="badge badge-green">Connected</span></td></tr><tr><th>Last Data</th><td>' + timeSince + '</td></tr></table>';
+        }
 
         function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
         function getColorClass(color) {
@@ -116,13 +132,16 @@
             if (!session) { output.textContent = 'No session selected.'; return; }
             if (terminalSource) terminalSource.close();
             output.textContent = 'Connecting to ' + session + '...';
+            currentSession = session;
+            lastPing = Date.now();
             terminalSource = new EventSource('/api/terminal/stream?session=' + encodeURIComponent(session));
             terminalConnected = true;
             toggle.textContent = 'Disconnect';
             toggle.className = 'btn btn-warning';
-            document.getElementById('session-info').innerHTML = '<table><tr><th>Session ID</th><td>' + escapeHtml(session) + '</td></tr><tr><th>Status</th><td><span class="badge badge-green">Connected</span></td></tr></table>';
+            updateSessionInfoWithPing();
 
-            terminalSource.addEventListener('frame', (e) => { output.textContent = e.data; output.scrollTop = output.scrollHeight; });
+            terminalSource.addEventListener('frame', (e) => { output.textContent = e.data; output.scrollTop = output.scrollHeight; lastPing = Date.now(); });
+            terminalSource.addEventListener('ping', (e) => { lastPing = Date.now(); updateSessionInfoWithPing(); });
             terminalSource.addEventListener('error', (e) => {
                 const data = e.data || '';
                 if (data.startsWith('session_ended:')) {
@@ -143,7 +162,8 @@
                 }
             });
             terminalSource.addEventListener('open', () => {
-                document.getElementById('session-info').innerHTML = '<table><tr><th>Session ID</th><td>' + escapeHtml(session) + '</td></tr><tr><th>Status</th><td><span class="badge badge-green">Connected</span></td></tr></table>';
+                updateSessionInfoWithPing();
+                document.getElementById('terminal-input-area').style.display = 'block';
             });
         }
 
@@ -151,18 +171,55 @@
             const toggle = document.getElementById('terminal-toggle');
             if (terminalSource) { terminalSource.close(); terminalSource = null; }
             terminalConnected = false;
+            currentSession = '';
             toggle.textContent = 'Connect';
             toggle.className = 'btn btn-success';
+            document.getElementById('terminal-input-area').style.display = 'none';
+        }
+
+        async function sendTerminalInput() {
+            const input = document.getElementById('terminal-input');
+            const text = input.value;
+            if (!text || !currentSession) return;
+            try {
+                const res = await fetch('/api/terminal/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session: currentSession, text: text, enter: true })
+                });
+                if (res.ok) input.value = '';
+                else console.error('Failed to send input:', await res.text());
+            } catch (e) { console.error('Error sending input:', e); }
+        }
+
+        async function sendTerminalKey(key) {
+            if (!currentSession) return;
+            try {
+                await fetch('/api/terminal/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session: currentSession, key: key })
+                });
+            } catch (e) { console.error('Error sending key:', e); }
+        }
+
+        function agentTypeIcon(type) {
+            switch (type) {
+                case 'crew': return '👷';
+                case 'refinery': return '🏭';
+                case 'polecat': return '🐱';
+                default: return '🤖';
+            }
         }
 
         function updatePolecatsList(polecats) {
             const list = document.getElementById('polecats-list');
             if (!polecats || polecats.length === 0) {
-                list.innerHTML = '<p style="color: #64748b;">No polecats running</p>';
+                list.innerHTML = '<p style="color: #64748b;">No agents running</p>';
                 return;
             }
-            list.innerHTML = '<table><tr><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
-                polecats.map(p => '<tr><td>' + escapeHtml(p.Name) + '</td><td>' + escapeHtml(p.Rig) + '</td><td><span class="badge badge-' + getColorClass(p.LastActivity.ColorClass) + '">' + escapeHtml(p.LastActivity.FormattedAge) + '</span></td></tr>').join('') + '</table>';
+            list.innerHTML = '<table><tr><th>Type</th><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
+                polecats.map(p => '<tr><td>' + agentTypeIcon(p.AgentType) + '</td><td>' + escapeHtml(p.Name) + '</td><td>' + escapeHtml(p.Rig) + '</td><td><span class="badge badge-' + getColorClass(p.LastActivity.ColorClass) + '">' + escapeHtml(p.LastActivity.FormattedAge) + '</span></td></tr>').join('') + '</table>';
         }
 
         function updateTerminalSessions(polecats) {

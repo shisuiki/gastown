@@ -227,3 +227,52 @@ func (h *GUIHandler) renderTemplate(w http.ResponseWriter, name string, data int
 		http.Error(w, "Render error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// IssueRow represents an issue in the dashboard.
+type IssueRow struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Status   string `json:"status"`
+	Priority int    `json:"priority"`
+	Type     string `json:"issue_type"`
+}
+
+// handleAPIIssues returns issues from beads.
+func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Get status filter from query params
+	status := r.URL.Query().Get("status")
+	args := []string{"list", "--json"}
+	if status != "" {
+		args = append(args, "--status="+status)
+	}
+
+	cmd := exec.Command("bd", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "Failed to fetch issues",
+			"issues": []IssueRow{},
+		})
+		return
+	}
+
+	var issues []IssueRow
+	if err := json.Unmarshal(output, &issues); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "Failed to parse issues",
+			"issues": []IssueRow{},
+		})
+		return
+	}
+
+	// Limit to first 20 issues for dashboard
+	if len(issues) > 20 {
+		issues = issues[:20]
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"issues": issues,
+	})
+}

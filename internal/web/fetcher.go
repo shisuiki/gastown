@@ -627,17 +627,29 @@ func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
 		}
 
 		// Parse session name: gt-roxas-dag -> rig=roxas, polecat=dag
-		nameParts := strings.SplitN(sessionName, "-", 3)
-		if len(nameParts) != 3 {
+		// Or: gt-rig-crew-name -> rig=rig, crew=name
+		nameParts := strings.SplitN(sessionName, "-", 4) // Allow up to 4 parts for crew
+		if len(nameParts) < 3 {
 			continue
 		}
 		rig := nameParts[1]
-		polecat := nameParts[2]
+		agentPart := nameParts[2]
+		agentType := "polecat"
+		var agentName string
 
-		// Skip non-worker sessions (witness, mayor, deacon, boot)
-		// Note: refinery is included to show idle/processing status
-		if polecat == "witness" || polecat == "mayor" || polecat == "deacon" || polecat == "boot" {
+		// Check if this is a crew worker (gt-rig-crew-name)
+		if agentPart == "crew" && len(nameParts) >= 4 {
+			agentType = "crew"
+			agentName = strings.Join(nameParts[3:], "-") // Handle names with dashes
+		} else if agentPart == "refinery" {
+			agentType = "refinery"
+			agentName = "refinery"
+		} else if agentPart == "witness" || agentPart == "mayor" || agentPart == "deacon" || agentPart == "boot" {
+			// Skip non-worker patrol sessions from polecats list
 			continue
+		} else {
+			// Regular polecat
+			agentName = agentPart
 		}
 
 		// Parse activity timestamp
@@ -649,16 +661,17 @@ func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
 
 		// Get status hint - special handling for refinery
 		var statusHint string
-		if polecat == "refinery" {
+		if agentType == "refinery" {
 			statusHint = f.getRefineryStatusHint(mergeQueueCount)
 		} else {
 			statusHint = f.getPolecatStatusHint(sessionName)
 		}
 
 		polecats = append(polecats, PolecatRow{
-			Name:         polecat,
+			Name:         agentName,
 			Rig:          rig,
 			SessionID:    sessionName,
+			AgentType:    agentType,
 			LastActivity: activity.Calculate(activityTime),
 			StatusHint:   statusHint,
 		})

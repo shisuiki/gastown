@@ -19,11 +19,12 @@ type ConvoyData struct {
 	Polecats   []PolecatRow
 }
 
-// PolecatRow represents a polecat worker in the dashboard.
+// PolecatRow represents a polecat or crew worker in the dashboard.
 type PolecatRow struct {
-	Name         string        // e.g., "dag", "nux"
-	Rig          string        // e.g., "roxas", "gastown"
-	SessionID    string        // e.g., "gt-roxas-dag"
+	Name         string        // e.g., "dag", "nux", "Myrtle"
+	Rig          string        // e.g., "roxas", "gastown", "TerraNomadicCity"
+	SessionID    string        // e.g., "gt-roxas-dag", "gt-TerraNomadicCity-crew-Myrtle"
+	AgentType    string        // "polecat", "crew", "refinery", "patrol"
 	LastActivity activity.Info // Colored activity display
 	StatusHint   string        // Last line from pane (optional)
 }

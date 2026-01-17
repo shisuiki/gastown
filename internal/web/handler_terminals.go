@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -50,9 +51,10 @@ func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Requ
 	defer ticker.Stop()
 
 	lastFrame := ""
-	noChangeCount := 0
+	lastPing := time.Now()
 	errorCount := 0
 	const maxConsecutiveErrors = 5
+	const keepaliveInterval = 10 * time.Second // Reduced from 15s to prevent proxy/mobile timeout
 
 	for {
 		select {
@@ -91,16 +93,15 @@ func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Requ
 
 			frame = strings.TrimRight(frame, "\n")
 			if frame == lastFrame {
-				noChangeCount++
-				// Send keepalive every 15 seconds to prevent mobile timeout
-				if noChangeCount >= 15 {
+				// Send keepalive based on time elapsed (more reliable than count)
+				if time.Since(lastPing) >= keepaliveInterval {
 					writeSSE(w, "ping", "keepalive")
 					flusher.Flush()
-					noChangeCount = 0
+					lastPing = time.Now()
 				}
 				continue
 			}
-			noChangeCount = 0
+			lastPing = time.Now() // Reset ping timer on actual data
 			lastFrame = frame
 			writeSSE(w, "frame", frame)
 			flusher.Flush()
@@ -144,4 +145,72 @@ func writeSSE(w http.ResponseWriter, event, data string) {
 		fmt.Fprintf(w, "data: %s\n", line)
 	}
 	fmt.Fprint(w, "\n")
+}
+
+// TerminalSendRequest represents a request to send input to a terminal.
+type TerminalSendRequest struct {
+	Session string `json:"session"`
+	Text    string `json:"text,omitempty"`
+	Key     string `json:"key,omitempty"`
+	Enter   bool   `json:"enter,omitempty"`
+}
+
+// handleAPITerminalSend sends input to a tmux session.
+func (h *GUIHandler) handleAPITerminalSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req TerminalSendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Session == "" || !tmuxSessionNamePattern.MatchString(req.Session) {
+		http.Error(w, "Invalid session", http.StatusBadRequest)
+		return
+	}
+
+	// Send key if specified (for special keys like C-c, Enter)
+	if req.Key != "" {
+		if err := sendTmuxKey(req.Session, req.Key); err != nil {
+			http.Error(w, "Failed to send key: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Send text if specified
+	if req.Text != "" {
+		if err := sendTmuxText(req.Session, req.Text, req.Enter); err != nil {
+			http.Error(w, "Failed to send text: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// sendTmuxKey sends a special key to a tmux session.
+func sendTmuxKey(session, key string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", session, key)
+	return cmd.Run()
+}
+
+// sendTmuxText sends text to a tmux session.
+func sendTmuxText(session, text string, enter bool) error {
+	// Use send-keys with literal text
+	args := []string{"send-keys", "-t", session, "-l", text}
+	cmd := exec.Command("tmux", args...)
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	if enter {
+		return sendTmuxKey(session, "Enter")
+	}
+	return nil
 }

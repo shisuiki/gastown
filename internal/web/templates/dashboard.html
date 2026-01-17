@@ -112,6 +112,11 @@
             </div>
 
             <div class="card" style="grid-column: 1 / -1;">
+                <h2>📋 Active Issues</h2>
+                <div class="card-content" id="issues-list" style="max-height: 250px; overflow-y: auto;">Loading...</div>
+            </div>
+
+            <div class="card" style="grid-column: 1 / -1;">
                 <h2>📝 Recent Activity</h2>
                 <div class="card-content" id="activity-list" style="max-height: 250px; overflow-y: auto;">Loading...</div>
             </div>
@@ -195,11 +200,19 @@
                 : '<p style="color: #64748b;">No active convoys</p>';
             document.getElementById('convoys-list').innerHTML = convoysHtml;
 
+            const agentTypeIcon = (type) => {
+                switch (type) {
+                    case 'crew': return '👷';
+                    case 'refinery': return '🏭';
+                    case 'polecat': return '🐱';
+                    default: return '🤖';
+                }
+            };
             const polecatsHtml = data.polecats && data.polecats.length > 0
-                ? '<table><tr><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
-                  data.polecats.map(p => '<tr><td>' + escapeHtml(p.Name) + '</td><td>' + escapeHtml(p.Rig) + '</td><td><span class="badge badge-' + getColorClass(p.LastActivity.ColorClass) + '">' + escapeHtml(p.LastActivity.FormattedAge) + '</span></td></tr>').join('') +
+                ? '<table><tr><th>Type</th><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
+                  data.polecats.map(p => '<tr><td>' + agentTypeIcon(p.AgentType) + '</td><td>' + escapeHtml(p.Name) + '</td><td>' + escapeHtml(p.Rig) + '</td><td><span class="badge badge-' + getColorClass(p.LastActivity.ColorClass) + '">' + escapeHtml(p.LastActivity.FormattedAge) + '</span></td></tr>').join('') +
                   '</table>'
-                : '<p style="color: #64748b;">No polecats running</p>';
+                : '<p style="color: #64748b;">No agents running</p>';
             document.getElementById('polecats-list').innerHTML = polecatsHtml;
 
             document.getElementById('mail-status').innerHTML =
@@ -229,8 +242,40 @@
             }
         }
 
+        async function loadIssues() {
+            try {
+                const res = await fetch('/api/issues?status=open');
+                const data = await res.json();
+                const container = document.getElementById('issues-list');
+
+                if (data.issues && data.issues.length > 0) {
+                    const priorityBadge = (p) => {
+                        const colors = { 1: 'red', 2: 'yellow', 3: 'blue', 4: 'green' };
+                        return '<span class="badge badge-' + (colors[p] || 'blue') + '">P' + p + '</span>';
+                    };
+                    const typeIcon = (t) => {
+                        const icons = { 'task': '📋', 'bug': '🐛', 'feature': '✨', 'doc': '📖' };
+                        return icons[t] || '📌';
+                    };
+                    container.innerHTML = '<table style="width: 100%;"><tr><th>ID</th><th>Title</th><th>Priority</th><th>Type</th></tr>' +
+                        data.issues.slice(0, 15).map(i =>
+                            '<tr><td><code style="color: #60a5fa;">' + escapeHtml(i.id) + '</code></td>' +
+                            '<td>' + escapeHtml(i.title) + '</td>' +
+                            '<td>' + priorityBadge(i.priority) + '</td>' +
+                            '<td>' + typeIcon(i.issue_type) + '</td></tr>'
+                        ).join('') + '</table>';
+                } else {
+                    container.innerHTML = '<p style="color: #64748b;">No open issues</p>';
+                }
+            } catch (e) {
+                document.getElementById('issues-list').innerHTML = '<p style="color: #f87171;">Error: ' + e.message + '</p>';
+            }
+        }
+
         loadActivity();
+        loadIssues();
         setInterval(loadActivity, 30000);
+        setInterval(loadIssues, 30000);
         connectStatusSocket();
     </script>
 </body>

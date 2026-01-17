@@ -48,6 +48,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	// Dashboard API routes
 	h.mux.HandleFunc("/api/status", h.handleAPIStatus)
 	h.mux.HandleFunc("/ws/status", h.handleStatusWS)
+	h.mux.HandleFunc("/api/issues", h.handleAPIIssues)
 
 	// Mayor API routes
 	h.mux.HandleFunc("/api/mayor/terminal", h.handleAPIMayorTerminal)
@@ -61,6 +62,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 
 	// Terminal API routes
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
+	h.mux.HandleFunc("/api/terminal/send", h.handleAPITerminalSend)
 
 	// Activity API routes
 	h.mux.HandleFunc("/api/activity", h.handleAPIActivity)
