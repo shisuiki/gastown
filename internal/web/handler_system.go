@@ -5,14 +5,121 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// RigConfig represents the config.json structure for a rig.
+type RigConfig struct {
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	GitURL    string `json:"git_url"`
+	LocalRepo string `json:"local_repo"`
+}
+
+// RigInfo contains rig name and its git repo path for the Git page.
+type RigInfo struct {
+	Name    string `json:"name"`
+	RepoDir string `json:"repo_dir"`
+	HasRepo bool   `json:"has_repo"`
+}
+
 // Version is set from the main package
 var Version = "0.2.6"
+
+// getGTRoot returns the GT_ROOT directory.
+func getGTRoot() string {
+	dir := os.Getenv("GT_ROOT")
+	if dir == "" {
+		dir = os.Getenv("HOME") + "/gt"
+	}
+	return dir
+}
+
+// getRigRepoDir returns the git repo directory for a rig by reading its config.json.
+// Returns GT_ROOT if rig is empty, or the rig's local_repo if configured.
+func getRigRepoDir(rig string) string {
+	gtRoot := getGTRoot()
+	if rig == "" {
+		return gtRoot
+	}
+
+	// Read rig's config.json
+	configPath := filepath.Join(gtRoot, rig, "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// Fall back to rig directory if config not found
+		return filepath.Join(gtRoot, rig)
+	}
+
+	var config RigConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return filepath.Join(gtRoot, rig)
+	}
+
+	// Use local_repo if specified, otherwise fall back to rig directory
+	if config.LocalRepo != "" {
+		return config.LocalRepo
+	}
+	return filepath.Join(gtRoot, rig)
+}
+
+// getRigsWithRepos returns all rigs that have git repositories.
+func getRigsWithRepos() []RigInfo {
+	gtRoot := getGTRoot()
+	var rigs []RigInfo
+
+	entries, err := os.ReadDir(gtRoot)
+	if err != nil {
+		return rigs
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Skip hidden directories and special folders
+		if strings.HasPrefix(name, ".") || name == "settings" || name == "mayor" {
+			continue
+		}
+
+		// Check if this is a rig (has config.json with type="rig")
+		configPath := filepath.Join(gtRoot, name, "config.json")
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			continue
+		}
+
+		var config RigConfig
+		if err := json.Unmarshal(data, &config); err != nil || config.Type != "rig" {
+			continue
+		}
+
+		// Determine repo directory
+		repoDir := config.LocalRepo
+		if repoDir == "" {
+			repoDir = filepath.Join(gtRoot, name)
+		}
+
+		// Check if repo has .git
+		hasRepo := false
+		if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
+			hasRepo = true
+		}
+
+		rigs = append(rigs, RigInfo{
+			Name:    name,
+			RepoDir: repoDir,
+			HasRepo: hasRepo,
+		})
+	}
+
+	return rigs
+}
 
 // SystemInfo represents system resource information.
 type SystemInfo struct {
@@ -160,19 +267,23 @@ func (h *GUIHandler) handleAPISystem(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(info)
 }
 
+// handleAPIGitRigs returns rigs with their git repository information.
+func (h *GUIHandler) handleAPIGitRigs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	rigs := getRigsWithRepos()
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"rigs":    rigs,
+		"gt_root": getGTRoot(),
+	})
+}
+
 // handleAPIGitCommits returns recent git commits.
 func (h *GUIHandler) handleAPIGitCommits(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Get rig parameter or default to GT_ROOT
+	// Get rig parameter and resolve to actual repo directory
 	rig := r.URL.Query().Get("rig")
-	dir := os.Getenv("GT_ROOT")
-	if dir == "" {
-		dir = os.Getenv("HOME") + "/gt"
-	}
-	if rig != "" {
-		dir = dir + "/" + rig
-	}
+	dir := getRigRepoDir(rig)
 
 	// Get commit count
 	countStr := r.URL.Query().Get("count")
@@ -234,13 +345,8 @@ func (h *GUIHandler) handleAPIGitCommits(w http.ResponseWriter, r *http.Request)
 func (h *GUIHandler) handleAPIGitBranches(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	dir := os.Getenv("GT_ROOT")
-	if dir == "" {
-		dir = os.Getenv("HOME") + "/gt"
-	}
-	if rig := r.URL.Query().Get("rig"); rig != "" {
-		dir = dir + "/" + rig
-	}
+	rig := r.URL.Query().Get("rig")
+	dir := getRigRepoDir(rig)
 
 	cmd := exec.Command("git", "branch", "-a", "--format=%(refname:short)|%(HEAD)|%(objectname:short)")
 	cmd.Dir = dir
@@ -280,13 +386,8 @@ func (h *GUIHandler) handleAPIGitBranches(w http.ResponseWriter, r *http.Request
 func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	dir := os.Getenv("GT_ROOT")
-	if dir == "" {
-		dir = os.Getenv("HOME") + "/gt"
-	}
-	if rig := r.URL.Query().Get("rig"); rig != "" {
-		dir = dir + "/" + rig
-	}
+	rig := r.URL.Query().Get("rig")
+	dir := getRigRepoDir(rig)
 
 	count := 50
 	if c := r.URL.Query().Get("count"); c != "" {

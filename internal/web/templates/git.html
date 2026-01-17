@@ -233,8 +233,8 @@
                 <label class="text-muted">Repository:</label>
                 <select x-model="selectedRig" @change="loadAll(); graphNodes = [];">
                     <option value="">Town Root (~/gt)</option>
-                    <template x-for="rig in rigs" :key="rig">
-                        <option :value="rig" x-text="rig"></option>
+                    <template x-for="rig in rigs" :key="rig.name">
+                        <option :value="rig.name" x-text="rig.name + ' (' + rig.repo_dir + ')'"></option>
                     </template>
                 </select>
             </div>
@@ -390,10 +390,10 @@
 
                 async loadRigs() {
                     try {
-                        const res = await fetch('/api/rigs');
+                        const res = await fetch('/api/git/rigs');
                         const data = await res.json();
-                        // API returns array directly, not {rigs: [...]}
-                        this.rigs = Array.isArray(data) ? data.map(r => r.Name || r.name) : [];
+                        // Filter to only show rigs with git repos
+                        this.rigs = (data.rigs || []).filter(r => r.has_repo);
                     } catch (e) {
                         console.error('Failed to load rigs:', e);
                     }
