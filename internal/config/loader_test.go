@@ -2179,6 +2179,282 @@ func TestRoleAgentsRoundTrip(t *testing.T) {
 	})
 }
 
+// RoleModels tests
+
+func TestRoleModelsRoundTrip(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Test TownSettings with RoleModels
+	t.Run("town settings with role_models", func(t *testing.T) {
+		townSettingsPath := filepath.Join(dir, "town-settings", "config.json")
+		original := NewTownSettings()
+		original.RoleModels = map[string]*RoleModelConfig{
+			"mayor":   {Model: "claude-opus-4", Endpoint: "https://api.anthropic.com"},
+			"witness": {Model: "claude-haiku-3"},
+			"polecat": {Endpoint: "https://custom-api.example.com", Auth: "work-account"},
+		}
+
+		if err := SaveTownSettings(townSettingsPath, original); err != nil {
+			t.Fatalf("SaveTownSettings: %v", err)
+		}
+
+		loaded, err := LoadOrCreateTownSettings(townSettingsPath)
+		if err != nil {
+			t.Fatalf("LoadOrCreateTownSettings: %v", err)
+		}
+
+		if len(loaded.RoleModels) != 3 {
+			t.Errorf("RoleModels count = %d, want 3", len(loaded.RoleModels))
+		}
+		if loaded.RoleModels["mayor"] == nil || loaded.RoleModels["mayor"].Model != "claude-opus-4" {
+			t.Errorf("RoleModels[mayor].Model = %q, want %q", loaded.RoleModels["mayor"].Model, "claude-opus-4")
+		}
+		if loaded.RoleModels["mayor"].Endpoint != "https://api.anthropic.com" {
+			t.Errorf("RoleModels[mayor].Endpoint = %q, want %q", loaded.RoleModels["mayor"].Endpoint, "https://api.anthropic.com")
+		}
+		if loaded.RoleModels["polecat"] == nil || loaded.RoleModels["polecat"].Auth != "work-account" {
+			t.Errorf("RoleModels[polecat].Auth = %q, want %q", loaded.RoleModels["polecat"].Auth, "work-account")
+		}
+	})
+
+	// Test RigSettings with RoleModels
+	t.Run("rig settings with role_models", func(t *testing.T) {
+		rigSettingsPath := filepath.Join(dir, "rig-settings", "config.json")
+		original := NewRigSettings()
+		original.RoleModels = map[string]*RoleModelConfig{
+			"witness": {Model: "claude-haiku-3", Endpoint: "https://rig-api.example.com"},
+			"crew":    {Model: "claude-sonnet-4"},
+		}
+
+		if err := SaveRigSettings(rigSettingsPath, original); err != nil {
+			t.Fatalf("SaveRigSettings: %v", err)
+		}
+
+		loaded, err := LoadRigSettings(rigSettingsPath)
+		if err != nil {
+			t.Fatalf("LoadRigSettings: %v", err)
+		}
+
+		if len(loaded.RoleModels) != 2 {
+			t.Errorf("RoleModels count = %d, want 2", len(loaded.RoleModels))
+		}
+		if loaded.RoleModels["witness"] == nil || loaded.RoleModels["witness"].Model != "claude-haiku-3" {
+			t.Errorf("RoleModels[witness].Model = %q, want %q", loaded.RoleModels["witness"].Model, "claude-haiku-3")
+		}
+		if loaded.RoleModels["crew"] == nil || loaded.RoleModels["crew"].Model != "claude-sonnet-4" {
+			t.Errorf("RoleModels[crew].Model = %q, want %q", loaded.RoleModels["crew"].Model, "claude-sonnet-4")
+		}
+	})
+}
+
+func TestRoleModelsValidation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	t.Run("rejects invalid role name", func(t *testing.T) {
+		path := filepath.Join(dir, "invalid-role", "config.json")
+		settings := NewTownSettings()
+		settings.RoleModels = map[string]*RoleModelConfig{
+			"invalid-role-xyz": {Model: "claude-opus-4"},
+		}
+
+		err := SaveTownSettings(path, settings)
+		if err == nil {
+			t.Error("expected error for invalid role name, got nil")
+		}
+		if !strings.Contains(err.Error(), "invalid role name") {
+			t.Errorf("expected 'invalid role name' error, got: %v", err)
+		}
+	})
+
+	t.Run("rejects invalid endpoint URL", func(t *testing.T) {
+		path := filepath.Join(dir, "invalid-url", "config.json")
+		settings := NewTownSettings()
+		settings.RoleModels = map[string]*RoleModelConfig{
+			"mayor": {Endpoint: "not-a-valid-url"},
+		}
+
+		err := SaveTownSettings(path, settings)
+		if err == nil {
+			t.Error("expected error for invalid endpoint URL, got nil")
+		}
+		if !strings.Contains(err.Error(), "endpoint") {
+			t.Errorf("expected 'endpoint' error, got: %v", err)
+		}
+	})
+
+	t.Run("rejects non-http scheme", func(t *testing.T) {
+		path := filepath.Join(dir, "invalid-scheme", "config.json")
+		settings := NewTownSettings()
+		settings.RoleModels = map[string]*RoleModelConfig{
+			"mayor": {Endpoint: "ftp://invalid.example.com"},
+		}
+
+		err := SaveTownSettings(path, settings)
+		if err == nil {
+			t.Error("expected error for non-http scheme, got nil")
+		}
+		if !strings.Contains(err.Error(), "http") {
+			t.Errorf("expected error about http/https scheme, got: %v", err)
+		}
+	})
+
+	t.Run("accepts valid settings", func(t *testing.T) {
+		path := filepath.Join(dir, "valid", "config.json")
+		settings := NewTownSettings()
+		settings.RoleModels = map[string]*RoleModelConfig{
+			"mayor":    {Model: "claude-opus-4", Endpoint: "https://api.anthropic.com"},
+			"witness":  {Model: "claude-haiku-3"},
+			"refinery": {Endpoint: "http://localhost:8080"},
+			"polecat":  {},
+			"crew":     {Auth: "work-account"},
+			"deacon":   nil, // nil is OK
+		}
+
+		err := SaveTownSettings(path, settings)
+		if err != nil {
+			t.Errorf("expected no error for valid settings, got: %v", err)
+		}
+	})
+}
+
+func TestResolveRoleModelConfig(t *testing.T) {
+	t.Parallel()
+	ResetRegistryForTesting()
+	defer ResetRegistryForTesting()
+
+	dir := t.TempDir()
+
+	// Setup town with role_models
+	townRoot := dir
+	townSettingsPath := TownSettingsPath(townRoot)
+	townSettings := NewTownSettings()
+	townSettings.RoleModels = map[string]*RoleModelConfig{
+		"mayor":   {Model: "claude-opus-4", Endpoint: "https://town-api.example.com"},
+		"witness": {Model: "claude-haiku-3"},
+		"polecat": {Model: "claude-sonnet-4"},
+	}
+	if err := SaveTownSettings(townSettingsPath, townSettings); err != nil {
+		t.Fatalf("SaveTownSettings: %v", err)
+	}
+
+	// Setup rig with role_models (overrides some town settings)
+	rigPath := filepath.Join(dir, "testrig")
+	rigSettingsPath := RigSettingsPath(rigPath)
+	rigSettings := NewRigSettings()
+	rigSettings.RoleModels = map[string]*RoleModelConfig{
+		"witness": {Model: "claude-sonnet-4", Endpoint: "https://rig-api.example.com"},
+		"crew":    {Model: "claude-opus-4"},
+	}
+	if err := SaveRigSettings(rigSettingsPath, rigSettings); err != nil {
+		t.Fatalf("SaveRigSettings: %v", err)
+	}
+
+	t.Run("rig RoleModels overrides town RoleModels", func(t *testing.T) {
+		config := ResolveRoleModelConfig("witness", townRoot, rigPath)
+		if config == nil {
+			t.Fatal("expected config, got nil")
+		}
+		// Should get rig's witness config (claude-sonnet-4, not claude-haiku-3)
+		if config.Model != "claude-sonnet-4" {
+			t.Errorf("Model = %q, want %q", config.Model, "claude-sonnet-4")
+		}
+		if config.Endpoint != "https://rig-api.example.com" {
+			t.Errorf("Endpoint = %q, want %q", config.Endpoint, "https://rig-api.example.com")
+		}
+	})
+
+	t.Run("town RoleModels used when rig has no override", func(t *testing.T) {
+		config := ResolveRoleModelConfig("polecat", townRoot, rigPath)
+		if config == nil {
+			t.Fatal("expected config, got nil")
+		}
+		// Should get town's polecat config
+		if config.Model != "claude-sonnet-4" {
+			t.Errorf("Model = %q, want %q", config.Model, "claude-sonnet-4")
+		}
+	})
+
+	t.Run("returns nil when role not in RoleModels", func(t *testing.T) {
+		config := ResolveRoleModelConfig("refinery", townRoot, rigPath)
+		if config != nil {
+			t.Errorf("expected nil for unconfigured role, got: %+v", config)
+		}
+	})
+
+	t.Run("town-level role (no rigPath) uses town RoleModels", func(t *testing.T) {
+		config := ResolveRoleModelConfig("mayor", townRoot, "")
+		if config == nil {
+			t.Fatal("expected config, got nil")
+		}
+		if config.Model != "claude-opus-4" {
+			t.Errorf("Model = %q, want %q", config.Model, "claude-opus-4")
+		}
+	})
+}
+
+func TestBuildStartupCommand_AppliesRoleModels(t *testing.T) {
+	t.Parallel()
+	ResetRegistryForTesting()
+	defer ResetRegistryForTesting()
+
+	dir := t.TempDir()
+
+	// Setup town with role_models
+	townRoot := dir
+	townSettingsPath := TownSettingsPath(townRoot)
+	townSettings := NewTownSettings()
+	townSettings.RoleModels = map[string]*RoleModelConfig{
+		"mayor":   {Model: "claude-opus-4"},
+		"witness": {Model: "claude-haiku-3", Endpoint: "https://custom-api.example.com"},
+	}
+	if err := SaveTownSettings(townSettingsPath, townSettings); err != nil {
+		t.Fatalf("SaveTownSettings: %v", err)
+	}
+
+	// Setup rig
+	rigPath := filepath.Join(dir, "testrig")
+	rigSettingsPath := RigSettingsPath(rigPath)
+	rigSettings := NewRigSettings()
+	if err := SaveRigSettings(rigSettingsPath, rigSettings); err != nil {
+		t.Fatalf("SaveRigSettings: %v", err)
+	}
+
+	t.Run("adds model flag for role with model configured", func(t *testing.T) {
+		envVars := map[string]string{"GT_ROLE": "mayor"}
+		cmd := BuildStartupCommand(envVars, rigPath, "")
+
+		if !strings.Contains(cmd, "--model claude-opus-4") {
+			t.Errorf("expected --model claude-opus-4 in command, got: %q", cmd)
+		}
+	})
+
+	t.Run("adds endpoint env var for role with endpoint configured", func(t *testing.T) {
+		envVars := map[string]string{"GT_ROLE": "witness"}
+		cmd := BuildStartupCommand(envVars, rigPath, "")
+
+		if !strings.Contains(cmd, "ANTHROPIC_API_BASE=https://custom-api.example.com") {
+			t.Errorf("expected ANTHROPIC_API_BASE in command, got: %q", cmd)
+		}
+		if !strings.Contains(cmd, "--model claude-haiku-3") {
+			t.Errorf("expected --model claude-haiku-3 in command, got: %q", cmd)
+		}
+	})
+
+	t.Run("no model args for role without config", func(t *testing.T) {
+		envVars := map[string]string{"GT_ROLE": "refinery"}
+		cmd := BuildStartupCommand(envVars, rigPath, "")
+
+		if strings.Contains(cmd, "--model") {
+			t.Errorf("did not expect --model flag for unconfigured role, got: %q", cmd)
+		}
+		if strings.Contains(cmd, "ANTHROPIC_API_BASE") {
+			t.Errorf("did not expect ANTHROPIC_API_BASE for unconfigured role, got: %q", cmd)
+		}
+	})
+}
+
 // Escalation config tests
 
 func TestEscalationConfigRoundTrip(t *testing.T) {

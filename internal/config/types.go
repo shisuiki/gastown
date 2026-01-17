@@ -57,6 +57,12 @@ type TownSettings struct {
 	// Example: {"mayor": "claude-opus", "witness": "claude-haiku", "polecat": "claude-sonnet"}
 	RoleAgents map[string]string `json:"role_agents,omitempty"`
 
+	// RoleModels provides per-role model/endpoint configuration.
+	// Keys are role names: "mayor", "deacon", "witness", "refinery", "polecat", "crew".
+	// These settings are applied after agent resolution via RoleAgents.
+	// Example: {"mayor": {"model": "claude-opus-4", "endpoint": "https://custom.api"}}
+	RoleModels map[string]*RoleModelConfig `json:"role_models,omitempty"`
+
 	// AgentEmailDomain is the domain used for agent git identity emails.
 	// Agent addresses like "gastown/crew/jack" become "gastown.crew.jack@{domain}".
 	// Default: "gastown.local"
@@ -71,7 +77,44 @@ func NewTownSettings() *TownSettings {
 		DefaultAgent: "claude",
 		Agents:       make(map[string]*RuntimeConfig),
 		RoleAgents:   make(map[string]string),
+		RoleModels:   make(map[string]*RoleModelConfig),
 	}
+}
+
+// RoleModelConfig contains per-role model and endpoint configuration.
+// This extends the RoleAgents agent selection with model-specific settings.
+type RoleModelConfig struct {
+	// Model is the specific model name/ID to use (e.g., "claude-sonnet-4", "claude-opus-4").
+	// For Claude, this is passed via the --model flag.
+	// For other agents, this may be passed differently based on their CLI.
+	// If empty, uses the agent's default model.
+	Model string `json:"model,omitempty"`
+
+	// Endpoint is the API base URL to use.
+	// For Claude, this sets the ANTHROPIC_API_BASE environment variable.
+	// Must be a valid URL if specified.
+	// If empty, uses the default endpoint.
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// Auth is a reference to an auth profile from accounts.json.
+	// If set, uses that profile's CLAUDE_CONFIG_DIR.
+	// If empty, uses the default account (if configured).
+	Auth string `json:"auth,omitempty"`
+}
+
+// ValidRoleNames returns the list of valid role names for RoleAgents and RoleModels.
+func ValidRoleNames() []string {
+	return []string{"mayor", "deacon", "witness", "refinery", "polecat", "crew"}
+}
+
+// IsValidRoleName checks if a role name is valid.
+func IsValidRoleName(role string) bool {
+	for _, valid := range ValidRoleNames() {
+		if role == valid {
+			return true
+		}
+	}
+	return false
 }
 
 // DaemonConfig represents daemon process settings.
@@ -229,6 +272,12 @@ type RigSettings struct {
 	// Overrides TownSettings.RoleAgents for this specific rig.
 	// Example: {"witness": "claude-haiku", "polecat": "claude-sonnet"}
 	RoleAgents map[string]string `json:"role_agents,omitempty"`
+
+	// RoleModels provides per-role model/endpoint configuration for this rig.
+	// Keys are role names: "witness", "refinery", "polecat", "crew".
+	// Overrides TownSettings.RoleModels for this specific rig.
+	// Example: {"witness": {"model": "claude-haiku-3", "endpoint": "https://custom.api"}}
+	RoleModels map[string]*RoleModelConfig `json:"role_models,omitempty"`
 }
 
 // CrewConfig represents crew workspace settings for a rig.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -212,11 +213,59 @@ func validateRigSettings(c *RigSettings) error {
 			return err
 		}
 	}
+	if c.RoleModels != nil {
+		if err := validateRoleModels(c.RoleModels); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // ErrInvalidOnConflict indicates an invalid on_conflict strategy.
 var ErrInvalidOnConflict = errors.New("invalid on_conflict strategy")
+
+// ErrInvalidRoleName indicates an unknown role name in RoleModels or RoleAgents.
+var ErrInvalidRoleName = errors.New("invalid role name")
+
+// ErrInvalidEndpoint indicates a malformed URL in RoleModelConfig.Endpoint.
+var ErrInvalidEndpoint = errors.New("invalid endpoint URL")
+
+// validateRoleModels validates a RoleModels map.
+func validateRoleModels(roleModels map[string]*RoleModelConfig) error {
+	for role, config := range roleModels {
+		// Validate role name
+		if !IsValidRoleName(role) {
+			return fmt.Errorf("%w: %q (valid: %v)", ErrInvalidRoleName, role, ValidRoleNames())
+		}
+
+		if config == nil {
+			continue
+		}
+
+		// Validate endpoint URL if specified
+		if config.Endpoint != "" {
+			if err := validateEndpointURL(config.Endpoint); err != nil {
+				return fmt.Errorf("role_models[%s].endpoint: %w", role, err)
+			}
+		}
+	}
+	return nil
+}
+
+// validateEndpointURL validates that a string is a valid HTTP(S) URL.
+func validateEndpointURL(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidEndpoint, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%w: scheme must be http or https, got %q", ErrInvalidEndpoint, u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%w: missing host", ErrInvalidEndpoint)
+	}
+	return nil
+}
 
 // validateMergeQueueConfig validates a MergeQueueConfig.
 func validateMergeQueueConfig(c *MergeQueueConfig) error {
@@ -261,6 +310,7 @@ func NewRigSettings() *RigSettings {
 		Version:    CurrentRigSettingsVersion,
 		MergeQueue: DefaultMergeQueueConfig(),
 		Namepool:   DefaultNamepoolConfig(),
+		RoleModels: make(map[string]*RoleModelConfig),
 	}
 }
 
@@ -765,6 +815,11 @@ func SaveTownSettings(path string, settings *TownSettings) error {
 	if settings.Version > CurrentTownSettingsVersion {
 		return fmt.Errorf("%w: got %d, max supported %d", ErrInvalidVersion, settings.Version, CurrentTownSettingsVersion)
 	}
+	if settings.RoleModels != nil {
+		if err := validateRoleModels(settings.RoleModels); err != nil {
+			return err
+		}
+	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
@@ -1048,6 +1103,84 @@ func ResolveRoleAgentName(role, townRoot, rigPath string) (agentName string, isR
 	return "claude", false
 }
 
+// ResolveRoleModelConfig returns the RoleModelConfig for a specific role.
+// Resolution order:
+//  1. Rig's RoleModels[role] - if set
+//  2. Town's RoleModels[role] - if set
+//  3. nil (no model config for this role)
+//
+// role is one of: "mayor", "deacon", "witness", "refinery", "polecat", "crew".
+// townRoot is the path to the town directory (e.g., ~/gt).
+// rigPath is the path to the rig directory, or empty for town-level roles.
+func ResolveRoleModelConfig(role, townRoot, rigPath string) *RoleModelConfig {
+	// Load rig settings
+	var rigSettings *RigSettings
+	if rigPath != "" {
+		var err error
+		rigSettings, err = LoadRigSettings(RigSettingsPath(rigPath))
+		if err != nil {
+			rigSettings = nil
+		}
+	}
+
+	// Load town settings
+	townSettings, err := LoadOrCreateTownSettings(TownSettingsPath(townRoot))
+	if err != nil {
+		townSettings = NewTownSettings()
+	}
+
+	// Check rig's RoleModels first
+	if rigSettings != nil && rigSettings.RoleModels != nil {
+		if config, ok := rigSettings.RoleModels[role]; ok && config != nil {
+			return config
+		}
+	}
+
+	// Check town's RoleModels
+	if townSettings.RoleModels != nil {
+		if config, ok := townSettings.RoleModels[role]; ok && config != nil {
+			return config
+		}
+	}
+
+	return nil
+}
+
+// ApplyRoleModelConfig applies a RoleModelConfig to environment variables and returns
+// additional command-line arguments to append.
+// Returns:
+//   - modelArgs: additional args to append (e.g., ["--model", "claude-sonnet-4"])
+//   - envVars: environment variables to set (modifies the passed map)
+func ApplyRoleModelConfig(config *RoleModelConfig, townRoot string, envVars map[string]string) []string {
+	if config == nil {
+		return nil
+	}
+
+	var modelArgs []string
+
+	// Apply model flag
+	if config.Model != "" {
+		modelArgs = append(modelArgs, "--model", config.Model)
+	}
+
+	// Apply endpoint as environment variable
+	if config.Endpoint != "" {
+		// ANTHROPIC_API_BASE is the standard env var for Claude API endpoint
+		envVars["ANTHROPIC_API_BASE"] = config.Endpoint
+	}
+
+	// Apply auth profile
+	if config.Auth != "" {
+		accountsPath := filepath.Join(townRoot, "mayor", "accounts.json")
+		configDir, _, err := ResolveAccountConfigDir(accountsPath, config.Auth)
+		if err == nil && configDir != "" {
+			envVars["CLAUDE_CONFIG_DIR"] = configDir
+		}
+	}
+
+	return modelArgs
+}
+
 // lookupAgentConfig looks up an agent by name.
 // Checks rig-level custom agents first, then town's custom agents, then built-in presets from agents.go.
 func lookupAgentConfig(name string, townSettings *TownSettings, rigSettings *RigSettings) *RuntimeConfig {
@@ -1207,10 +1340,12 @@ func findTownRootFromCwd() (string, error) {
 //
 // If envVars contains GT_ROLE, the function uses role-based agent resolution
 // (ResolveRoleAgentConfig) to select the appropriate agent for the role.
-// This enables per-role model selection via role_agents in settings.
+// It also applies per-role model configuration from role_models in settings,
+// which can specify model name, API endpoint, and auth profile.
 func BuildStartupCommand(envVars map[string]string, rigPath, prompt string) string {
 	var rc *RuntimeConfig
 	var townRoot string
+	var modelArgs []string
 
 	// Extract role from envVars for role-based agent resolution
 	role := envVars["GT_ROLE"]
@@ -1241,7 +1376,7 @@ func BuildStartupCommand(envVars map[string]string, rigPath, prompt string) stri
 	}
 
 	// Copy env vars to avoid mutating caller map
-	resolvedEnv := make(map[string]string, len(envVars)+2)
+	resolvedEnv := make(map[string]string, len(envVars)+4)
 	for k, v := range envVars {
 		resolvedEnv[k] = v
 	}
@@ -1251,6 +1386,12 @@ func BuildStartupCommand(envVars map[string]string, rigPath, prompt string) stri
 	}
 	if rc.Session != nil && rc.Session.SessionIDEnv != "" {
 		resolvedEnv["GT_SESSION_ID_ENV"] = rc.Session.SessionIDEnv
+	}
+
+	// Apply per-role model configuration (model, endpoint, auth)
+	if role != "" && townRoot != "" {
+		roleModelConfig := ResolveRoleModelConfig(role, townRoot, rigPath)
+		modelArgs = ApplyRoleModelConfig(roleModelConfig, townRoot, resolvedEnv)
 	}
 
 	// Build environment export prefix
@@ -1272,6 +1413,11 @@ func BuildStartupCommand(envVars map[string]string, rigPath, prompt string) stri
 		cmd += rc.BuildCommandWithPrompt(prompt)
 	} else {
 		cmd += rc.BuildCommand()
+	}
+
+	// Append model-specific arguments (e.g., --model claude-sonnet-4)
+	if len(modelArgs) > 0 {
+		cmd += " " + strings.Join(modelArgs, " ")
 	}
 
 	return cmd
@@ -1299,9 +1445,13 @@ func PrependEnv(command string, envVars map[string]string) string {
 //  1. agentOverride (explicit override)
 //  2. role_agents[GT_ROLE] (if GT_ROLE is in envVars)
 //  3. Default agent resolution (rig's Agent → town's DefaultAgent → "claude")
+//
+// Per-role model configuration from role_models is still applied regardless of override,
+// allowing model/endpoint/auth settings to be configured independently of agent selection.
 func BuildStartupCommandWithAgentOverride(envVars map[string]string, rigPath, prompt, agentOverride string) (string, error) {
 	var rc *RuntimeConfig
 	var townRoot string
+	var modelArgs []string
 
 	// Extract role from envVars for role-based agent resolution (when no override)
 	role := envVars["GT_ROLE"]
@@ -1342,7 +1492,7 @@ func BuildStartupCommandWithAgentOverride(envVars map[string]string, rigPath, pr
 	}
 
 	// Copy env vars to avoid mutating caller map
-	resolvedEnv := make(map[string]string, len(envVars)+2)
+	resolvedEnv := make(map[string]string, len(envVars)+4)
 	for k, v := range envVars {
 		resolvedEnv[k] = v
 	}
@@ -1352,6 +1502,12 @@ func BuildStartupCommandWithAgentOverride(envVars map[string]string, rigPath, pr
 	}
 	if rc.Session != nil && rc.Session.SessionIDEnv != "" {
 		resolvedEnv["GT_SESSION_ID_ENV"] = rc.Session.SessionIDEnv
+	}
+
+	// Apply per-role model configuration (model, endpoint, auth)
+	if role != "" && townRoot != "" {
+		roleModelConfig := ResolveRoleModelConfig(role, townRoot, rigPath)
+		modelArgs = ApplyRoleModelConfig(roleModelConfig, townRoot, resolvedEnv)
 	}
 
 	// Build environment export prefix
@@ -1370,6 +1526,11 @@ func BuildStartupCommandWithAgentOverride(envVars map[string]string, rigPath, pr
 		cmd += rc.BuildCommandWithPrompt(prompt)
 	} else {
 		cmd += rc.BuildCommand()
+	}
+
+	// Append model-specific arguments (e.g., --model claude-sonnet-4)
+	if len(modelArgs) > 0 {
+		cmd += " " + strings.Join(modelArgs, " ")
 	}
 
 	return cmd, nil
