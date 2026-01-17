@@ -230,9 +230,9 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <h1 style="font-size: 1.2rem; color: #94a3b8;">Git Repository</h1>
             <div class="rig-selector">
-                <label class="text-muted">Rig:</label>
-                <select x-model="selectedRig" @change="loadAll()">
-                    <option value="">Default (GT_ROOT)</option>
+                <label class="text-muted">Repository:</label>
+                <select x-model="selectedRig" @change="loadAll(); graphNodes = [];">
+                    <option value="">Town Root (~/gt)</option>
                     <template x-for="rig in rigs" :key="rig">
                         <option :value="rig" x-text="rig"></option>
                     </template>
@@ -392,7 +392,8 @@
                     try {
                         const res = await fetch('/api/rigs');
                         const data = await res.json();
-                        this.rigs = data.rigs ? data.rigs.map(r => r.name) : [];
+                        // API returns array directly, not {rigs: [...]}
+                        this.rigs = Array.isArray(data) ? data.map(r => r.Name || r.name) : [];
                     } catch (e) {
                         console.error('Failed to load rigs:', e);
                     }
