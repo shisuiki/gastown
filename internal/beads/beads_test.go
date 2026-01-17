@@ -2371,3 +2371,139 @@ func TestCloseAndClearAgentBead_ReasonVariations(t *testing.T) {
 		})
 	}
 }
+
+// TestDeleteAgentBead_MalformedID tests that DeleteAgentBead handles malformed
+// or invalid agent bead IDs gracefully.
+func TestDeleteAgentBead_MalformedID(t *testing.T) {
+	_, beadsDir := initTestBeads(t)
+	bd := New(beadsDir)
+
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{"empty_id", ""},
+		{"whitespace_only", "   "},
+		{"special_chars", "test/agent/../invalid"},
+		{"sql_injection_attempt", "test'; DROP TABLE issues; --"},
+		{"path_traversal", "../../etc/passwd"},
+		{"nonexistent_id", "nonexistent-agent-bead-xyz123"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// DeleteAgentBead should handle malformed IDs without crashing
+			err := bd.DeleteAgentBead(tc.id)
+
+			// We expect an error for malformed/nonexistent IDs
+			// The specific error will depend on bd's validation
+			if err == nil {
+				// Some IDs might succeed in closing (if bd is lenient)
+				// That's OK as long as it doesn't crash
+				t.Logf("DeleteAgentBead succeeded (bd may be lenient): %q", tc.id)
+			} else {
+				// Error is expected and acceptable
+				t.Logf("DeleteAgentBead failed as expected: %v", err)
+			}
+		})
+	}
+}
+
+// TestDeleteAgentBead_NewBehavior tests that DeleteAgentBead now uses the safe
+// CloseAndClearAgentBead path instead of bd delete --hard --force.
+func TestDeleteAgentBead_NewBehavior(t *testing.T) {
+	_, beadsDir := initTestBeads(t)
+	bd := New(beadsDir)
+
+	agentID := "test-testrig-polecat-safedelete"
+
+	// Create agent bead
+	_, err := bd.CreateAgentBead(agentID, "Test agent", &AgentFields{
+		RoleType:   "polecat",
+		Rig:        "testrig",
+		AgentState: "spawning",
+	})
+	if err != nil {
+		t.Fatalf("CreateAgentBead: %v", err)
+	}
+
+	// Call DeleteAgentBead (now uses CloseAndClearAgentBead internally)
+	err = bd.DeleteAgentBead(agentID)
+	if err != nil {
+		t.Fatalf("DeleteAgentBead: %v", err)
+	}
+
+	// Verify the bead is closed (not tombstone)
+	issue, err := bd.Show(agentID)
+	if err != nil {
+		t.Fatalf("Show after delete: %v", err)
+	}
+	if issue.Status != "closed" {
+		t.Errorf("status = %q, want 'closed' (should use close, not hard delete)", issue.Status)
+	}
+
+	// Verify we can reopen it (proves no tombstone was created)
+	_, err = bd.run("reopen", agentID, "--reason=test")
+	if err != nil {
+		t.Fatalf("reopen failed: %v (proves DeleteAgentBead created tombstone instead of closing)", err)
+	}
+
+	// Verify bead is open again
+	issue, err = bd.Show(agentID)
+	if err != nil {
+		t.Fatalf("Show after reopen: %v", err)
+	}
+	if issue.Status != "open" {
+		t.Errorf("status = %q, want 'open'", issue.Status)
+	}
+
+	t.Log("SUCCESS: DeleteAgentBead now uses safe close path (no tombstones)")
+}
+
+// TestDeleteDogAgentBead_SafePath tests that DeleteDogAgentBead uses the safe
+// CloseAndClearAgentBead path instead of creating tombstones.
+func TestDeleteDogAgentBead_SafePath(t *testing.T) {
+	_, beadsDir := initTestBeads(t)
+	bd := New(beadsDir)
+
+	dogName := "testdog-safedelete"
+
+	// Create dog agent bead
+	_, err := bd.CreateDogAgentBead(dogName, "testrig-dock")
+	if err != nil {
+		t.Fatalf("CreateDogAgentBead: %v", err)
+	}
+
+	// Find the dog bead to get its ID
+	dogBead, err := bd.FindDogAgentBead(dogName)
+	if err != nil {
+		t.Fatalf("FindDogAgentBead: %v", err)
+	}
+	if dogBead == nil {
+		t.Fatal("dog bead not found after creation")
+	}
+	dogID := dogBead.ID
+
+	// Call DeleteDogAgentBead (now uses CloseAndClearAgentBead internally)
+	err = bd.DeleteDogAgentBead(dogName)
+	if err != nil {
+		t.Fatalf("DeleteDogAgentBead: %v", err)
+	}
+
+	// Verify the bead is closed (not tombstone)
+	issue, err := bd.Show(dogID)
+	if err != nil {
+		t.Fatalf("Show after delete: %v", err)
+	}
+	if issue.Status != "closed" {
+		t.Errorf("status = %q, want 'closed' (should use close, not hard delete)", issue.Status)
+	}
+
+	// Verify we can reopen it (proves no tombstone was created)
+	_, err = bd.run("reopen", dogID, "--reason=test")
+	if err != nil {
+		t.Fatalf("reopen failed: %v (proves DeleteDogAgentBead created tombstone)", err)
+	}
+
+	t.Log("SUCCESS: DeleteDogAgentBead now uses safe close path (no tombstones)")
+}

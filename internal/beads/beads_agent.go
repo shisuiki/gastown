@@ -407,19 +407,17 @@ func (b *Beads) GetAgentNotificationLevel(id string) (string, error) {
 	return fields.NotificationLevel, nil
 }
 
-// DeleteAgentBead permanently deletes an agent bead.
-// Uses --hard --force for immediate permanent deletion (no tombstone).
+// DeleteAgentBead removes an agent bead safely by closing and clearing it.
 //
-// WARNING: Due to a bd bug, --hard --force still creates tombstones instead of
-// truly deleting. This breaks CreateOrReopenAgentBead because tombstones are
-// invisible to bd show/reopen but still block bd create via UNIQUE constraint.
+// This function uses CloseAndClearAgentBead instead of bd delete --hard --force
+// because of a bd bug where --hard --force still creates tombstones. Tombstones
+// are invisible to bd show/reopen but still block bd create via UNIQUE constraint,
+// which breaks CreateOrReopenAgentBead when re-spawning agents.
 //
-//
-// WORKAROUND: Use CloseAndClearAgentBead instead, which allows CreateOrReopenAgentBead
-// to reopen the bead on re-spawn.
+// By using close instead of delete, CreateOrReopenAgentBead can successfully
+// reopen the bead when an agent with the same ID is re-spawned.
 func (b *Beads) DeleteAgentBead(id string) error {
-	_, err := b.run("delete", id, "--hard", "--force")
-	return err
+	return b.CloseAndClearAgentBead(id, "agent removed")
 }
 
 // CloseAndClearAgentBead closes an agent bead (soft delete).

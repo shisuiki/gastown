@@ -77,6 +77,7 @@ func (b *Beads) FindDogAgentBead(name string) (*Issue, error) {
 
 // DeleteDogAgentBead finds and deletes the agent bead for a dog.
 // Returns nil if the bead doesn't exist (idempotent).
+// Uses CloseAndClearAgentBead to avoid the tombstone bug.
 func (b *Beads) DeleteDogAgentBead(name string) error {
 	issue, err := b.FindDogAgentBead(name)
 	if err != nil {
@@ -86,7 +87,7 @@ func (b *Beads) DeleteDogAgentBead(name string) error {
 		return nil // Already doesn't exist - idempotent
 	}
 
-	err = b.DeleteAgentBead(issue.ID)
+	err = b.CloseAndClearAgentBead(issue.ID, "dog removed")
 	if err != nil {
 		return fmt.Errorf("deleting bead %s: %w", issue.ID, err)
 	}
