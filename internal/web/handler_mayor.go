@@ -40,6 +40,9 @@ func (h *GUIHandler) handleAPIMayorTerminal(w http.ResponseWriter, r *http.Reque
 
 	lastFrame := ""
 	noChangeCount := 0
+	errorCount := 0
+	const maxConsecutiveErrors = 5
+
 	for {
 		select {
 		case <-r.Context().Done():
@@ -47,10 +50,34 @@ func (h *GUIHandler) handleAPIMayorTerminal(w http.ResponseWriter, r *http.Reque
 		case <-ticker.C:
 			frame, err := captureTmuxPane("hq-mayor")
 			if err != nil {
-				writeSSE(w, "error", err.Error())
+				errorCount++
+				// Distinguish between transient errors and session-ended
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "no server running") ||
+					strings.Contains(errMsg, "session not found") ||
+					strings.Contains(errMsg, "can't find") {
+					// Session ended - notify client and close
+					writeSSE(w, "error", "session_ended:"+errMsg)
+					flusher.Flush()
+					return
+				}
+
+				// Transient error - send error event but keep stream alive
+				writeSSE(w, "error", "transient:"+errMsg)
 				flusher.Flush()
-				return
+
+				// Give up after too many consecutive errors
+				if errorCount >= maxConsecutiveErrors {
+					writeSSE(w, "error", "max_errors_reached")
+					flusher.Flush()
+					return
+				}
+				continue
 			}
+
+			// Reset error count on successful capture
+			errorCount = 0
+
 			frame = strings.TrimRight(frame, "\n")
 			if frame == lastFrame {
 				noChangeCount++
