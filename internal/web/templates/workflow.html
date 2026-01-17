@@ -76,128 +76,211 @@
         .section-icon {
             margin-right: 8px;
         }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .section-header:hover {
+            opacity: 0.8;
+        }
+        .collapse-icon {
+            transition: transform 0.2s;
+        }
+        .collapse-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .refresh-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 5px;
+            font-size: 1rem;
+        }
+        .refresh-btn:hover {
+            color: var(--text-primary);
+        }
     </style>
 </head>
-<body>
+<body x-data="workflow()">
     {{template "nav" .}}
 
     <div class="container">
         <div class="card" style="margin-bottom: 20px;">
-            <h2><span class="section-icon">🪝</span>Current Hook</h2>
-            <div id="hook-status">
-                <div class="hook-status hook-empty">
-                    <div class="hook-label">Loading...</div>
+            <div class="section-header" @click="sections.hook = !sections.hook">
+                <h2><span class="section-icon">🪝</span>Current Hook</h2>
+                <span class="collapse-icon" :class="{ 'collapsed': !sections.hook }">▼</span>
+            </div>
+            <div x-show="sections.hook" x-collapse>
+                <div style="margin-top: 15px;">
+                    <template x-if="loading.hook">
+                        <div class="hook-status hook-empty">
+                            <span class="loading-spinner"></span> Loading...
+                        </div>
+                    </template>
+                    <template x-if="!loading.hook">
+                        <div :class="hookStatus.has_work ? 'hook-status hook-active' : 'hook-status hook-empty'">
+                            <template x-if="!hookStatus.has_work">
+                                <div>
+                                    <div class="hook-label">Hook Status</div>
+                                    <div class="hook-content">No work currently hooked</div>
+                                    <p class="text-muted" style="margin-top: 10px; font-size: 0.85rem;">
+                                        Check mail or use <code>gt sling</code> to assign work
+                                    </p>
+                                </div>
+                            </template>
+                            <template x-if="hookStatus.has_work">
+                                <div>
+                                    <div class="hook-label" x-text="(hookStatus.work_type === 'molecule' ? '📦 Molecule' : '📬 Mail') + ' Hooked'"></div>
+                                    <div class="hook-content">
+                                        <span class="hook-id" x-text="hookStatus.work_id"></span>
+                                        <template x-if="hookStatus.work_title">
+                                            <br><span class="text-secondary" x-text="hookStatus.work_title"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
 
         <div class="grid">
             <div class="card">
-                <h2><span class="section-icon">📋</span>Ready Issues</h2>
-                <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 10px;">Issues with no blockers</p>
-                <div id="ready-issues">Loading...</div>
+                <div class="section-header" @click="sections.ready = !sections.ready">
+                    <h2><span class="section-icon">📋</span>Ready Issues</h2>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button class="refresh-btn" @click.stop="loadReadyIssues()" title="Refresh">🔄</button>
+                        <span class="collapse-icon" :class="{ 'collapsed': !sections.ready }">▼</span>
+                    </div>
+                </div>
+                <div x-show="sections.ready" x-collapse>
+                    <p class="text-muted" style="font-size: 0.85rem; margin: 10px 0;">Issues with no blockers</p>
+                    <template x-if="loading.ready">
+                        <p><span class="loading-spinner"></span> Loading...</p>
+                    </template>
+                    <template x-if="!loading.ready && readyIssues.length === 0">
+                        <p class="text-muted">No ready issues</p>
+                    </template>
+                    <template x-if="!loading.ready && readyIssues.length > 0">
+                        <div>
+                            <template x-for="issue in readyIssues" :key="issue.id">
+                                <a :href="'/bead/' + issue.id" class="issue-row" style="text-decoration: none; color: inherit;">
+                                    <span class="priority-badge" :class="'priority-' + issue.priority" x-text="'P' + issue.priority"></span>
+                                    <span class="type-badge" x-text="issue.type"></span>
+                                    <span class="issue-id" x-text="issue.id"></span>
+                                    <span class="issue-title" x-text="issue.title"></span>
+                                </a>
+                            </template>
+                        </div>
+                    </template>
+                </div>
             </div>
+
             <div class="card">
-                <h2><span class="section-icon">🚚</span>Active Convoys</h2>
-                <div id="convoys-list">Loading...</div>
+                <div class="section-header" @click="sections.convoys = !sections.convoys">
+                    <h2><span class="section-icon">🚚</span>Active Convoys</h2>
+                    <span class="collapse-icon" :class="{ 'collapsed': !sections.convoys }">▼</span>
+                </div>
+                <div x-show="sections.convoys" x-collapse id="convoys-list">
+                    <div style="margin-top: 10px;">Loading...</div>
+                </div>
             </div>
         </div>
 
         <div class="card" style="margin-top: 20px;">
-            <h2><span class="section-icon">📝</span>Recent Commits</h2>
-            <div id="commits-list" style="max-height: 300px; overflow-y: auto;">Loading...</div>
+            <div class="section-header" @click="sections.commits = !sections.commits">
+                <h2><span class="section-icon">📝</span>Recent Commits</h2>
+                <span class="collapse-icon" :class="{ 'collapsed': !sections.commits }">▼</span>
+            </div>
+            <div x-show="sections.commits" x-collapse id="commits-list" style="max-height: 300px; overflow-y: auto; margin-top: 10px;">
+                Loading...
+            </div>
         </div>
     </div>
 
     {{template "scripts" .}}
     <script>
-        // ================================================================
-        // Workflow Page JavaScript
-        // ================================================================
+        function workflow() {
+            return {
+                sections: {
+                    hook: true,
+                    ready: true,
+                    convoys: true,
+                    commits: true
+                },
+                loading: {
+                    hook: true,
+                    ready: true
+                },
+                hookStatus: {
+                    has_work: false,
+                    work_type: 'none',
+                    work_id: '',
+                    work_title: ''
+                },
+                readyIssues: [],
 
-        function renderHookStatus(status) {
-            if (!status.has_work) {
-                return `
-                    <div class="hook-status hook-empty">
-                        <div class="hook-label">Hook Status</div>
-                        <div class="hook-content">No work currently hooked</div>
-                        <p class="text-muted" style="margin-top: 10px; font-size: 0.85rem;">
-                            Check mail or use <code>gt sling</code> to assign work
-                        </p>
-                    </div>
-                `;
-            }
+                init() {
+                    this.loadHookStatus();
+                    this.loadReadyIssues();
+                    loadConvoys();
+                    loadCommits();
 
-            const typeIcon = status.work_type === 'molecule' ? '📦' : '📬';
-            const typeLabel = status.work_type === 'molecule' ? 'Molecule' : 'Mail';
+                    // Refresh periodically
+                    setInterval(() => this.loadHookStatus(), 10000);
+                    setInterval(() => this.loadReadyIssues(), 30000);
+                    setInterval(loadConvoys, 30000);
+                    setInterval(loadCommits, 60000);
+                },
 
-            return `
-                <div class="hook-status hook-active">
-                    <div class="hook-label">${typeIcon} ${typeLabel} Hooked</div>
-                    <div class="hook-content">
-                        <span class="hook-id">${escapeHtml(status.work_id)}</span>
-                        ${status.work_title ? '<br><span class="text-secondary">' + escapeHtml(status.work_title) + '</span>' : ''}
-                    </div>
-                </div>
-            `;
-        }
+                async loadHookStatus() {
+                    this.loading.hook = true;
+                    try {
+                        const res = await fetch('/api/workflow/hook');
+                        this.hookStatus = await res.json();
+                    } catch (e) {
+                        console.error('Failed to load hook status:', e);
+                    }
+                    this.loading.hook = false;
+                },
 
-        function renderReadyIssues(issues) {
-            if (!issues || issues.length === 0) {
-                return '<p class="text-muted">No ready issues</p>';
-            }
-
-            return issues.map(issue => `
-                <a href="/bead/${escapeHtml(issue.id)}" class="issue-row" style="text-decoration: none; color: inherit;">
-                    <span class="priority-badge priority-${issue.priority}">P${issue.priority}</span>
-                    <span class="type-badge">${escapeHtml(issue.type)}</span>
-                    <span class="issue-id">${escapeHtml(issue.id)}</span>
-                    <span class="issue-title">${escapeHtml(issue.title)}</span>
-                </a>
-            `).join('');
-        }
-
-        async function loadHookStatus() {
-            try {
-                const res = await fetch('/api/workflow/hook');
-                const status = await res.json();
-                document.getElementById('hook-status').innerHTML = renderHookStatus(status);
-            } catch (e) {
-                document.getElementById('hook-status').innerHTML =
-                    '<div class="hook-status hook-empty"><div class="hook-content text-danger">Error: ' + escapeHtml(e.message) + '</div></div>';
-            }
-        }
-
-        async function loadReadyIssues() {
-            try {
-                const res = await fetch('/api/workflow/ready');
-                const data = await res.json();
-
-                if (data.error) {
-                    document.getElementById('ready-issues').innerHTML =
-                        '<p class="text-muted">' + escapeHtml(data.error) + '</p>';
-                    return;
+                async loadReadyIssues() {
+                    this.loading.ready = true;
+                    try {
+                        const res = await fetch('/api/workflow/ready');
+                        const data = await res.json();
+                        this.readyIssues = data.issues || [];
+                    } catch (e) {
+                        console.error('Failed to load ready issues:', e);
+                    }
+                    this.loading.ready = false;
                 }
-
-                document.getElementById('ready-issues').innerHTML = renderReadyIssues(data.issues);
-            } catch (e) {
-                document.getElementById('ready-issues').innerHTML =
-                    '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
-            }
+            };
         }
 
         async function loadConvoys() {
             try {
                 const res = await fetch('/api/convoys');
                 const convoys = await res.json();
-
-                if (convoys.error) {
-                    document.getElementById('convoys-list').innerHTML =
-                        '<p class="text-danger">Error: ' + escapeHtml(convoys.error) + '</p>';
-                    return;
-                }
-
-                document.getElementById('convoys-list').innerHTML = renderConvoysTable(convoys);
+                document.getElementById('convoys-list').innerHTML =
+                    '<div style="margin-top: 10px;">' + renderConvoysTable(convoys) + '</div>';
             } catch (e) {
                 document.getElementById('convoys-list').innerHTML =
                     '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
@@ -214,18 +297,6 @@
                     '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
             }
         }
-
-        // Initialize
-        loadHookStatus();
-        loadReadyIssues();
-        loadConvoys();
-        loadCommits();
-
-        // Refresh periodically
-        setInterval(loadHookStatus, 10000);
-        setInterval(loadReadyIssues, 30000);
-        setInterval(loadConvoys, 30000);
-        setInterval(loadCommits, 60000);
     </script>
 </body>
 </html>
