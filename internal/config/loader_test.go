@@ -913,6 +913,18 @@ func TestRuntimeConfigBuildCommandWithPrompt(t *testing.T) {
 			prompt: "custom prompt",
 			want:   `aider "custom prompt"`,
 		},
+		{
+			name:   "prompt with backticks escaped",
+			rc:     DefaultRuntimeConfig(),
+			prompt: "Run `gt hook` now",
+			want:   `claude --dangerously-skip-permissions "Run \` + "`" + `gt hook\` + "`" + ` now"`,
+		},
+		{
+			name:   "prompt with dollar sign escaped",
+			rc:     DefaultRuntimeConfig(),
+			prompt: "Value is $HOME",
+			want:   `claude --dangerously-skip-permissions "Value is \$HOME"`,
+		},
 	}
 
 	for _, tt := range tests {
