@@ -622,30 +622,10 @@ func determineColorClass(ciStatus, mergeable string) string {
 }
 
 // FetchAgents fetches all running agent sessions (polecats, crew, refinery) with activity data.
+// Always fetches fresh data - tmux list-sessions is fast enough (~10ms).
+// Caching is handled at the StatusCache level to avoid stale-on-stale delays.
 func (f *LiveConvoyFetcher) FetchAgents() ([]AgentRow, error) {
-	// Check cache first - handle both typed and JSON-loaded cache
-	if cached := f.cache.Get("agents"); cached != nil {
-		if rows, ok := cached.([]AgentRow); ok {
-			return rows, nil
-		}
-		// Cache loaded from disk as []interface{} - convert via JSON
-		if arr, ok := cached.([]interface{}); ok {
-			data, _ := json.Marshal(arr)
-			var rows []AgentRow
-			if json.Unmarshal(data, &rows) == nil {
-				return rows, nil
-			}
-		}
-	}
-
-	agents, err := f.fetchAgentsUncached()
-	if err != nil {
-		return nil, err
-	}
-
-	// Cache successful result
-	f.cache.Set("agents", agents, AgentCacheTTL)
-	return agents, nil
+	return f.fetchAgentsUncached()
 }
 
 // fetchAgentsUncached does the actual agent fetching without caching.
