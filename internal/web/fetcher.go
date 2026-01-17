@@ -644,7 +644,10 @@ func (f *LiveConvoyFetcher) FetchAgents() ([]AgentRow, error) {
 		} else if agentPart == "refinery" {
 			agentType = "refinery"
 			agentName = "refinery"
-		} else if agentPart == "witness" || agentPart == "mayor" || agentPart == "deacon" || agentPart == "boot" {
+		} else if agentPart == "mayor" {
+			agentType = "mayor"
+			agentName = "mayor"
+		} else if agentPart == "witness" || agentPart == "deacon" || agentPart == "boot" {
 			// Skip non-worker patrol sessions from agents list
 			continue
 		} else {
@@ -659,10 +662,12 @@ func (f *LiveConvoyFetcher) FetchAgents() ([]AgentRow, error) {
 		}
 		activityTime := time.Unix(activityUnix, 0)
 
-		// Get status hint - special handling for refinery
+		// Get status hint - special handling for refinery and mayor
 		var statusHint string
 		if agentType == "refinery" {
 			statusHint = f.getRefineryStatusHint(mergeQueueCount)
+		} else if agentType == "mayor" {
+			statusHint = f.getPolecatStatusHint(sessionName) // Use same pane capture for mayor
 		} else {
 			statusHint = f.getPolecatStatusHint(sessionName)
 		}
@@ -747,10 +752,10 @@ func parsePolecatSessionName(sessionName string) (rig, polecat string, ok bool) 
 }
 
 // isWorkerSession returns true if the polecat name represents a worker session.
-// Non-worker sessions: witness, mayor, deacon, boot
+// Non-worker sessions: witness, deacon, boot (mayor is now shown in terminals)
 func isWorkerSession(polecat string) bool {
 	switch polecat {
-	case "witness", "mayor", "deacon", "boot":
+	case "witness", "deacon", "boot":
 		return false
 	default:
 		return true
