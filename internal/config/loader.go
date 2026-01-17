@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/steveyegge/gastown/internal/constants"
+	"github.com/steveyegge/gastown/internal/templates"
 )
 
 var (
@@ -1375,6 +1376,26 @@ func BuildStartupCommand(envVars map[string]string, rigPath, prompt string) stri
 		}
 	}
 
+	// Resolve and inject system prompt if role is set
+	if role != "" && townRoot != "" {
+		systemPrompt, err := ResolveSystemPrompt(role, townRoot, rigPath)
+		if err != nil {
+			// Log warning but don't fail - system prompts are optional
+			fmt.Fprintf(os.Stderr, "warning: failed to resolve system prompt for role %s: %v\n", role, err)
+		} else if systemPrompt != "" {
+			// Check if agent supports system prompts
+			agentName, _ := ResolveRoleAgentName(role, townRoot, rigPath)
+			agentInfo := GetAgentPresetByName(agentName)
+			if agentInfo != nil && agentInfo.SupportsSystemPrompt {
+				// Agent supports system prompts - inject it
+				rc.SystemPrompt = systemPrompt
+			} else if agentInfo != nil && !agentInfo.SupportsSystemPrompt {
+				// Agent doesn't support system prompts - log warning
+				fmt.Fprintf(os.Stderr, "warning: agent %s does not support system prompts, ignoring system prompt for role %s\n", agentName, role)
+			}
+		}
+	}
+
 	// Copy env vars to avoid mutating caller map
 	resolvedEnv := make(map[string]string, len(envVars)+4)
 	for k, v := range envVars {
@@ -1487,6 +1508,26 @@ func BuildStartupCommandWithAgentOverride(envVars map[string]string, rigPath, pr
 				rc = ResolveRoleAgentConfig(role, townRoot, "")
 			} else {
 				rc = ResolveAgentConfig(townRoot, "")
+			}
+		}
+	}
+
+	// Resolve and inject system prompt if role is set
+	if role != "" && townRoot != "" {
+		systemPrompt, err := ResolveSystemPrompt(role, townRoot, rigPath)
+		if err != nil {
+			// Log warning but don't fail - system prompts are optional
+			fmt.Fprintf(os.Stderr, "warning: failed to resolve system prompt for role %s: %v\n", role, err)
+		} else if systemPrompt != "" {
+			// Check if agent supports system prompts
+			agentName, _ := ResolveRoleAgentName(role, townRoot, rigPath)
+			agentInfo := GetAgentPresetByName(agentName)
+			if agentInfo != nil && agentInfo.SupportsSystemPrompt {
+				// Agent supports system prompts - inject it
+				rc.SystemPrompt = systemPrompt
+			} else if agentInfo != nil && !agentInfo.SupportsSystemPrompt {
+				// Agent doesn't support system prompts - log warning
+				fmt.Fprintf(os.Stderr, "warning: agent %s does not support system prompts, ignoring system prompt for role %s\n", agentName, role)
 			}
 		}
 	}
@@ -1799,4 +1840,65 @@ func (c *EscalationConfig) GetMaxReescalations() int {
 		return 2
 	}
 	return c.MaxReescalations
+}
+
+// ResolveSystemPrompt resolves the system prompt for a specific role.
+// It implements a clear precedence order:
+//  1. Rig-level SystemPrompts[role] (if rigPath is non-empty)
+//  2. Town-level SystemPrompts[role]
+//  3. Built-in system prompt templates
+//  4. Empty string (graceful fallback)
+//
+// Values can be either inline prompt text or file paths (prefixed with "file:").
+// Returns the resolved system prompt content and any error encountered while reading files.
+func ResolveSystemPrompt(role, townRoot, rigPath string) (string, error) {
+	// Priority 1: Rig-level SystemPrompts
+	if rigPath != "" {
+		rigSettings, err := LoadRigSettings(RigSettingsPath(rigPath))
+		if err == nil && rigSettings.SystemPrompts != nil {
+			if prompt, ok := rigSettings.SystemPrompts[role]; ok && prompt != "" {
+				return resolveSystemPromptValue(prompt)
+			}
+		}
+	}
+
+	// Priority 2: Town-level SystemPrompts
+	townSettings, err := LoadOrCreateTownSettings(TownSettingsPath(townRoot))
+	if err == nil && townSettings.SystemPrompts != nil {
+		if prompt, ok := townSettings.SystemPrompts[role]; ok && prompt != "" {
+			return resolveSystemPromptValue(prompt)
+		}
+	}
+
+	// Priority 3: Built-in templates
+	builtinPrompt, err := templates.GetBuiltinSystemPrompt(role)
+	if err != nil {
+		// Log but don't fail - gracefully fall back to empty
+		fmt.Fprintf(os.Stderr, "warning: error reading built-in system prompt for %s: %v\n", role, err)
+		return "", nil
+	}
+	if builtinPrompt != "" {
+		return builtinPrompt, nil
+	}
+
+	// Priority 4: Empty (graceful fallback)
+	return "", nil
+}
+
+// resolveSystemPromptValue resolves a system prompt value, which can be:
+// - Inline text: returned as-is
+// - File path: prefixed with "file:", read from filesystem
+func resolveSystemPromptValue(value string) (string, error) {
+	const filePrefix = "file:"
+	if strings.HasPrefix(value, filePrefix) {
+		// Load from file
+		filePath := strings.TrimPrefix(value, filePrefix)
+		content, err := os.ReadFile(filePath) //nolint:gosec // G304: path is from config
+		if err != nil {
+			return "", fmt.Errorf("reading system prompt file %s: %w", filePath, err)
+		}
+		return string(content), nil
+	}
+	// Inline text
+	return value, nil
 }

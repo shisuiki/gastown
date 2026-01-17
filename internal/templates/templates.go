@@ -16,6 +16,9 @@ var templateFS embed.FS
 //go:embed commands/*.md
 var commandsFS embed.FS
 
+//go:embed system-prompts/*.md
+var systemPromptsFS embed.FS
+
 // Templates manages role and message templates.
 type Templates struct {
 	roleTemplates    *template.Template
@@ -269,4 +272,47 @@ func MissingCommands(workspacePath string) ([]string, error) {
 	}
 
 	return missing, nil
+}
+
+// GetBuiltinSystemPrompt returns the built-in system prompt for a given role.
+// Returns empty string and no error if the role doesn't have a built-in system prompt.
+// role should be one of: "mayor", "deacon", "witness", "refinery", "polecat", "crew".
+func GetBuiltinSystemPrompt(role string) (string, error) {
+	filename := fmt.Sprintf("system-prompts/%s.md", role)
+	content, err := systemPromptsFS.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil // No built-in prompt for this role
+		}
+		return "", fmt.Errorf("reading system prompt for %s: %w", role, err)
+	}
+	return string(content), nil
+}
+
+// HasBuiltinSystemPrompt checks if a role has a built-in system prompt.
+func HasBuiltinSystemPrompt(role string) bool {
+	filename := fmt.Sprintf("system-prompts/%s.md", role)
+	_, err := systemPromptsFS.ReadFile(filename)
+	return err == nil
+}
+
+// ListBuiltinSystemPrompts returns the list of roles with built-in system prompts.
+func ListBuiltinSystemPrompts() ([]string, error) {
+	entries, err := systemPromptsFS.ReadDir("system-prompts")
+	if err != nil {
+		return nil, fmt.Errorf("reading system-prompts directory: %w", err)
+	}
+
+	var roles []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		// Extract role name from filename (e.g., "polecat.md" -> "polecat")
+		name := entry.Name()
+		if len(name) > 3 && name[len(name)-3:] == ".md" {
+			roles = append(roles, name[:len(name)-3])
+		}
+	}
+	return roles, nil
 }

@@ -63,6 +63,13 @@ type TownSettings struct {
 	// Example: {"mayor": {"model": "claude-opus-4", "endpoint": "https://custom.api"}}
 	RoleModels map[string]*RoleModelConfig `json:"role_models,omitempty"`
 
+	// SystemPrompts maps role names to system prompt content or file paths.
+	// Keys are role names: "mayor", "deacon", "witness", "refinery", "polecat", "crew".
+	// Values can be either inline prompt text or file paths (prefixed with "file:").
+	// Precedence: town config > built-in templates.
+	// Example: {"polecat": "You are an expert code reviewer", "witness": "file:/path/to/prompt.md"}
+	SystemPrompts map[string]string `json:"system_prompts,omitempty"`
+
 	// AgentEmailDomain is the domain used for agent git identity emails.
 	// Agent addresses like "gastown/crew/jack" become "gastown.crew.jack@{domain}".
 	// Default: "gastown.local"
@@ -72,12 +79,13 @@ type TownSettings struct {
 // NewTownSettings creates a new TownSettings with defaults.
 func NewTownSettings() *TownSettings {
 	return &TownSettings{
-		Type:         "town-settings",
-		Version:      CurrentTownSettingsVersion,
-		DefaultAgent: "claude",
-		Agents:       make(map[string]*RuntimeConfig),
-		RoleAgents:   make(map[string]string),
-		RoleModels:   make(map[string]*RoleModelConfig),
+		Type:          "town-settings",
+		Version:       CurrentTownSettingsVersion,
+		DefaultAgent:  "claude",
+		Agents:        make(map[string]*RuntimeConfig),
+		RoleAgents:    make(map[string]string),
+		RoleModels:    make(map[string]*RoleModelConfig),
+		SystemPrompts: make(map[string]string),
 	}
 }
 
@@ -278,6 +286,13 @@ type RigSettings struct {
 	// Overrides TownSettings.RoleModels for this specific rig.
 	// Example: {"witness": {"model": "claude-haiku-3", "endpoint": "https://custom.api"}}
 	RoleModels map[string]*RoleModelConfig `json:"role_models,omitempty"`
+
+	// SystemPrompts maps role names to system prompt content or file paths.
+	// Keys are role names: "witness", "refinery", "polecat", "crew".
+	// Values can be either inline prompt text or file paths (prefixed with "file:").
+	// Overrides TownSettings.SystemPrompts for this specific rig.
+	// Example: {"polecat": "You are specialized for this rig's codebase"}
+	SystemPrompts map[string]string `json:"system_prompts,omitempty"`
 }
 
 // CrewConfig represents crew workspace settings for a rig.
@@ -315,6 +330,11 @@ type RuntimeConfig struct {
 	// For claude, this is passed as the prompt argument.
 	// Empty by default (hooks handle context).
 	InitialPrompt string `json:"initial_prompt,omitempty"`
+
+	// SystemPrompt is an optional system-level instruction for the agent.
+	// This is prepended to InitialPrompt for agents that support system prompts.
+	// For agents without system prompt support, this is ignored with a warning.
+	SystemPrompt string `json:"system_prompt,omitempty"`
 
 	// PromptMode controls how prompts are passed to the runtime.
 	// Supported values: "arg" (append prompt arg), "none" (ignore prompt).
@@ -398,6 +418,7 @@ func (rc *RuntimeConfig) BuildCommand() string {
 // BuildCommandWithPrompt returns the full command line with an initial prompt.
 // If the config has an InitialPrompt, it's appended as a quoted argument.
 // If prompt is provided, it overrides the config's InitialPrompt.
+// If SystemPrompt is set, it's prepended to the user prompt.
 func (rc *RuntimeConfig) BuildCommandWithPrompt(prompt string) string {
 	resolved := normalizeRuntimeConfig(rc)
 	base := resolved.BuildCommand()
@@ -406,6 +427,17 @@ func (rc *RuntimeConfig) BuildCommandWithPrompt(prompt string) string {
 	p := prompt
 	if p == "" {
 		p = resolved.InitialPrompt
+	}
+
+	// Prepend system prompt if present
+	if resolved.SystemPrompt != "" {
+		if p != "" {
+			// Combine system prompt and user prompt
+			p = resolved.SystemPrompt + "\n\n---\n\n" + p
+		} else {
+			// Only system prompt
+			p = resolved.SystemPrompt
+		}
 	}
 
 	if p == "" || resolved.PromptMode == "none" {
@@ -424,6 +456,17 @@ func (rc *RuntimeConfig) BuildArgsWithPrompt(prompt string) []string {
 	p := prompt
 	if p == "" {
 		p = resolved.InitialPrompt
+	}
+
+	// Prepend system prompt if present
+	if resolved.SystemPrompt != "" {
+		if p != "" {
+			// Combine system prompt and user prompt
+			p = resolved.SystemPrompt + "\n\n---\n\n" + p
+		} else {
+			// Only system prompt
+			p = resolved.SystemPrompt
+		}
 	}
 
 	if p != "" && resolved.PromptMode != "none" {

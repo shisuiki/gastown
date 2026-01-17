@@ -67,6 +67,11 @@ type AgentPresetInfo struct {
 	// Claude-only feature for seance command.
 	SupportsForkSession bool `json:"supports_fork_session,omitempty"`
 
+	// SupportsSystemPrompt indicates if the agent supports system-level prompts.
+	// If true, system prompts will be prepended to the initial prompt.
+	// If false, system prompts are ignored with a warning.
+	SupportsSystemPrompt bool `json:"supports_system_prompt,omitempty"`
+
 	// NonInteractive contains settings for non-interactive mode.
 	NonInteractive *NonInteractiveConfig `json:"non_interactive,omitempty"`
 }
@@ -99,83 +104,89 @@ const CurrentAgentRegistryVersion = 1
 // builtinPresets contains the default presets for supported agents.
 var builtinPresets = map[AgentPreset]*AgentPresetInfo{
 	AgentClaude: {
-		Name:                AgentClaude,
-		Command:             "claude",
-		Args:                []string{"--dangerously-skip-permissions"},
-		ProcessNames:        []string{"node"}, // Claude runs as Node.js
-		SessionIDEnv:        "CLAUDE_SESSION_ID",
-		ResumeFlag:          "--resume",
-		ResumeStyle:         "flag",
-		SupportsHooks:       true,
-		SupportsForkSession: true,
-		NonInteractive:      nil, // Claude is native non-interactive
+		Name:                 AgentClaude,
+		Command:              "claude",
+		Args:                 []string{"--dangerously-skip-permissions"},
+		ProcessNames:         []string{"node"}, // Claude runs as Node.js
+		SessionIDEnv:         "CLAUDE_SESSION_ID",
+		ResumeFlag:           "--resume",
+		ResumeStyle:          "flag",
+		SupportsHooks:        true,
+		SupportsForkSession:  true,
+		SupportsSystemPrompt: true, // Claude supports system prompts
+		NonInteractive:       nil,  // Claude is native non-interactive
 	},
 	AgentGemini: {
-		Name:                AgentGemini,
-		Command:             "gemini",
-		Args:                []string{"--approval-mode", "yolo"},
-		ProcessNames:        []string{"gemini"}, // Gemini CLI binary
-		SessionIDEnv:        "GEMINI_SESSION_ID",
-		ResumeFlag:          "--resume",
-		ResumeStyle:         "flag",
-		SupportsHooks:       true,
-		SupportsForkSession: false,
+		Name:                 AgentGemini,
+		Command:              "gemini",
+		Args:                 []string{"--approval-mode", "yolo"},
+		ProcessNames:         []string{"gemini"}, // Gemini CLI binary
+		SessionIDEnv:         "GEMINI_SESSION_ID",
+		ResumeFlag:           "--resume",
+		ResumeStyle:          "flag",
+		SupportsHooks:        true,
+		SupportsForkSession:  false,
+		SupportsSystemPrompt: true, // Gemini supports system prompts
 		NonInteractive: &NonInteractiveConfig{
 			PromptFlag: "-p",
 			OutputFlag: "--output-format json",
 		},
 	},
 	AgentCodex: {
-		Name:                AgentCodex,
-		Command:             "codex",
-		Args:                []string{"--yolo"},
-		ProcessNames:        []string{"codex"}, // Codex CLI binary
-		SessionIDEnv:        "", // Codex captures from JSONL output
-		ResumeFlag:          "resume",
-		ResumeStyle:         "subcommand",
-		SupportsHooks:       false, // Use env/files instead
-		SupportsForkSession: false,
+		Name:                 AgentCodex,
+		Command:              "codex",
+		Args:                 []string{"--yolo"},
+		ProcessNames:         []string{"codex"}, // Codex CLI binary
+		SessionIDEnv:         "",                // Codex captures from JSONL output
+		ResumeFlag:           "resume",
+		ResumeStyle:          "subcommand",
+		SupportsHooks:        false, // Use env/files instead
+		SupportsForkSession:  false,
+		SupportsSystemPrompt: true, // Codex supports system prompts
 		NonInteractive: &NonInteractiveConfig{
 			Subcommand: "exec",
 			OutputFlag: "--json",
 		},
 	},
 	AgentCursor: {
-		Name:                AgentCursor,
-		Command:             "cursor-agent",
-		Args:                []string{"-f"}, // Force mode (YOLO equivalent), -p requires prompt
-		ProcessNames:        []string{"cursor-agent"},
-		SessionIDEnv:        "", // Uses --resume with chatId directly
-		ResumeFlag:          "--resume",
-		ResumeStyle:         "flag",
-		SupportsHooks:       false, // TODO: verify hooks support
-		SupportsForkSession: false,
+		Name:                 AgentCursor,
+		Command:              "cursor-agent",
+		Args:                 []string{"-f"}, // Force mode (YOLO equivalent), -p requires prompt
+		ProcessNames:         []string{"cursor-agent"},
+		SessionIDEnv:         "", // Uses --resume with chatId directly
+		ResumeFlag:           "--resume",
+		ResumeStyle:          "flag",
+		SupportsHooks:        false, // TODO: verify hooks support
+		SupportsForkSession:  false,
+		SupportsSystemPrompt: true, // Cursor supports system prompts
 		NonInteractive: &NonInteractiveConfig{
 			PromptFlag: "-p",
 			OutputFlag: "--output-format json",
 		},
 	},
 	AgentAuggie: {
-		Name:                AgentAuggie,
-		Command:             "auggie",
-		Args:                []string{"--allow-indexing"},
-		ProcessNames:        []string{"auggie"},
-		SessionIDEnv:        "",
-		ResumeFlag:          "--resume",
-		ResumeStyle:         "flag",
-		SupportsHooks:       false,
-		SupportsForkSession: false,
+		Name:                 AgentAuggie,
+		Command:              "auggie",
+		Args:                 []string{"--allow-indexing"},
+		ProcessNames:         []string{"auggie"},
+		SessionIDEnv:         "",
+		ResumeFlag:           "--resume",
+		ResumeStyle:          "flag",
+		SupportsHooks:        false,
+		SupportsForkSession:  false,
+		SupportsSystemPrompt: true, // Auggie supports system prompts
 	},
 	AgentAmp: {
-		Name:                AgentAmp,
-		Command:             "amp",
-		Args:                []string{"--dangerously-allow-all", "--no-ide"},
-		ProcessNames:        []string{"amp"},
-		SessionIDEnv:        "",
-		ResumeFlag:          "threads continue",
-		ResumeStyle:         "subcommand", // 'amp threads continue <threadId>'
-		SupportsHooks:       false,
-		SupportsForkSession: false,
+		Name:                 AgentAmp,
+		Command:              "amp",
+		Args:                 []string{"--dangerously-allow-all", "--no-ide"},
+		ProcessNames:         []string{"amp"},
+		SessionIDEnv:         "",
+		ResumeFlag:           "threads continue",
+		ResumeStyle:          "subcommand", // 'amp threads continue <threadId>'
+		SupportsHooks:        false,
+		SupportsForkSession:  false,
+		SupportsSystemPrompt: true, // AMP supports system prompts
 	},
 }
 
