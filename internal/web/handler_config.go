@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -11,24 +10,19 @@ import (
 	"github.com/steveyegge/gastown/internal/config"
 )
 
+// ConfigPageData is the data passed to the config template.
+type ConfigPageData struct {
+	Title      string
+	ActivePage string
+}
+
 // handleConfig serves the config page.
 func (h *GUIHandler) handleConfig(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFS(templatesFS, "templates/base.html", "templates/config.html")
-	if err != nil {
-		log.Printf("Error parsing config template: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	data := struct {
-		ActivePage string
-	}{
+	data := ConfigPageData{
+		Title:      "Config",
 		ActivePage: "config",
 	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		log.Printf("Error executing config template: %v", err)
-	}
+	h.renderTemplate(w, "config.html", data)
 }
 
 // ConfigResponse is the API response for town settings.
