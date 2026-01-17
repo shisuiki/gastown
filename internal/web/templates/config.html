@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>Config - Gas Town</title>
+    <style>
+        .config-section {
+            margin-bottom: 30px;
+        }
+        .config-section h3 {
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+        }
+        .config-label {
+            min-width: 120px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .config-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .config-input:focus {
+            outline: none;
+            border-color: var(--green);
+        }
+        .config-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+        .role-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .role-mayor { background: #8b5cf6; color: white; }
+        .role-deacon { background: #ec4899; color: white; }
+        .role-witness { background: #ef4444; color: white; }
+        .role-refinery { background: #a855f7; color: white; }
+        .role-polecat { background: #f59e0b; color: black; }
+        .role-crew { background: #22c55e; color: black; }
+        .btn-primary {
+            padding: 10px 20px;
+            background: var(--green);
+            color: var(--bg-dark);
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            padding: 10px 20px;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .btn-secondary:hover {
+            border-color: var(--text-primary);
+            color: var(--text-primary);
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .alert-success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid var(--green);
+            color: var(--green);
+        }
+        .alert-error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--red);
+            color: var(--red);
+        }
+        .custom-agent-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .custom-agent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .custom-agent-name {
+            font-family: monospace;
+            font-size: 1rem;
+            color: var(--yellow);
+        }
+        .btn-remove {
+            background: transparent;
+            border: none;
+            color: var(--red);
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 0.9rem;
+        }
+        .btn-remove:hover {
+            text-decoration: underline;
+        }
+        .btn-add {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px dashed var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn-add:hover {
+            border-color: var(--green);
+            color: var(--green);
+        }
+        .help-text {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body x-data="configPanel()">
+    {{template "nav" .}}
+
+    <div class="container">
+        <!-- Loading overlay -->
+        <template x-if="loading">
+            <div class="loading-overlay">
+                <div class="loading-spinner"></div>
+            </div>
+        </template>
+
+        <!-- Alerts -->
+        <template x-if="message">
+            <div :class="'alert alert-' + messageType" x-text="message"></div>
+        </template>
+
+        <div class="card">
+            <h2>Agent Configuration</h2>
+            <p class="text-muted" style="margin-bottom: 20px;">Configure which AI agents are used for different roles in Gas Town.</p>
+
+            <!-- Default Agent -->
+            <div class="config-section">
+                <h3>Default Agent</h3>
+                <div class="config-row">
+                    <span class="config-label">Default:</span>
+                    <input type="text" class="config-input" x-model="config.default_agent" placeholder="claude">
+                </div>
+                <p class="help-text">The agent used when no role-specific agent is configured. Built-in options: claude, gemini, codex, cursor, auggie, amp</p>
+            </div>
+
+            <!-- Role-specific Agents -->
+            <div class="config-section">
+                <h3>Role-Specific Agents</h3>
+                <p class="help-text" style="margin-bottom: 15px;">Assign different agents to specific roles for cost optimization or capability matching.</p>
+
+                <template x-for="role in roles" :key="role.id">
+                    <div class="config-row">
+                        <span class="config-label">
+                            <span class="role-badge" :class="'role-' + role.id" x-text="role.label"></span>
+                        </span>
+                        <input type="text"
+                               class="config-input"
+                               :value="config.role_agents[role.id] || ''"
+                               @input="setRoleAgent(role.id, $event.target.value)"
+                               :placeholder="'(uses default: ' + (config.default_agent || 'claude') + ')'">
+                    </div>
+                </template>
+            </div>
+
+            <!-- Custom Agents -->
+            <div class="config-section">
+                <h3>Custom Agents</h3>
+                <p class="help-text" style="margin-bottom: 15px;">Define custom agent configurations with specific commands and arguments.</p>
+
+                <template x-for="(agent, name) in config.agents" :key="name">
+                    <div class="custom-agent-card">
+                        <div class="custom-agent-header">
+                            <span class="custom-agent-name" x-text="name"></span>
+                            <button class="btn-remove" @click="removeAgent(name)">Remove</button>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Command:</span>
+                            <input type="text" class="config-input" x-model="agent.command" placeholder="/path/to/command">
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">Args:</span>
+                            <input type="text"
+                                   class="config-input"
+                                   :value="(agent.args || []).join(' ')"
+                                   @input="agent.args = $event.target.value.split(' ').filter(a => a)"
+                                   placeholder="--flag1 --flag2">
+                        </div>
+                    </div>
+                </template>
+
+                <button class="btn-add" @click="showAddAgent = true" x-show="!showAddAgent">
+                    + Add Custom Agent
+                </button>
+
+                <div class="custom-agent-card" x-show="showAddAgent">
+                    <div class="config-row">
+                        <span class="config-label">Name:</span>
+                        <input type="text" class="config-input" x-model="newAgent.name" placeholder="my-agent">
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">Command:</span>
+                        <input type="text" class="config-input" x-model="newAgent.command" placeholder="/path/to/command">
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">Args:</span>
+                        <input type="text" class="config-input" x-model="newAgent.args" placeholder="--flag1 --flag2">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn-primary" @click="addAgent()" :disabled="!newAgent.name || !newAgent.command">Add</button>
+                        <button class="btn-secondary" @click="cancelAddAgent()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Domain -->
+            <div class="config-section">
+                <h3>Agent Email Domain</h3>
+                <div class="config-row">
+                    <span class="config-label">Domain:</span>
+                    <input type="text" class="config-input" x-model="config.agent_email_domain" placeholder="gastown.local">
+                </div>
+                <p class="help-text">Domain used for agent git identity emails (e.g., gastown.crew.jack@domain)</p>
+            </div>
+
+            <!-- Save/Reset buttons -->
+            <div class="btn-group">
+                <button class="btn-primary" @click="saveConfig()" :disabled="saving">
+                    <span x-show="!saving">Save Configuration</span>
+                    <span x-show="saving">Saving...</span>
+                </button>
+                <button class="btn-secondary" @click="loadConfig()">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        function configPanel() {
+            return {
+                loading: true,
+                saving: false,
+                message: '',
+                messageType: 'success',
+                showAddAgent: false,
+                newAgent: { name: '', command: '', args: '' },
+                config: {
+                    default_agent: '',
+                    role_agents: {},
+                    agents: {},
+                    agent_email_domain: ''
+                },
+                roles: [
+                    { id: 'mayor', label: 'Mayor' },
+                    { id: 'deacon', label: 'Deacon' },
+                    { id: 'witness', label: 'Witness' },
+                    { id: 'refinery', label: 'Refinery' },
+                    { id: 'polecat', label: 'Polecat' },
+                    { id: 'crew', label: 'Crew' }
+                ],
+
+                init() {
+                    this.loadConfig();
+                },
+
+                async loadConfig() {
+                    this.loading = true;
+                    this.message = '';
+                    try {
+                        const res = await fetch('/api/config');
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+                        const data = await res.json();
+                        this.config = {
+                            default_agent: data.default_agent || '',
+                            role_agents: data.role_agents || {},
+                            agents: data.agents || {},
+                            agent_email_domain: data.agent_email_domain || ''
+                        };
+                    } catch (e) {
+                        this.message = 'Failed to load config: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                    this.loading = false;
+                },
+
+                async saveConfig() {
+                    this.saving = true;
+                    this.message = '';
+                    try {
+                        // Clean up empty role_agents
+                        const cleanRoleAgents = {};
+                        for (const [role, agent] of Object.entries(this.config.role_agents)) {
+                            if (agent && agent.trim()) {
+                                cleanRoleAgents[role] = agent.trim();
+                            }
+                        }
+
+                        const payload = {
+                            default_agent: this.config.default_agent || 'claude',
+                            role_agents: cleanRoleAgents,
+                            agents: this.config.agents,
+                            agent_email_domain: this.config.agent_email_domain || ''
+                        };
+
+                        const res = await fetch('/api/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+
+                        this.message = 'Configuration saved successfully';
+                        this.messageType = 'success';
+
+                        // Reload to get normalized values
+                        await this.loadConfig();
+                    } catch (e) {
+                        this.message = 'Failed to save config: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                    this.saving = false;
+                },
+
+                setRoleAgent(role, value) {
+                    if (!this.config.role_agents) {
+                        this.config.role_agents = {};
+                    }
+                    if (value && value.trim()) {
+                        this.config.role_agents[role] = value.trim();
+                    } else {
+                        delete this.config.role_agents[role];
+                    }
+                },
+
+                addAgent() {
+                    if (!this.newAgent.name || !this.newAgent.command) return;
+
+                    if (!this.config.agents) {
+                        this.config.agents = {};
+                    }
+
+                    this.config.agents[this.newAgent.name] = {
+                        command: this.newAgent.command,
+                        args: this.newAgent.args ? this.newAgent.args.split(' ').filter(a => a) : []
+                    };
+
+                    this.cancelAddAgent();
+                },
+
+                cancelAddAgent() {
+                    this.showAddAgent = false;
+                    this.newAgent = { name: '', command: '', args: '' };
+                },
+
+                removeAgent(name) {
+                    if (confirm('Remove agent "' + name + '"?')) {
+                        delete this.config.agents[name];
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>
