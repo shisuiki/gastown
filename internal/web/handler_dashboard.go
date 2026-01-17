@@ -124,17 +124,22 @@ type MailStatus struct {
 }
 
 func (h *GUIHandler) buildStatus() StatusResponse {
+	// Use cached status if available
+	return h.statusCache.GetOrBuild(h.buildStatusUncached)
+}
+
+func (h *GUIHandler) buildStatusUncached() StatusResponse {
 	status := StatusResponse{
 		Timestamp: time.Now(),
 	}
 
-	// Get daemon status
+	// Get daemon status (fast, no caching needed)
 	status.Daemon = h.getDaemonStatus()
 
-	// Get rigs
+	// Get rigs (fast enough, no caching needed)
 	status.Rigs = h.getRigs()
 
-	// Get convoys
+	// Get convoys (expensive - uses its own cache in fetcher)
 	if convoys, err := h.fetcher.FetchConvoys(); err == nil {
 		status.Convoys = convoys
 	}
@@ -144,12 +149,12 @@ func (h *GUIHandler) buildStatus() StatusResponse {
 		status.MergeQueue = mq
 	}
 
-	// Get agents (polecats, crew, refinery)
+	// Get agents (expensive - uses its own cache in fetcher)
 	if agents, err := h.fetcher.FetchAgents(); err == nil {
 		status.Agents = agents
 	}
 
-	// Get mail status
+	// Get mail status (medium cost)
 	status.Mail = h.getMailStatus()
 
 	return status
@@ -243,6 +248,14 @@ func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 
 	// Get status filter from query params
 	status := r.URL.Query().Get("status")
+	cacheKey := "issues:" + status
+
+	// Check cache first
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
 	args := []string{"list", "--json"}
 	if status != "" {
 		args = append(args, "--status="+status)
@@ -272,7 +285,12 @@ func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 		issues = issues[:20]
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	result := map[string]interface{}{
 		"issues": issues,
-	})
+	}
+
+	// Cache the result
+	h.cache.Set(cacheKey, result, IssuesCacheTTL)
+
+	json.NewEncoder(w).Encode(result)
 }

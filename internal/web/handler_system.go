@@ -183,6 +183,12 @@ func (h *GUIHandler) handleAPIVersion(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPISystem(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// Check cache first
+	if cached := h.cache.Get("system"); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
 	info := SystemInfo{
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,
@@ -264,6 +270,9 @@ func (h *GUIHandler) handleAPISystem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Cache the result
+	h.cache.Set("system", info, SystemCacheTTL)
+
 	json.NewEncoder(w).Encode(info)
 }
 
@@ -283,10 +292,18 @@ func (h *GUIHandler) handleAPIGitCommits(w http.ResponseWriter, r *http.Request)
 
 	// Get rig parameter and resolve to actual repo directory
 	rig := r.URL.Query().Get("rig")
+	countStr := r.URL.Query().Get("count")
+	cacheKey := "git:commits:" + rig + ":" + countStr
+
+	// Check cache first
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
 	dir := getRigRepoDir(rig)
 
 	// Get commit count
-	countStr := r.URL.Query().Get("count")
 	count := 30
 	if countStr != "" {
 		if c, err := strconv.Atoi(countStr); err == nil && c > 0 && c <= 100 {
@@ -335,10 +352,15 @@ func (h *GUIHandler) handleAPIGitCommits(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	result := map[string]interface{}{
 		"commits": commits,
 		"dir":     dir,
-	})
+	}
+
+	// Cache the result
+	h.cache.Set(cacheKey, result, GitCacheTTL)
+
+	json.NewEncoder(w).Encode(result)
 }
 
 // handleAPIGitBranches returns git branches.

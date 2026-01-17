@@ -27,6 +27,8 @@ type GUIHandler struct {
 	fetcher           ConvoyFetcher
 	mux               *http.ServeMux
 	allowPasswordAuth bool // For local dev only - logs warning if enabled
+	statusCache       *StatusCache
+	cache             *Cache
 }
 
 // authConfig controls authentication behavior.
@@ -53,8 +55,10 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	}
 
 	h := &GUIHandler{
-		fetcher: fetcher,
-		mux:     http.NewServeMux(),
+		fetcher:     fetcher,
+		mux:         http.NewServeMux(),
+		statusCache: NewStatusCache(StatusCacheTTL),
+		cache:       NewCache(),
 	}
 
 	// Static files (CSS, JS)

@@ -16,6 +16,7 @@ import (
 // LiveConvoyFetcher fetches convoy data from beads.
 type LiveConvoyFetcher struct {
 	townBeads string
+	cache     *Cache
 }
 
 // NewLiveConvoyFetcher creates a fetcher for the current workspace.
@@ -27,12 +28,30 @@ func NewLiveConvoyFetcher() (*LiveConvoyFetcher, error) {
 
 	return &LiveConvoyFetcher{
 		townBeads: filepath.Join(townRoot, ".beads"),
+		cache:     NewCache(),
 	}, nil
 }
 
 
 // FetchConvoys fetches all open convoys with their activity data.
 func (f *LiveConvoyFetcher) FetchConvoys() ([]ConvoyRow, error) {
+	// Check cache first
+	if cached := f.cache.Get("convoys"); cached != nil {
+		return cached.([]ConvoyRow), nil
+	}
+
+	convoys, err := f.fetchConvoysUncached()
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache successful result
+	f.cache.Set("convoys", convoys, ConvoyCacheTTL)
+	return convoys, nil
+}
+
+// fetchConvoysUncached does the actual convoy fetching without caching.
+func (f *LiveConvoyFetcher) fetchConvoysUncached() ([]ConvoyRow, error) {
 	// List all open convoy-type issues
 	listArgs := []string{"list", "--type=convoy", "--status=open", "--json"}
 	listCmd := exec.Command("bd", listArgs...)
@@ -594,6 +613,23 @@ func determineColorClass(ciStatus, mergeable string) string {
 
 // FetchAgents fetches all running agent sessions (polecats, crew, refinery) with activity data.
 func (f *LiveConvoyFetcher) FetchAgents() ([]AgentRow, error) {
+	// Check cache first
+	if cached := f.cache.Get("agents"); cached != nil {
+		return cached.([]AgentRow), nil
+	}
+
+	agents, err := f.fetchAgentsUncached()
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache successful result
+	f.cache.Set("agents", agents, AgentCacheTTL)
+	return agents, nil
+}
+
+// fetchAgentsUncached does the actual agent fetching without caching.
+func (f *LiveConvoyFetcher) fetchAgentsUncached() ([]AgentRow, error) {
 	// Query all tmux sessions with window_activity for more accurate timing
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{window_activity}")
 	var stdout bytes.Buffer
