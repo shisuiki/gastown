@@ -957,7 +957,7 @@ func runPolecatCheckRecovery(cmd *cobra.Command, args []string) error {
 	// We need to read it directly from beads since manager doesn't expose it
 	rigPath := r.Path
 	bd := beads.New(rigPath)
-	agentBeadID := beads.PolecatBeadID(rigName, polecatName)
+	agentBeadID := polecatBeadIDForRig(r, rigName, polecatName)
 	_, fields, err := bd.GetAgentBead(agentBeadID)
 
 	status := RecoveryStatus{
@@ -1158,7 +1158,7 @@ func runPolecatNuke(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  - Kill session: gt-%s-%s\n", p.rigName, p.polecatName)
 			fmt.Printf("  - Delete worktree: %s/polecats/%s\n", p.r.Path, p.polecatName)
 			fmt.Printf("  - Delete branch (if exists)\n")
-			fmt.Printf("  - Close agent bead: %s\n", beads.PolecatBeadID(p.rigName, p.polecatName))
+			fmt.Printf("  - Close agent bead: %s\n", polecatBeadIDForRig(p.r, p.rigName, p.polecatName))
 
 			displayDryRunSafetyCheck(p)
 			fmt.Println()
@@ -1203,8 +1203,15 @@ func runPolecatNuke(cmd *cobra.Command, args []string) error {
 		}
 
 		// Step 4: Delete branch (if we know it)
+		// Use bare repo if it exists (matches where worktree was created), otherwise mayor/rig
 		if branchToDelete != "" {
-			repoGit := git.NewGit(filepath.Join(p.r.Path, "mayor", "rig"))
+			var repoGit *git.Git
+			bareRepoPath := filepath.Join(p.r.Path, ".repo.git")
+			if info, err := os.Stat(bareRepoPath); err == nil && info.IsDir() {
+				repoGit = git.NewGitWithDir(bareRepoPath, "")
+			} else {
+				repoGit = git.NewGit(filepath.Join(p.r.Path, "mayor", "rig"))
+			}
 			if err := repoGit.DeleteBranch(branchToDelete, true); err != nil {
 				// Non-fatal - branch might already be gone
 				fmt.Printf("  %s branch delete: %v\n", style.Dim.Render("○"), err)
@@ -1214,7 +1221,7 @@ func runPolecatNuke(cmd *cobra.Command, args []string) error {
 		}
 
 		// Step 5: Close agent bead (if exists)
-		agentBeadID := beads.PolecatBeadID(p.rigName, p.polecatName)
+		agentBeadID := polecatBeadIDForRig(p.r, p.rigName, p.polecatName)
 		closeArgs := []string{"close", agentBeadID, "--reason=nuked"}
 		if sessionID := runtime.SessionIDFromEnv(); sessionID != "" {
 			closeArgs = append(closeArgs, "--session="+sessionID)
