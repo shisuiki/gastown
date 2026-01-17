@@ -16,11 +16,11 @@
             </div>
             <pre class="terminal-output" id="terminal-output">Select an agent session to view its terminal output.</pre>
             <div id="terminal-input-area" style="display: none; margin-top: 10px;">
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter...">
-                    <button onclick="terminal.sendInput()" class="btn btn-success" style="padding: 10px 15px;">Send</button>
-                    <button onclick="terminal.sendKey('C-c')" class="btn btn-danger" style="padding: 10px 15px;">Ctrl+C</button>
-                    <button onclick="terminal.sendKey('Enter')" class="btn" style="background: #6366f1; color: white; padding: 10px 15px;">Enter</button>
+                <textarea id="terminal-input" class="input-field" rows="2" style="resize: vertical; min-height: 40px; max-height: 200px;" placeholder="Type command and press Enter..."></textarea>
+                <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: nowrap;">
+                    <button onclick="terminal.sendInput()" class="btn btn-success" style="flex: 1; min-width: 60px; padding: 10px 12px;">Send</button>
+                    <button onclick="terminal.sendKey('Enter')" class="btn" style="flex: 1; min-width: 60px; padding: 10px 12px; background: #6366f1; color: white;">Enter</button>
+                    <button onclick="terminal.sendKey('C-c')" class="btn btn-danger" style="flex: 1; min-width: 60px; padding: 10px 12px;">Ctrl+C</button>
                 </div>
             </div>
         </div>

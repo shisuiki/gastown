@@ -18,11 +18,11 @@
                     </div>
                     <pre class="terminal-output" id="terminal-output" style="min-height: 400px;">Click "Connect" to view Mayor's terminal output.</pre>
                     <div id="terminal-input-area" style="display: none; margin-top: 10px;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter...">
-                            <button onclick="terminal.sendInput()" class="btn btn-success btn-sm">Send</button>
-                            <button onclick="terminal.sendKey('Enter')" class="btn btn-sm" style="background: #6366f1; color: white;">Enter</button>
-                            <button onclick="terminal.sendKey('C-c')" class="btn btn-danger btn-sm">Ctrl+C</button>
+                        <textarea id="terminal-input" class="input-field" rows="2" style="resize: vertical; min-height: 40px; max-height: 200px;" placeholder="Type command and press Enter..."></textarea>
+                        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: nowrap;">
+                            <button onclick="terminal.sendInput()" class="btn btn-success" style="flex: 1; min-width: 60px; padding: 10px 12px;">Send</button>
+                            <button onclick="terminal.sendKey('Enter')" class="btn" style="flex: 1; min-width: 60px; padding: 10px 12px; background: #6366f1; color: white;">Enter</button>
+                            <button onclick="terminal.sendKey('C-c')" class="btn btn-danger" style="flex: 1; min-width: 60px; padding: 10px 12px;">Ctrl+C</button>
                         </div>
                     </div>
                 </div>

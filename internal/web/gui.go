@@ -73,7 +73,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/logout", h.handleLogout)
 
 	// Page routes
-	h.mux.HandleFunc("/", h.handleDashboard)
+	h.mux.HandleFunc("/", h.handleRootRedirect)
+	h.mux.HandleFunc("/dashboard", h.handleDashboard)
 	h.mux.HandleFunc("/mayor", h.handleMayor)
 	h.mux.HandleFunc("/mail", h.handleMail)
 	h.mux.HandleFunc("/terminals", h.handleTerminals)

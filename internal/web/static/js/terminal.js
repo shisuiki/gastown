@@ -63,10 +63,12 @@ class TerminalWidget {
 
         if (this.inputEl) {
             this.inputEl.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    // Enter without Shift sends input
                     e.preventDefault();
                     this.sendInput();
                 }
+                // Shift+Enter allows newline in textarea
             });
         }
 

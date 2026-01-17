@@ -17,14 +17,18 @@ type DashboardPageData struct {
 	ActivePage string
 }
 
-// handleDashboard serves the dashboard page.
-func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	// Only handle exact "/" path, not all paths
+// handleRootRedirect redirects "/" to "/dashboard" to avoid mobile auth issues.
+func (h *GUIHandler) handleRootRedirect(w http.ResponseWriter, r *http.Request) {
+	// Only redirect exact "/" path
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
+	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
 
+// handleDashboard serves the dashboard page.
+func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	data := DashboardPageData{
 		Title:      "Dashboard",
 		ActivePage: "dashboard",
