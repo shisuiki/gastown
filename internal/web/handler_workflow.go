@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // WorkflowPageData is the data passed to the workflow template.
@@ -45,6 +46,12 @@ func (h *GUIHandler) handleWorkflow(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPIWorkflowHook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// Check cache first (short TTL for hook status)
+	if cached := h.cache.Get("workflow:hook"); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
 	cmd := exec.Command("gt", "hook")
 	output, err := cmd.Output()
 	if err != nil {
@@ -57,6 +64,10 @@ func (h *GUIHandler) handleAPIWorkflowHook(w http.ResponseWriter, r *http.Reques
 
 	outStr := string(output)
 	status := parseHookOutput(outStr)
+
+	// Cache for 5 seconds
+	h.cache.Set("workflow:hook", status, 5*time.Second)
+
 	json.NewEncoder(w).Encode(status)
 }
 
@@ -110,6 +121,12 @@ func parseHookOutput(output string) HookStatus {
 func (h *GUIHandler) handleAPIWorkflowReady(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// Check cache first
+	if cached := h.cache.Get("workflow:ready"); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
 	cmd := exec.Command("bd", "ready")
 	output, err := cmd.Output()
 	if err != nil {
@@ -121,9 +138,14 @@ func (h *GUIHandler) handleAPIWorkflowReady(w http.ResponseWriter, r *http.Reque
 	}
 
 	issues := parseReadyOutput(string(output))
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	result := map[string]interface{}{
 		"issues": issues,
-	})
+	}
+
+	// Cache for 15 seconds
+	h.cache.Set("workflow:ready", result, 15*time.Second)
+
+	json.NewEncoder(w).Encode(result)
 }
 
 // parseReadyOutput parses the bd ready command output.
@@ -187,6 +209,12 @@ func parseReadyOutput(output string) []ReadyIssue {
 func (h *GUIHandler) handleAPIActivity(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// Check cache first
+	if cached := h.cache.Get("workflow:activity"); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
 	// Get recent commits from the current rig's repo
 	// Try to find the current rig directory
 	rigDir := "/home/shisui/gt"
@@ -223,7 +251,12 @@ func (h *GUIHandler) handleAPIActivity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	result := map[string]interface{}{
 		"commits": commits,
-	})
+	}
+
+	// Cache for 30 seconds
+	h.cache.Set("workflow:activity", result, 30*time.Second)
+
+	json.NewEncoder(w).Encode(result)
 }

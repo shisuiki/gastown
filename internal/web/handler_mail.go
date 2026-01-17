@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // MailPageData is the data passed to the mail template.
@@ -71,6 +72,12 @@ func (h *GUIHandler) handleAPISendMail(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// Check cache first
+	if cached := h.cache.Get("mail:inbox"); cached != nil {
+		w.Write(cached.([]byte))
+		return
+	}
+
 	cmd := exec.Command("gt", "mail", "inbox", "--json")
 	output, err := cmd.Output()
 	if err != nil {
@@ -80,6 +87,9 @@ func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+
+	// Cache for 10 seconds
+	h.cache.Set("mail:inbox", output, 10*time.Second)
 
 	w.Write(output)
 }
@@ -91,6 +101,14 @@ func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
 	agent := r.URL.Query().Get("agent")
 	if agent == "" {
 		agent = "mayor/"
+	}
+
+	cacheKey := "mail:agent:" + agent
+
+	// Check cache first
+	if cached := h.cache.Get(cacheKey); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
 	}
 
 	// Get inbox for specific agent
@@ -118,15 +136,26 @@ func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	result := map[string]interface{}{
 		"agent":    agent,
 		"messages": messages,
-	})
+	}
+
+	// Cache for 10 seconds
+	h.cache.Set(cacheKey, result, 10*time.Second)
+
+	json.NewEncoder(w).Encode(result)
 }
 
 // handleAPIAgentsList returns all available agents for mail recipients.
 func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	// Check cache first (agents list changes rarely)
+	if cached := h.cache.Get("mail:agents"); cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
 
 	agents := []map[string]string{
 		{"address": "mayor/", "name": "Mayor", "type": "mayor"},
@@ -184,6 +213,9 @@ func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request)
 			map[string]string{"address": rig.Name + "/refinery/", "name": rig.Name + " Refinery", "type": "refinery"},
 		)
 	}
+
+	// Cache for 60 seconds (agents list changes rarely)
+	h.cache.Set("mail:agents", agents, 60*time.Second)
 
 	json.NewEncoder(w).Encode(agents)
 }
