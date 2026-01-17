@@ -206,3 +206,45 @@ func TestGUIHandler_StatusWebSocket(t *testing.T) {
 		t.Errorf("Convoys = %#v, want mock data", status.Convoys)
 	}
 }
+
+func TestNewGUIHandler_RejectsInsecureRemoteConfig(t *testing.T) {
+	// Save original values
+	origToken := authConfig.token
+	origAllowRemote := authConfig.allowRemote
+	defer func() {
+		authConfig.token = origToken
+		authConfig.allowRemote = origAllowRemote
+	}()
+
+	// Test: allowRemote=true without token should fail
+	authConfig.token = ""
+	authConfig.allowRemote = true
+
+	mock := &MockConvoyFetcher{}
+	_, err := NewGUIHandler(mock)
+
+	if err == nil {
+		t.Error("NewGUIHandler() should reject insecure remote config (allowRemote=true, token=empty)")
+	}
+	if err != ErrInsecureRemoteConfig {
+		t.Errorf("NewGUIHandler() error = %v, want ErrInsecureRemoteConfig", err)
+	}
+
+	// Test: allowRemote=true with token should succeed
+	authConfig.token = "test-token"
+	authConfig.allowRemote = true
+
+	_, err = NewGUIHandler(mock)
+	if err != nil {
+		t.Errorf("NewGUIHandler() with token should succeed, got error = %v", err)
+	}
+
+	// Test: allowRemote=false without token should succeed (localhost only)
+	authConfig.token = ""
+	authConfig.allowRemote = false
+
+	_, err = NewGUIHandler(mock)
+	if err != nil {
+		t.Errorf("NewGUIHandler() localhost-only should succeed, got error = %v", err)
+	}
+}

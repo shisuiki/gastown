@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"errors"
 	"io/fs"
 	"log"
 	"net"
@@ -31,7 +32,7 @@ type GUIHandler struct {
 // authConfig controls authentication behavior.
 // By default, only localhost connections are allowed.
 // Set GT_WEB_AUTH_TOKEN env var to require token auth for all requests.
-// Set GT_WEB_ALLOW_REMOTE=1 to allow non-localhost (use with reverse proxy auth).
+// Set GT_WEB_ALLOW_REMOTE=1 to allow non-localhost (REQUIRES GT_WEB_AUTH_TOKEN).
 var authConfig = struct {
 	token       string
 	allowRemote bool
@@ -40,8 +41,17 @@ var authConfig = struct {
 	allowRemote: os.Getenv("GT_WEB_ALLOW_REMOTE") == "1",
 }
 
+// ErrInsecureRemoteConfig is returned when GT_WEB_ALLOW_REMOTE=1 is set without GT_WEB_AUTH_TOKEN.
+var ErrInsecureRemoteConfig = errors.New("SECURITY: GT_WEB_ALLOW_REMOTE=1 requires GT_WEB_AUTH_TOKEN to be set")
+
 // NewGUIHandler creates a new GUI handler with all routes.
+// Returns ErrInsecureRemoteConfig if GT_WEB_ALLOW_REMOTE=1 is set without GT_WEB_AUTH_TOKEN.
 func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
+	// SECURITY: Reject insecure remote configuration
+	if authConfig.allowRemote && authConfig.token == "" {
+		return nil, ErrInsecureRemoteConfig
+	}
+
 	h := &GUIHandler{
 		fetcher: fetcher,
 		mux:     http.NewServeMux(),

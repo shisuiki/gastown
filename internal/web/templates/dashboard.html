@@ -4,7 +4,7 @@
     {{template "head" .}}
     <title>Dashboard - Gas Town</title>
 </head>
-<body>
+<body x-data="dashboard()">
     {{template "nav" .}}
 
     <div class="container">
@@ -16,13 +16,13 @@
         <div class="card" style="margin-bottom: 20px;">
             <h2>⚡ Quick Actions</h2>
             <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                <button class="btn btn-success" onclick="runAction('daemon-status')">Daemon Status</button>
-                <button class="btn" onclick="runAction('bd-sync')">Sync Beads</button>
-                <button class="btn" onclick="runAction('bd-ready')">Show Ready</button>
-                <button class="btn btn-info" onclick="showCreateDialog('convoy')">+ Convoy</button>
-                <button class="btn btn-info" onclick="showCreateDialog('issue')">+ Issue</button>
+                <button class="btn btn-success" @click="runAction('daemon-status')">Daemon Status</button>
+                <button class="btn" @click="runAction('bd-sync')">Sync Beads</button>
+                <button class="btn" @click="runAction('bd-ready')">Show Ready</button>
+                <button class="btn btn-info" @click="showConvoyModal = true">+ Convoy</button>
+                <button class="btn btn-info" @click="showIssueModal = true">+ Issue</button>
             </div>
-            <pre id="action-output" class="terminal-output" style="display: none; margin-top: 15px; max-height: 200px;"></pre>
+            <pre x-show="actionOutput" x-text="actionOutput" class="terminal-output" style="margin-top: 15px; max-height: 200px;"></pre>
         </div>
 
         <div class="grid">
@@ -58,12 +58,128 @@
         </div>
     </div>
 
+    <!-- Create Convoy Modal -->
+    <div x-cloak x-show="showConvoyModal" class="modal-backdrop" @click.self="showConvoyModal = false"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+        <div class="modal" @click.stop>
+            <h3>🚚 Create Convoy</h3>
+            <div class="form-group">
+                <label>Convoy Title</label>
+                <input type="text" x-model="convoyForm.title" class="input-field" placeholder="Enter convoy title...">
+            </div>
+            <div class="modal-actions">
+                <button class="btn" @click="showConvoyModal = false">Cancel</button>
+                <button class="btn btn-success" @click="createConvoy()" :disabled="!convoyForm.title">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Issue Modal -->
+    <div x-cloak x-show="showIssueModal" class="modal-backdrop" @click.self="showIssueModal = false"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+        <div class="modal" @click.stop>
+            <h3>📋 Create Issue</h3>
+            <div class="form-group">
+                <label>Issue Title</label>
+                <input type="text" x-model="issueForm.title" class="input-field" placeholder="Enter issue title...">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select x-model="issueForm.type">
+                    <option value="task">Task</option>
+                    <option value="bug">Bug</option>
+                    <option value="feature">Feature</option>
+                    <option value="doc">Doc</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Priority</label>
+                <select x-model="issueForm.priority">
+                    <option value="1">P1 - Critical</option>
+                    <option value="2" selected>P2 - High</option>
+                    <option value="3">P3 - Normal</option>
+                    <option value="4">P4 - Low</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" @click="showIssueModal = false">Cancel</button>
+                <button class="btn btn-success" @click="createIssue()" :disabled="!issueForm.title">Create</button>
+            </div>
+        </div>
+    </div>
+
     {{template "scripts" .}}
     <script>
-        // ================================================================
-        // Dashboard-specific JavaScript
-        // ================================================================
+        function dashboard() {
+            return {
+                showConvoyModal: false,
+                showIssueModal: false,
+                actionOutput: '',
+                convoyForm: { title: '' },
+                issueForm: { title: '', type: 'task', priority: 2 },
 
+                async runAction(action) {
+                    this.actionOutput = 'Running ' + action + '...';
+                    try {
+                        const res = await fetch('/api/action', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: action })
+                        });
+                        const data = await res.json();
+                        this.actionOutput = data.output || data.error || 'Done';
+                    } catch (e) {
+                        this.actionOutput = 'Error: ' + e.message;
+                    }
+                },
+
+                async createConvoy() {
+                    this.actionOutput = 'Creating convoy...';
+                    this.showConvoyModal = false;
+                    try {
+                        const res = await fetch('/api/convoy/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: this.convoyForm.title })
+                        });
+                        const data = await res.json();
+                        this.actionOutput = data.output || data.error || 'Convoy created';
+                        this.convoyForm.title = '';
+                        if (data.success) loadIssues();
+                    } catch (e) {
+                        this.actionOutput = 'Error: ' + e.message;
+                    }
+                },
+
+                async createIssue() {
+                    this.actionOutput = 'Creating issue...';
+                    this.showIssueModal = false;
+                    try {
+                        const res = await fetch('/api/bead/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: this.issueForm.title,
+                                type: this.issueForm.type,
+                                priority: parseInt(this.issueForm.priority)
+                            })
+                        });
+                        const data = await res.json();
+                        this.actionOutput = data.output || data.error || 'Issue created';
+                        this.issueForm.title = '';
+                        if (data.success) loadIssues();
+                    } catch (e) {
+                        this.actionOutput = 'Error: ' + e.message;
+                    }
+                }
+            };
+        }
+
+        // WebSocket connection for real-time updates
         let reconnectAttempts = 0;
         const maxReconnectDelay = 30000;
 
@@ -90,9 +206,7 @@
                 reconnectAttempts++;
                 const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
                 const jitter = Math.random() * 1000;
-                const delay = baseDelay + jitter;
-                console.log(`WebSocket closed. Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttempts})`);
-                setTimeout(connectStatusSocket, delay);
+                setTimeout(connectStatusSocket, baseDelay + jitter);
             });
 
             socket.addEventListener('error', (e) => {
@@ -110,16 +224,9 @@
                     (data.daemon.running ? 'status-green' : 'status-red');
             }
 
-            // Rigs
             document.getElementById('rigs-list').innerHTML = renderRigsTable(data.rigs);
-
-            // Convoys
             document.getElementById('convoys-list').innerHTML = renderConvoysTable(data.convoys);
-
-            // Agents
             document.getElementById('agents-list').innerHTML = renderAgentsTable(data.agents);
-
-            // Mail status
             document.getElementById('mail-status').innerHTML =
                 '<p>Unread: <strong>' + (data.mail.unread || 0) + '</strong></p>' +
                 '<p style="margin-top: 8px;"><a href="/mail">Open Mail Center →</a></p>';
@@ -142,82 +249,6 @@
                 document.getElementById('issues-list').innerHTML = renderIssuesTable(data.issues);
             } catch (e) {
                 document.getElementById('issues-list').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
-            }
-        }
-
-        // Quick Actions
-        async function runAction(action) {
-            const outputEl = document.getElementById('action-output');
-            outputEl.style.display = 'block';
-            outputEl.textContent = 'Running ' + action + '...';
-
-            try {
-                const res = await fetch('/api/action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: action })
-                });
-                const data = await res.json();
-                outputEl.textContent = data.output || data.error || 'Done';
-            } catch (e) {
-                outputEl.textContent = 'Error: ' + e.message;
-            }
-        }
-
-        function showCreateDialog(type) {
-            if (type === 'convoy') {
-                const title = prompt('Enter convoy title:');
-                if (title) {
-                    createConvoy(title);
-                }
-            } else if (type === 'issue') {
-                const title = prompt('Enter issue title:');
-                if (title) {
-                    const issueType = prompt('Type (task/bug/feature/doc):', 'task') || 'task';
-                    createIssue(title, issueType);
-                }
-            }
-        }
-
-        async function createConvoy(title) {
-            const outputEl = document.getElementById('action-output');
-            outputEl.style.display = 'block';
-            outputEl.textContent = 'Creating convoy...';
-
-            try {
-                const res = await fetch('/api/convoy/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: title })
-                });
-                const data = await res.json();
-                outputEl.textContent = data.output || data.error || 'Convoy created';
-                if (data.success) {
-                    loadIssues(); // Refresh
-                }
-            } catch (e) {
-                outputEl.textContent = 'Error: ' + e.message;
-            }
-        }
-
-        async function createIssue(title, type) {
-            const outputEl = document.getElementById('action-output');
-            outputEl.style.display = 'block';
-            outputEl.textContent = 'Creating issue...';
-
-            try {
-                const res = await fetch('/api/bead/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: title, type: type, priority: 2 })
-                });
-                const data = await res.json();
-                outputEl.textContent = data.output || data.error || 'Issue created';
-                if (data.success) {
-                    loadIssues(); // Refresh
-                }
-            } catch (e) {
-                outputEl.textContent = 'Error: ' + e.message;
             }
         }
 

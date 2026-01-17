@@ -171,3 +171,59 @@ code { font-family: "Menlo", "Monaco", "Consolas", monospace; }
     .terminal-output { min-height: 250px; max-height: 400px; font-size: 0.75rem; }
     .mayor-grid { grid-template-columns: 1fr; }
 }
+
+/* ================================================================
+   Modal Dialogs (Alpine.js)
+   ================================================================ */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+.modal {
+    background: #16213e;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+.modal h3 {
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+    color: #eee;
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+.form-group {
+    margin-bottom: 15px;
+}
+.form-group label {
+    display: block;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin-bottom: 5px;
+}
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    background: #0f172a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #eee;
+    font-size: 0.9rem;
+}
+
+/* Alpine.js transitions */
+[x-cloak] { display: none !important; }
