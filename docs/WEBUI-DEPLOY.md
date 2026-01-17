@@ -1,0 +1,241 @@
+# Gas Town Web UI Deployment
+
+This document describes how the Gas Town Web UI is deployed and auto-updated.
+
+## Architecture Overview
+
+```
+GitHub (shisuiki/gastown)
+        ↓ (gastown-sync.service checks every 60s)
+~/laplace/gastown-src (local source)
+        ↓ git pull (triggers post-merge hook → go build)
+~/go/bin/gt (binary with embedded webui)
+        ↓ (sync auto-restarts gastown-web.service)
+http://localhost:8080 (Web UI)
+```
+
+## Components
+
+### 1. Source Repository
+
+- **Location**: `~/laplace/gastown-src`
+- **Remote**: `https://github.com/shisuiki/gastown.git`
+- **Git Hooks**:
+  - `post-commit`: Auto-builds gt after local commits
+  - `post-merge`: Auto-builds gt and triggers WebUI redeploy after pull
+
+### 2. Systemd Services
+
+Two user-level systemd services manage the deployment:
+
+#### gastown-web.service
+Runs the Web UI server.
+
+```ini
+[Unit]
+Description=Gas Town Web UI
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/shisui/gt
+ExecStart=/home/shisui/go/bin/gt gui --port 8080
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/home/shisui
+Environment=GT_ROOT=/home/shisui/gt
+Environment=PATH=/home/shisui/go/bin:/home/shisui/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
+```
+
+#### gastown-sync.service
+Watches for upstream changes and auto-syncs.
+
+```ini
+[Unit]
+Description=Gas Town Source Sync Watcher
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/shisui/gt/scripts/gastown-sync.sh watch
+Restart=on-failure
+RestartSec=10
+Environment=GASTOWN_SRC=/home/shisui/laplace/gastown-src
+Environment=GASTOWN_SYNC_INTERVAL=60
+
+[Install]
+WantedBy=default.target
+```
+
+### 3. Sync Script
+
+`~/gt/scripts/gastown-sync.sh` handles the auto-update logic:
+
+```bash
+# Check if source is behind remote
+./gastown-sync.sh check
+
+# Manually sync (pull + rebuild + restart web)
+./gastown-sync.sh sync
+
+# Run as daemon (checks every 60s)
+./gastown-sync.sh watch
+
+# Stop watch daemon
+./gastown-sync.sh stop
+
+# Check daemon status
+./gastown-sync.sh status
+```
+
+### 4. Webhook Server (Optional)
+
+`~/gt/scripts/gastown-webhook.py` provides a webhook endpoint for GitHub Actions:
+
+```bash
+# Start webhook server on port 9876
+GASTOWN_WEBHOOK_TOKEN=your_secret python3 ~/gt/scripts/gastown-webhook.py
+
+# Trigger from GitHub Actions:
+curl -X POST "http://your-server:9876/sync?token=your_secret"
+```
+
+## Installation
+
+### 1. Install Systemd Services
+
+```bash
+# Copy service files
+mkdir -p ~/.config/systemd/user
+cp deploy/gastown-web.service ~/.config/systemd/user/
+cp deploy/gastown-sync.service ~/.config/systemd/user/
+
+# Reload and enable
+systemctl --user daemon-reload
+systemctl --user enable --now gastown-web.service gastown-sync.service
+
+# Enable linger for services to run without login
+loginctl enable-linger $USER
+```
+
+### 2. Install Sync Script
+
+```bash
+mkdir -p ~/gt/scripts
+cp deploy/gastown-sync.sh ~/gt/scripts/
+chmod +x ~/gt/scripts/gastown-sync.sh
+```
+
+### 3. Configure Git Hooks (in gastown-src)
+
+```bash
+cd ~/laplace/gastown-src
+
+# post-commit hook
+cat > .git/hooks/post-commit << 'EOF'
+#!/bin/bash
+cd "$(git rev-parse --show-toplevel)"
+echo "[post-commit] Building gt..."
+go build -o ~/go/bin/gt ./cmd/gt 2>&1
+[ $? -eq 0 ] && echo "[post-commit] gt built successfully" || echo "[post-commit] build failed"
+EOF
+chmod +x .git/hooks/post-commit
+
+# post-merge hook
+cat > .git/hooks/post-merge << 'EOF'
+#!/bin/bash
+cd "$(git rev-parse --show-toplevel)"
+echo "[post-merge] Building gt..."
+go build -o ~/go/bin/gt ./cmd/gt 2>&1
+if [ $? -eq 0 ]; then
+    echo "[post-merge] gt built successfully"
+    if systemctl --user is-active gastown-web.service &>/dev/null; then
+        echo "[post-merge] Restarting web service..."
+        systemctl --user restart gastown-web.service
+    fi
+else
+    echo "[post-merge] build failed"
+fi
+EOF
+chmod +x .git/hooks/post-merge
+```
+
+## Management Commands
+
+```bash
+# View service status
+systemctl --user status gastown-web gastown-sync
+
+# Restart services
+systemctl --user restart gastown-web
+systemctl --user restart gastown-sync
+
+# Stop services
+systemctl --user stop gastown-web gastown-sync
+
+# View logs (real-time)
+journalctl --user -u gastown-web -f
+journalctl --user -u gastown-sync -f
+
+# View sync log file
+tail -f ~/gt/logs/gastown-sync.log
+
+# Manual sync
+~/gt/scripts/gastown-sync.sh sync
+
+# Check if behind remote
+~/gt/scripts/gastown-sync.sh check
+```
+
+## Auto-Update Flow
+
+1. Code is pushed to GitHub (`shisuiki/gastown`)
+2. `gastown-sync.service` checks remote every 60 seconds
+3. When new commits detected, runs `git pull` in `~/laplace/gastown-src`
+4. `post-merge` hook triggers `go build -o ~/go/bin/gt`
+5. Sync script restarts `gastown-web.service`
+6. Web UI now serves the updated code
+
+## Troubleshooting
+
+### Service won't start
+
+```bash
+# Check logs
+journalctl --user -u gastown-web -n 50
+
+# Common issues:
+# - Port 8080 in use: kill other process or change port
+# - bd not found: ensure PATH includes ~/go/bin
+# - Not in workspace: ensure WorkingDirectory is set to ~/gt
+```
+
+### Sync not working
+
+```bash
+# Check sync service logs
+journalctl --user -u gastown-sync -f
+
+# Manual check
+cd ~/laplace/gastown-src
+git fetch origin main
+git rev-list --count HEAD..origin/main  # Shows commits behind
+```
+
+### Web UI shows old code
+
+```bash
+# Check gt binary timestamp
+stat ~/go/bin/gt | grep Modify
+
+# Check src commit
+cd ~/laplace/gastown-src && git log --oneline -1
+
+# Force rebuild and restart
+cd ~/laplace/gastown-src
+go build -o ~/go/bin/gt ./cmd/gt
+systemctl --user restart gastown-web
+```
