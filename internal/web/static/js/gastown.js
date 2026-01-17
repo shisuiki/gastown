@@ -474,6 +474,30 @@ function formatTokens(num) {
 }
 
 /**
+ * Format cost in USD
+ * @param {number} cost - Cost in USD
+ * @returns {string} Formatted cost
+ */
+function formatCost(cost) {
+    if (!cost) return '$0.00';
+    return '$' + cost.toFixed(2);
+}
+
+/**
+ * Shorten model name for display
+ * @param {string} model - Full model name
+ * @returns {string} Short model name
+ */
+function shortModelName(model) {
+    return model
+        .replace('claude-', '')
+        .replace('deepseek-', 'ds-')
+        .replace('-20251101', '')
+        .replace('-20250929', '')
+        .replace('-20251001', '');
+}
+
+/**
  * Render Claude usage info card content
  * @param {object} usage - Usage info from /api/claude/usage
  * @returns {string} HTML content
@@ -483,21 +507,47 @@ function renderClaudeUsage(usage) {
         return '<p class="text-muted">' + escapeHtml(usage?.error || 'Unable to load Claude usage') + '</p>';
     }
 
-    let html = '<div class="system-stats">' +
-        '<div class="sys-row"><span class="sys-label">Sessions</span><span class="sys-value">' + (usage.total_sessions || 0) + '</span></div>' +
-        '<div class="sys-row"><span class="sys-label">Messages</span><span class="sys-value">' + formatTokens(usage.total_messages) + '</span></div>';
+    let html = '<div class="system-stats">';
 
-    // Model usage breakdown
-    if (usage.model_usage) {
-        for (const [model, stats] of Object.entries(usage.model_usage)) {
-            // Shorten model name for display
-            const shortName = model.replace('claude-', '').replace('-20251101', '');
-            const totalTokens = (stats.input_tokens || 0) + (stats.output_tokens || 0) + (stats.cache_read || 0);
-            if (totalTokens > 0) {
-                html += '<div class="sys-section"><span class="sys-label">' + escapeHtml(shortName) + '</span>' +
-                    '<span class="sys-value">' + formatTokens(totalTokens) + ' tokens</span></div>';
+    // Today's usage
+    if (usage.today) {
+        html += '<div class="sys-row"><span class="sys-label">Today</span><span class="sys-value">' +
+            formatCost(usage.today.total_cost) + '</span></div>';
+        html += '<div class="sys-row"><span class="sys-label">Tokens</span><span class="sys-value">' +
+            formatTokens(usage.today.total_tokens) + '</span></div>';
+
+        // Model breakdown for today
+        if (usage.today.models && usage.today.models.length > 0) {
+            for (const m of usage.today.models) {
+                if (m.cost > 0.01) {  // Only show models with >$0.01 usage
+                    html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">' +
+                        shortModelName(m.model) + '</span><span class="sys-value">' +
+                        formatCost(m.cost) + '</span></div>';
+                }
             }
         }
+    }
+
+    // Active billing block
+    if (usage.active_block) {
+        html += '<div class="sys-section" style="margin-top:8px;padding-top:8px;border-top:1px solid #333">' +
+            '<span class="sys-label">Current Block</span><span class="sys-value">' +
+            formatCost(usage.active_block.total_cost) + '</span></div>';
+        if (usage.active_block.burn_rate > 0) {
+            html += '<div class="sys-row"><span class="sys-label">Burn Rate</span><span class="sys-value">' +
+                formatCost(usage.active_block.burn_rate) + '/hr</span></div>';
+        }
+        if (usage.active_block.projected_cost > 0) {
+            html += '<div class="sys-row"><span class="sys-label">Projected</span><span class="sys-value">' +
+                formatCost(usage.active_block.projected_cost) + '</span></div>';
+        }
+    }
+
+    // Total usage
+    if (usage.totals) {
+        html += '<div class="sys-section" style="margin-top:8px;padding-top:8px;border-top:1px solid #333">' +
+            '<span class="sys-label">All Time</span><span class="sys-value">' +
+            formatCost(usage.totals.total_cost) + '</span></div>';
     }
 
     html += '</div>';

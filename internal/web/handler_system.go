@@ -470,31 +470,57 @@ func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ClaudeUsage represents Claude Code usage statistics.
+// ClaudeUsage represents Claude Code usage statistics from ccusage.
 type ClaudeUsage struct {
-	TotalSessions int            `json:"total_sessions"`
-	TotalMessages int            `json:"total_messages"`
-	ModelUsage    map[string]ModelUsage `json:"model_usage"`
-	DailyActivity []DailyActivity `json:"daily_activity,omitempty"`
+	Today      *DailyUsage  `json:"today,omitempty"`
+	Totals     *UsageTotals `json:"totals,omitempty"`
+	ActiveBlock *BillingBlock `json:"active_block,omitempty"`
+	Error      string       `json:"error,omitempty"`
 }
 
-// ModelUsage represents token usage for a single model.
-type ModelUsage struct {
-	InputTokens   int64 `json:"input_tokens"`
-	OutputTokens  int64 `json:"output_tokens"`
-	CacheRead     int64 `json:"cache_read"`
-	CacheCreation int64 `json:"cache_creation"`
+// DailyUsage represents a single day's usage.
+type DailyUsage struct {
+	Date        string         `json:"date"`
+	InputTokens int64          `json:"input_tokens"`
+	OutputTokens int64         `json:"output_tokens"`
+	CacheCreate int64          `json:"cache_create"`
+	CacheRead   int64          `json:"cache_read"`
+	TotalTokens int64          `json:"total_tokens"`
+	TotalCost   float64        `json:"total_cost"`
+	Models      []ModelBreakdown `json:"models,omitempty"`
 }
 
-// DailyActivity represents daily activity stats.
-type DailyActivity struct {
-	Date          string `json:"date"`
-	MessageCount  int    `json:"message_count"`
-	SessionCount  int    `json:"session_count"`
-	ToolCallCount int    `json:"tool_call_count"`
+// UsageTotals represents cumulative usage totals.
+type UsageTotals struct {
+	InputTokens int64   `json:"input_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
+	CacheCreate int64   `json:"cache_create"`
+	CacheRead   int64   `json:"cache_read"`
+	TotalTokens int64   `json:"total_tokens"`
+	TotalCost   float64 `json:"total_cost"`
 }
 
-// handleAPIClaudeUsage returns Claude Code usage statistics.
+// ModelBreakdown represents usage for a single model.
+type ModelBreakdown struct {
+	Model       string  `json:"model"`
+	InputTokens int64   `json:"input_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
+	CacheCreate int64   `json:"cache_create"`
+	CacheRead   int64   `json:"cache_read"`
+	Cost        float64 `json:"cost"`
+}
+
+// BillingBlock represents an active billing window.
+type BillingBlock struct {
+	StartTime    string  `json:"start_time"`
+	EndTime      string  `json:"end_time"`
+	TotalTokens  int64   `json:"total_tokens"`
+	TotalCost    float64 `json:"total_cost"`
+	BurnRate     float64 `json:"burn_rate"`      // cost per hour
+	ProjectedCost float64 `json:"projected_cost"` // projected total for this block
+}
+
+// handleAPIClaudeUsage returns Claude Code usage statistics via ccusage.
 func (h *GUIHandler) handleAPIClaudeUsage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -504,72 +530,120 @@ func (h *GUIHandler) handleAPIClaudeUsage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Read stats-cache.json from ~/.claude/
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "Cannot determine home directory",
-		})
-		return
-	}
+	usage := ClaudeUsage{}
 
-	statsPath := filepath.Join(homeDir, ".claude", "stats-cache.json")
-	data, err := os.ReadFile(statsPath)
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "Cannot read Claude stats: " + err.Error(),
-		})
-		return
-	}
+	// Get daily usage from ccusage
+	dailyCmd := exec.Command("npx", "ccusage@latest", "daily", "--json")
+	dailyOutput, err := dailyCmd.Output()
+	if err == nil {
+		var dailyData struct {
+			Daily []struct {
+				Date        string  `json:"date"`
+				InputTokens int64   `json:"inputTokens"`
+				OutputTokens int64  `json:"outputTokens"`
+				CacheCreationTokens int64 `json:"cacheCreationTokens"`
+				CacheReadTokens int64 `json:"cacheReadTokens"`
+				TotalTokens int64   `json:"totalTokens"`
+				TotalCost   float64 `json:"totalCost"`
+				ModelBreakdowns []struct {
+					ModelName   string  `json:"modelName"`
+					InputTokens int64   `json:"inputTokens"`
+					OutputTokens int64  `json:"outputTokens"`
+					CacheCreationTokens int64 `json:"cacheCreationTokens"`
+					CacheReadTokens int64 `json:"cacheReadTokens"`
+					Cost        float64 `json:"cost"`
+				} `json:"modelBreakdowns"`
+			} `json:"daily"`
+			Totals struct {
+				InputTokens int64   `json:"inputTokens"`
+				OutputTokens int64  `json:"outputTokens"`
+				CacheCreationTokens int64 `json:"cacheCreationTokens"`
+				CacheReadTokens int64 `json:"cacheReadTokens"`
+				TotalTokens int64   `json:"totalTokens"`
+				TotalCost   float64 `json:"totalCost"`
+			} `json:"totals"`
+		}
 
-	// Parse the stats file
-	var rawStats struct {
-		TotalSessions int `json:"totalSessions"`
-		TotalMessages int `json:"totalMessages"`
-		ModelUsage    map[string]struct {
-			InputTokens            int64 `json:"inputTokens"`
-			OutputTokens           int64 `json:"outputTokens"`
-			CacheReadInputTokens   int64 `json:"cacheReadInputTokens"`
-			CacheCreationInputTokens int64 `json:"cacheCreationInputTokens"`
-		} `json:"modelUsage"`
-		DailyActivity []struct {
-			Date          string `json:"date"`
-			MessageCount  int    `json:"messageCount"`
-			SessionCount  int    `json:"sessionCount"`
-			ToolCallCount int    `json:"toolCallCount"`
-		} `json:"dailyActivity"`
-	}
+		if err := json.Unmarshal(dailyOutput, &dailyData); err == nil {
+			// Get today's data (last entry)
+			if len(dailyData.Daily) > 0 {
+				today := dailyData.Daily[len(dailyData.Daily)-1]
+				usage.Today = &DailyUsage{
+					Date:        today.Date,
+					InputTokens: today.InputTokens,
+					OutputTokens: today.OutputTokens,
+					CacheCreate: today.CacheCreationTokens,
+					CacheRead:   today.CacheReadTokens,
+					TotalTokens: today.TotalTokens,
+					TotalCost:   today.TotalCost,
+				}
+				for _, m := range today.ModelBreakdowns {
+					usage.Today.Models = append(usage.Today.Models, ModelBreakdown{
+						Model:       m.ModelName,
+						InputTokens: m.InputTokens,
+						OutputTokens: m.OutputTokens,
+						CacheCreate: m.CacheCreationTokens,
+						CacheRead:   m.CacheReadTokens,
+						Cost:        m.Cost,
+					})
+				}
+			}
 
-	if err := json.Unmarshal(data, &rawStats); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "Cannot parse Claude stats: " + err.Error(),
-		})
-		return
-	}
-
-	// Convert to our response format
-	usage := ClaudeUsage{
-		TotalSessions: rawStats.TotalSessions,
-		TotalMessages: rawStats.TotalMessages,
-		ModelUsage:    make(map[string]ModelUsage),
-	}
-
-	for model, stats := range rawStats.ModelUsage {
-		usage.ModelUsage[model] = ModelUsage{
-			InputTokens:   stats.InputTokens,
-			OutputTokens:  stats.OutputTokens,
-			CacheRead:     stats.CacheReadInputTokens,
-			CacheCreation: stats.CacheCreationInputTokens,
+			usage.Totals = &UsageTotals{
+				InputTokens: dailyData.Totals.InputTokens,
+				OutputTokens: dailyData.Totals.OutputTokens,
+				CacheCreate: dailyData.Totals.CacheCreationTokens,
+				CacheRead:   dailyData.Totals.CacheReadTokens,
+				TotalTokens: dailyData.Totals.TotalTokens,
+				TotalCost:   dailyData.Totals.TotalCost,
+			}
 		}
 	}
 
-	for _, day := range rawStats.DailyActivity {
-		usage.DailyActivity = append(usage.DailyActivity, DailyActivity{
-			Date:          day.Date,
-			MessageCount:  day.MessageCount,
-			SessionCount:  day.SessionCount,
-			ToolCallCount: day.ToolCallCount,
-		})
+	// Get active billing block from ccusage blocks
+	blocksCmd := exec.Command("npx", "ccusage@latest", "blocks", "--json")
+	blocksOutput, err := blocksCmd.Output()
+	if err == nil {
+		var blocksData struct {
+			Blocks []struct {
+				StartTime   string `json:"startTime"`
+				EndTime     string `json:"endTime"`
+				IsActive    bool   `json:"isActive"`
+				TotalTokens int64  `json:"totalTokens"`
+				CostUSD     float64 `json:"costUSD"`
+				BurnRate    *struct {
+					CostPerHour float64 `json:"costPerHour"`
+				} `json:"burnRate"`
+				Projection *struct {
+					TotalCost float64 `json:"totalCost"`
+				} `json:"projection"`
+			} `json:"blocks"`
+		}
+
+		if err := json.Unmarshal(blocksOutput, &blocksData); err == nil {
+			// Find active block
+			for _, block := range blocksData.Blocks {
+				if block.IsActive {
+					usage.ActiveBlock = &BillingBlock{
+						StartTime:   block.StartTime,
+						EndTime:     block.EndTime,
+						TotalTokens: block.TotalTokens,
+						TotalCost:   block.CostUSD,
+					}
+					if block.BurnRate != nil {
+						usage.ActiveBlock.BurnRate = block.BurnRate.CostPerHour
+					}
+					if block.Projection != nil {
+						usage.ActiveBlock.ProjectedCost = block.Projection.TotalCost
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if usage.Today == nil && usage.Totals == nil {
+		usage.Error = "ccusage not available"
 	}
 
 	// Cache for 60 seconds
