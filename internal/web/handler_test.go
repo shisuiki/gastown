@@ -19,7 +19,7 @@ var errFetchFailed = errors.New("fetch failed")
 type MockConvoyFetcher struct {
 	Convoys    []ConvoyRow
 	MergeQueue []MergeQueueRow
-	Polecats   []PolecatRow
+	Agents     []AgentRow
 	Error      error
 }
 
@@ -31,8 +31,8 @@ func (m *MockConvoyFetcher) FetchMergeQueue() ([]MergeQueueRow, error) {
 	return m.MergeQueue, nil
 }
 
-func (m *MockConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
-	return m.Polecats, nil
+func (m *MockConvoyFetcher) FetchAgents() ([]AgentRow, error) {
+	return m.Agents, nil
 }
 
 func TestConvoyHandler_RendersTemplate(t *testing.T) {
@@ -321,7 +321,7 @@ func TestConvoyHandler_EmptyMergeQueue(t *testing.T) {
 func TestConvoyHandler_PolecatWorkersRendering(t *testing.T) {
 	mock := &MockConvoyFetcher{
 		Convoys: []ConvoyRow{},
-		Polecats: []PolecatRow{
+		Agents: []AgentRow{
 			{
 				Name:         "dag",
 				Rig:          "roxas",
@@ -355,17 +355,17 @@ func TestConvoyHandler_PolecatWorkersRendering(t *testing.T) {
 
 	body := w.Body.String()
 
-	// Check polecat section header
-	if !strings.Contains(body, "Polecat Workers") {
-		t.Error("Response should contain polecat workers section header")
+	// Check agents section header
+	if !strings.Contains(body, "Active Agents") {
+		t.Error("Response should contain active agents section header")
 	}
 
-	// Check polecat names
+	// Check agent names
 	if !strings.Contains(body, "dag") {
-		t.Error("Response should contain polecat 'dag'")
+		t.Error("Response should contain agent 'dag'")
 	}
 	if !strings.Contains(body, "nux") {
-		t.Error("Response should contain polecat 'nux'")
+		t.Error("Response should contain agent 'nux'")
 	}
 
 	// Check rig names
@@ -548,7 +548,7 @@ func TestConvoyHandler_FullDashboard(t *testing.T) {
 				ColorClass: "mq-green",
 			},
 		},
-		Polecats: []PolecatRow{
+		Agents: []AgentRow{
 			{
 				Name:         "worker1",
 				Rig:          "testrig",
@@ -588,11 +588,11 @@ func TestConvoyHandler_FullDashboard(t *testing.T) {
 	if !strings.Contains(body, "#789") {
 		t.Error("Response should contain PR data")
 	}
-	if !strings.Contains(body, "Polecat Workers") {
-		t.Error("Response should contain polecat section")
+	if !strings.Contains(body, "Active Agents") {
+		t.Error("Response should contain agents section")
 	}
 	if !strings.Contains(body, "worker1") {
-		t.Error("Response should contain polecat data")
+		t.Error("Response should contain agent data")
 	}
 }
 
@@ -626,7 +626,7 @@ func TestE2E_Server_FullDashboard(t *testing.T) {
 				ColorClass: "mq-green",
 			},
 		},
-		Polecats: []PolecatRow{
+		Agents: []AgentRow{
 			{
 				Name:         "furiosa",
 				Rig:          "roxas",
@@ -683,9 +683,9 @@ func TestE2E_Server_FullDashboard(t *testing.T) {
 		{"Merge queue section", "Refinery Merge Queue"},
 		{"PR number", "#101"},
 		{"PR repo", "roxas"},
-		{"Polecat section", "Polecat Workers"},
-		{"Polecat name", "furiosa"},
-		{"Polecat status", "Running E2E tests"},
+		{"Agents section", "Active Agents"},
+		{"Agent name", "furiosa"},
+		{"Agent status", "Running E2E tests"},
 		{"HTMX auto-refresh", `hx-trigger="every 10s"`},
 	}
 
@@ -711,7 +711,7 @@ func TestE2E_Server_ActivityColors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &MockConvoyFetcher{
-				Polecats: []PolecatRow{
+				Agents: []AgentRow{
 					{
 						Name:         "test-worker",
 						Rig:          "test-rig",
@@ -751,7 +751,7 @@ func TestE2E_Server_MergeQueueEmpty(t *testing.T) {
 	mock := &MockConvoyFetcher{
 		Convoys:    []ConvoyRow{},
 		MergeQueue: []MergeQueueRow{},
-		Polecats:   []PolecatRow{},
+		Agents: []AgentRow{},
 	}
 
 	handler, err := NewConvoyHandler(mock)
@@ -892,10 +892,10 @@ func TestE2E_Server_HTMLStructure(t *testing.T) {
 	}
 }
 
-// TestE2E_Server_RefineryInPolecats tests that refinery appears in polecat workers.
-func TestE2E_Server_RefineryInPolecats(t *testing.T) {
+// TestE2E_Server_RefineryInAgents tests that refinery appears in the agents list.
+func TestE2E_Server_RefineryInAgents(t *testing.T) {
 	mock := &MockConvoyFetcher{
-		Polecats: []PolecatRow{
+		Agents: []AgentRow{
 			{
 				Name:         "refinery",
 				Rig:          "roxas",
@@ -938,18 +938,18 @@ func TestE2E_Server_RefineryInPolecats(t *testing.T) {
 		t.Error("Refinery idle status should be shown")
 	}
 
-	// Regular polecats should also appear
+	// Regular agents should also appear
 	if !strings.Contains(body, "dag") {
 		t.Error("Regular polecat 'dag' should appear")
 	}
 }
 
-// Test that merge queue and polecat errors are non-fatal
+// Test that merge queue and agent errors are non-fatal
 
 type MockConvoyFetcherWithErrors struct {
-	Convoys          []ConvoyRow
-	MergeQueueError  error
-	PolecatsError    error
+	Convoys         []ConvoyRow
+	MergeQueueError error
+	AgentsError     error
 }
 
 func (m *MockConvoyFetcherWithErrors) FetchConvoys() ([]ConvoyRow, error) {
@@ -960,8 +960,8 @@ func (m *MockConvoyFetcherWithErrors) FetchMergeQueue() ([]MergeQueueRow, error)
 	return nil, m.MergeQueueError
 }
 
-func (m *MockConvoyFetcherWithErrors) FetchPolecats() ([]PolecatRow, error) {
-	return nil, m.PolecatsError
+func (m *MockConvoyFetcherWithErrors) FetchAgents() ([]AgentRow, error) {
+	return nil, m.AgentsError
 }
 
 func TestConvoyHandler_NonFatalErrors(t *testing.T) {
@@ -970,7 +970,7 @@ func TestConvoyHandler_NonFatalErrors(t *testing.T) {
 			{ID: "hq-cv-test", Title: "Test", Status: "open", WorkStatus: "active"},
 		},
 		MergeQueueError: errFetchFailed,
-		PolecatsError:   errFetchFailed,
+		AgentsError:     errFetchFailed,
 	}
 
 	handler, err := NewConvoyHandler(mock)
@@ -983,7 +983,7 @@ func TestConvoyHandler_NonFatalErrors(t *testing.T) {
 
 	handler.ServeHTTP(w, req)
 
-	// Should still return OK even if merge queue and polecats fail
+	// Should still return OK even if merge queue and agents fail
 	if w.Code != http.StatusOK {
 		t.Errorf("Status = %d, want %d (non-fatal errors should not fail request)", w.Code, http.StatusOK)
 	}

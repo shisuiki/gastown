@@ -425,19 +425,19 @@
         </div>
         {{end}}
 
-        {{if .Polecats}}
-        <h2 class="section-header">🐾 Polecat Workers</h2>
+        {{if .Agents}}
+        <h2 class="section-header">🤖 Active Agents</h2>
         <table class="convoy-table">
             <thead>
                 <tr>
-                    <th>Polecat</th>
+                    <th>Agent</th>
                     <th>Rig</th>
                     <th>Last Activity</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
-                {{range .Polecats}}
+                {{range .Agents}}
                 <tr>
                     <td>
                         <span class="convoy-id">{{.Name}}</span>

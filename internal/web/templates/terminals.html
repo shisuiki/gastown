@@ -62,10 +62,10 @@
                 const data = await res.json();
 
                 // Update agents list
-                document.getElementById('agents-list').innerHTML = renderAgentsTable(data.polecats);
+                document.getElementById('agents-list').innerHTML = renderAgentsTable(data.agents);
 
                 // Update session dropdown
-                const sessions = (data.polecats || [])
+                const sessions = (data.agents || [])
                     .filter(p => p.SessionID)
                     .map(p => ({ id: p.SessionID, label: p.Rig + '/' + p.Name }));
                 terminal.updateSessionSelect(sessions);

@@ -16,11 +16,11 @@ var templateFS embed.FS
 type ConvoyData struct {
 	Convoys    []ConvoyRow
 	MergeQueue []MergeQueueRow
-	Polecats   []PolecatRow
+	Agents     []AgentRow
 }
 
-// PolecatRow represents a polecat or crew worker in the dashboard.
-type PolecatRow struct {
+// AgentRow represents any Gas Town agent (polecat, crew, refinery, patrol) in the dashboard.
+type AgentRow struct {
 	Name         string        // e.g., "dag", "nux", "Myrtle"
 	Rig          string        // e.g., "roxas", "gastown", "TerraNomadicCity"
 	SessionID    string        // e.g., "gt-roxas-dag", "gt-TerraNomadicCity-crew-Myrtle"
@@ -28,6 +28,10 @@ type PolecatRow struct {
 	LastActivity activity.Info // Colored activity display
 	StatusHint   string        // Last line from pane (optional)
 }
+
+// PolecatRow is an alias for AgentRow for backwards compatibility.
+// Deprecated: Use AgentRow instead.
+type PolecatRow = AgentRow
 
 // MergeQueueRow represents a PR in the merge queue.
 type MergeQueueRow struct {

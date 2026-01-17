@@ -338,10 +338,10 @@ function renderRigsTable(rigs) {
     if (!rigs || rigs.length === 0) {
         return '<p class="text-muted">No rigs configured</p>';
     }
-    return '<table><tr><th>Name</th><th>Polecats</th><th>Crew</th></tr>' +
+    return '<table><tr><th>Name</th><th>Agents</th><th>Crew</th></tr>' +
         rigs.map(r =>
             '<tr><td>' + escapeHtml(r.name) + '</td>' +
-            '<td>' + (r.polecats || 0) + '</td>' +
+            '<td>' + (r.agents || r.polecats || 0) + '</td>' +
             '<td>' + (r.crew || 0) + '</td></tr>'
         ).join('') + '</table>';
 }

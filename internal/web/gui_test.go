@@ -73,8 +73,8 @@ func newGUIHandler(t *testing.T) *GUIHandler {
 		MergeQueue: []MergeQueueRow{
 			{Repo: "repo", Title: "PR"},
 		},
-		Polecats: []PolecatRow{
-			{Name: "polecat-1"},
+		Agents: []AgentRow{
+			{Name: "agent-1"},
 		},
 	}
 
@@ -112,8 +112,8 @@ func TestGUIHandler_APIStatus(t *testing.T) {
 	if len(status.MergeQueue) != 1 {
 		t.Errorf("MergeQueue length = %d, want 1", len(status.MergeQueue))
 	}
-	if len(status.Polecats) != 1 {
-		t.Errorf("Polecats length = %d, want 1", len(status.Polecats))
+	if len(status.Agents) != 1 {
+		t.Errorf("Agents length = %d, want 1", len(status.Agents))
 	}
 	if status.Daemon.Running != true {
 		t.Errorf("Daemon running = %v, want true", status.Daemon.Running)

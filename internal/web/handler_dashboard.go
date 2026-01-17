@@ -97,7 +97,7 @@ type StatusResponse struct {
 	Rigs       []RigStatus     `json:"rigs"`
 	Convoys    []ConvoyRow     `json:"convoys"`
 	MergeQueue []MergeQueueRow `json:"merge_queue"`
-	Polecats   []PolecatRow    `json:"polecats"`
+	Agents     []AgentRow      `json:"agents"`
 	Mail       MailStatus      `json:"mail"`
 }
 
@@ -144,9 +144,9 @@ func (h *GUIHandler) buildStatus() StatusResponse {
 		status.MergeQueue = mq
 	}
 
-	// Get polecats
-	if polecats, err := h.fetcher.FetchPolecats(); err == nil {
-		status.Polecats = polecats
+	// Get agents (polecats, crew, refinery)
+	if agents, err := h.fetcher.FetchAgents(); err == nil {
+		status.Agents = agents
 	}
 
 	// Get mail status

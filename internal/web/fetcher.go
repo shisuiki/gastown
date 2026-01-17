@@ -592,8 +592,8 @@ func determineColorClass(ciStatus, mergeable string) string {
 	return "mq-yellow"
 }
 
-// FetchPolecats fetches all running polecat and refinery sessions with activity data.
-func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
+// FetchAgents fetches all running agent sessions (polecats, crew, refinery) with activity data.
+func (f *LiveConvoyFetcher) FetchAgents() ([]AgentRow, error) {
 	// Query all tmux sessions with window_activity for more accurate timing
 	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{window_activity}")
 	var stdout bytes.Buffer
@@ -606,7 +606,7 @@ func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
 	// Pre-fetch merge queue count to determine refinery idle status
 	mergeQueueCount := f.getMergeQueueCount()
 
-	var polecats []PolecatRow
+	var agents []AgentRow
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 
 	for _, line := range lines {
@@ -645,7 +645,7 @@ func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
 			agentType = "refinery"
 			agentName = "refinery"
 		} else if agentPart == "witness" || agentPart == "mayor" || agentPart == "deacon" || agentPart == "boot" {
-			// Skip non-worker patrol sessions from polecats list
+			// Skip non-worker patrol sessions from agents list
 			continue
 		} else {
 			// Regular polecat
@@ -667,7 +667,7 @@ func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
 			statusHint = f.getPolecatStatusHint(sessionName)
 		}
 
-		polecats = append(polecats, PolecatRow{
+		agents = append(agents, AgentRow{
 			Name:         agentName,
 			Rig:          rig,
 			SessionID:    sessionName,
@@ -677,7 +677,7 @@ func (f *LiveConvoyFetcher) FetchPolecats() ([]PolecatRow, error) {
 		})
 	}
 
-	return polecats, nil
+	return agents, nil
 }
 
 // getPolecatStatusHint captures the last non-empty line from a polecat's pane.
