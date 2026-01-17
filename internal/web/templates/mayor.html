@@ -21,6 +21,7 @@
                         <div style="display: flex; gap: 10px; align-items: center;">
                             <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter...">
                             <button onclick="terminal.sendInput()" class="btn btn-success btn-sm">Send</button>
+                            <button onclick="terminal.sendKey('Enter')" class="btn btn-sm" style="background: #6366f1; color: white;">Enter</button>
                             <button onclick="terminal.sendKey('C-c')" class="btn btn-danger btn-sm">Ctrl+C</button>
                         </div>
                     </div>
