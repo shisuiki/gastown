@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>Git - Gas Town</title>
+    <style>
+        .git-stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            padding: 15px 20px;
+            min-width: 120px;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #60a5fa;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+        .commit-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .commit-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            border-bottom: 1px solid #333;
+            transition: background 0.2s;
+        }
+        .commit-item:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .commit-item:last-child {
+            border-bottom: none;
+        }
+        .commit-hash {
+            font-family: monospace;
+            color: #60a5fa;
+            font-size: 0.85rem;
+            min-width: 70px;
+        }
+        .commit-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .commit-message {
+            color: #eee;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .commit-meta {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        .commit-author {
+            color: #94a3b8;
+        }
+        .branch-tag {
+            display: inline-block;
+            background: #166534;
+            color: #4ade80;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 8px;
+        }
+        .graph-container {
+            position: relative;
+            overflow-x: auto;
+            padding: 20px 0;
+        }
+        .graph-row {
+            display: flex;
+            align-items: center;
+            min-height: 40px;
+            position: relative;
+        }
+        .graph-lines {
+            width: 80px;
+            min-width: 80px;
+            position: relative;
+            height: 40px;
+        }
+        .graph-node {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #60a5fa;
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 2;
+        }
+        .graph-node.merge {
+            background: #4ade80;
+        }
+        .graph-line {
+            position: absolute;
+            width: 2px;
+            background: #60a5fa;
+            left: 24px;
+        }
+        .graph-line.top {
+            top: 0;
+            height: 50%;
+        }
+        .graph-line.bottom {
+            top: 50%;
+            height: 50%;
+        }
+        .graph-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+        .branches-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .branch-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0f172a;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+        .branch-item.current {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.1);
+        }
+        .branch-name {
+            font-family: monospace;
+            color: #eee;
+        }
+        .branch-commit {
+            font-size: 0.75rem;
+            color: #64748b;
+            font-family: monospace;
+        }
+        .current-indicator {
+            color: #4ade80;
+            font-size: 0.8rem;
+        }
+        .tab-nav {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        .tab-btn {
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #eee;
+        }
+        .tab-btn.active {
+            background: #3b82f6;
+            color: #fff;
+        }
+        .rig-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .rig-selector select {
+            padding: 8px 12px;
+            background: #0f172a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #eee;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 768px) {
+            .git-stats {
+                gap: 10px;
+            }
+            .stat-card {
+                flex: 1;
+                min-width: 80px;
+                padding: 10px;
+            }
+            .stat-value {
+                font-size: 1.2rem;
+            }
+            .commit-item {
+                flex-direction: column;
+                gap: 8px;
+            }
+            .graph-lines {
+                width: 50px;
+                min-width: 50px;
+            }
+        }
+    </style>
+</head>
+<body x-data="gitPage()">
+    {{template "nav" .}}
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h1 style="font-size: 1.2rem; color: #94a3b8;">Git Repository</h1>
+            <div class="rig-selector">
+                <label class="text-muted">Rig:</label>
+                <select x-model="selectedRig" @change="loadAll()">
+                    <option value="">Default (GT_ROOT)</option>
+                    <template x-for="rig in rigs" :key="rig">
+                        <option :value="rig" x-text="rig"></option>
+                    </template>
+                </select>
+            </div>
+        </div>
+
+        <div class="git-stats">
+            <div class="stat-card">
+                <div class="stat-value" x-text="stats.commits">-</div>
+                <div class="stat-label">Commits</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" x-text="stats.branches">-</div>
+                <div class="stat-label">Branches</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" x-text="currentBranch || '-'"></div>
+                <div class="stat-label">Current Branch</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="tab-nav">
+                <button class="tab-btn" :class="{ active: activeTab === 'commits' }" @click="activeTab = 'commits'">
+                    Commits
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'graph' }" @click="activeTab = 'graph'; loadGraph()">
+                    Graph
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'branches' }" @click="activeTab = 'branches'">
+                    Branches
+                </button>
+            </div>
+
+            <!-- Commits Tab -->
+            <div x-show="activeTab === 'commits'">
+                <template x-if="loading.commits">
+                    <p class="text-muted">Loading commits...</p>
+                </template>
+                <template x-if="!loading.commits && commits.length === 0">
+                    <p class="text-muted">No commits found</p>
+                </template>
+                <div class="commit-list" x-show="!loading.commits && commits.length > 0">
+                    <template x-for="(commit, index) in commits" :key="commit.hash">
+                        <div class="commit-item">
+                            <span class="commit-hash" x-text="commit.short_hash"></span>
+                            <div class="commit-info">
+                                <div class="commit-message">
+                                    <span x-text="commit.message"></span>
+                                    <template x-if="commit.branch && index === 0">
+                                        <span class="branch-tag" x-text="commit.branch"></span>
+                                    </template>
+                                </div>
+                                <div class="commit-meta">
+                                    <span class="commit-author" x-text="commit.author"></span>
+                                    <span> · </span>
+                                    <span x-text="commit.date"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Graph Tab -->
+            <div x-show="activeTab === 'graph'">
+                <template x-if="loading.graph">
+                    <p class="text-muted">Loading graph...</p>
+                </template>
+                <template x-if="!loading.graph && graphNodes.length === 0">
+                    <p class="text-muted">No graph data</p>
+                </template>
+                <div class="graph-container" x-show="!loading.graph && graphNodes.length > 0">
+                    <template x-for="(node, index) in graphNodes" :key="node.hash">
+                        <div class="graph-row">
+                            <div class="graph-lines">
+                                <template x-if="index > 0">
+                                    <div class="graph-line top"></div>
+                                </template>
+                                <div class="graph-node" :class="{ merge: node.parents && node.parents.length > 1 }"></div>
+                                <template x-if="index < graphNodes.length - 1">
+                                    <div class="graph-line bottom"></div>
+                                </template>
+                            </div>
+                            <div class="graph-content">
+                                <span class="commit-hash" x-text="node.short_hash"></span>
+                                <div class="commit-info">
+                                    <div class="commit-message">
+                                        <span x-text="node.message"></span>
+                                        <template x-if="node.refs">
+                                            <span class="branch-tag" x-text="node.refs"></span>
+                                        </template>
+                                    </div>
+                                    <div class="commit-meta">
+                                        <span class="commit-author" x-text="node.author"></span>
+                                        <span> · </span>
+                                        <span x-text="node.date"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Branches Tab -->
+            <div x-show="activeTab === 'branches'">
+                <template x-if="loading.branches">
+                    <p class="text-muted">Loading branches...</p>
+                </template>
+                <template x-if="!loading.branches && branches.length === 0">
+                    <p class="text-muted">No branches found</p>
+                </template>
+                <div class="branches-list" x-show="!loading.branches && branches.length > 0">
+                    <template x-for="branch in branches" :key="branch.name">
+                        <div class="branch-item" :class="{ current: branch.is_current }">
+                            <template x-if="branch.is_current">
+                                <span class="current-indicator">●</span>
+                            </template>
+                            <span class="branch-name" x-text="branch.name"></span>
+                            <span class="branch-commit" x-text="branch.last_commit"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        function gitPage() {
+            return {
+                activeTab: 'commits',
+                selectedRig: '',
+                rigs: [],
+                commits: [],
+                branches: [],
+                graphNodes: [],
+                currentBranch: '',
+                stats: {
+                    commits: '-',
+                    branches: '-'
+                },
+                loading: {
+                    commits: true,
+                    branches: true,
+                    graph: false
+                },
+
+                init() {
+                    this.loadRigs();
+                    this.loadAll();
+                },
+
+                async loadRigs() {
+                    try {
+                        const res = await fetch('/api/rigs');
+                        const data = await res.json();
+                        this.rigs = data.rigs ? data.rigs.map(r => r.name) : [];
+                    } catch (e) {
+                        console.error('Failed to load rigs:', e);
+                    }
+                },
+
+                loadAll() {
+                    this.loadCommits();
+                    this.loadBranches();
+                },
+
+                async loadCommits() {
+                    this.loading.commits = true;
+                    try {
+                        const url = '/api/git/commits' + (this.selectedRig ? '?rig=' + this.selectedRig : '');
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        this.commits = data.commits || [];
+                        this.stats.commits = this.commits.length;
+                        if (this.commits.length > 0 && this.commits[0].branch) {
+                            this.currentBranch = this.commits[0].branch;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load commits:', e);
+                    }
+                    this.loading.commits = false;
+                },
+
+                async loadBranches() {
+                    this.loading.branches = true;
+                    try {
+                        const url = '/api/git/branches' + (this.selectedRig ? '?rig=' + this.selectedRig : '');
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        this.branches = data.branches || [];
+                        this.stats.branches = this.branches.length;
+                        const current = this.branches.find(b => b.is_current);
+                        if (current) {
+                            this.currentBranch = current.name;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load branches:', e);
+                    }
+                    this.loading.branches = false;
+                },
+
+                async loadGraph() {
+                    if (this.graphNodes.length > 0) return;
+                    this.loading.graph = true;
+                    try {
+                        const url = '/api/git/graph' + (this.selectedRig ? '?rig=' + this.selectedRig : '');
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        this.graphNodes = data.nodes || [];
+                    } catch (e) {
+                        console.error('Failed to load graph:', e);
+                    }
+                    this.loading.graph = false;
+                }
+            };
+        }
+    </script>
+</body>
+</html>

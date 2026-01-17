@@ -383,9 +383,84 @@ function renderCommitsTable(commits) {
 }
 
 // ============================================================================
+// Version Management
+// ============================================================================
+
+/**
+ * Fetch and display the current version in the navbar badge
+ */
+async function loadVersion() {
+    try {
+        const res = await fetch('/api/version');
+        const data = await res.json();
+        const badge = document.getElementById('version-badge');
+        if (badge && data.version) {
+            badge.textContent = 'v' + data.version;
+        }
+    } catch (e) {
+        console.error('Failed to load version:', e);
+    }
+}
+
+// ============================================================================
+// System Monitoring
+// ============================================================================
+
+/**
+ * Render system info card content
+ * @param {object} info - System info from /api/system
+ * @returns {string} HTML content
+ */
+function renderSystemInfo(info) {
+    if (!info) {
+        return '<p class="text-muted">Unable to load system info</p>';
+    }
+
+    const memBar = info.mem_percent ?
+        '<div class="progress-bar"><div class="progress-fill" style="width: ' + info.mem_percent.toFixed(1) + '%"></div></div>' : '';
+    const diskBar = info.disk_percent ?
+        '<div class="progress-bar"><div class="progress-fill" style="width: ' + info.disk_percent.toFixed(1) + '%"></div></div>' : '';
+
+    return '<div class="system-stats">' +
+        '<div class="sys-row"><span class="sys-label">Host</span><span class="sys-value">' + escapeHtml(info.hostname || '-') + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">OS</span><span class="sys-value">' + escapeHtml(info.os + '/' + info.arch) + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">CPUs</span><span class="sys-value">' + (info.cpus || '-') + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">Uptime</span><span class="sys-value">' + escapeHtml(info.uptime || '-') + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">Load</span><span class="sys-value">' + escapeHtml(info.load_avg || '-') + '</span></div>' +
+        '<div class="sys-section"><span class="sys-label">Memory</span><span class="sys-value">' +
+            escapeHtml(info.mem_used || '-') + ' / ' + escapeHtml(info.mem_total || '-') +
+            ' (' + (info.mem_percent ? info.mem_percent.toFixed(1) : '-') + '%)</span>' + memBar + '</div>' +
+        '<div class="sys-section"><span class="sys-label">Disk</span><span class="sys-value">' +
+            escapeHtml(info.disk_used || '-') + ' / ' + escapeHtml(info.disk_total || '-') +
+            ' (' + (info.disk_percent ? info.disk_percent.toFixed(1) : '-') + '%)</span>' + diskBar + '</div>' +
+        '</div>';
+}
+
+/**
+ * Fetch and update system info display
+ * @param {string} elementId - ID of element to update
+ */
+async function loadSystemInfo(elementId) {
+    try {
+        const res = await fetch('/api/system');
+        const data = await res.json();
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = renderSystemInfo(data);
+        }
+    } catch (e) {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+}
+
+// ============================================================================
 // Initialize on page load
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
     setActiveNavLink();
+    loadVersion();
 });

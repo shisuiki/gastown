@@ -41,6 +41,18 @@ body {
 .status-yellow { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
 .status-red { background: #f87171; box-shadow: 0 0 8px #f87171; }
 
+/* Version Badge */
+.version-badge {
+    font-size: 0.65rem;
+    font-weight: 400;
+    color: #64748b;
+    background: rgba(100, 116, 139, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
 /* ================================================================
    Cards
    ================================================================ */
@@ -227,3 +239,52 @@ code { font-family: "Menlo", "Monaco", "Consolas", monospace; }
 
 /* Alpine.js transitions */
 [x-cloak] { display: none !important; }
+
+/* ================================================================
+   System Monitoring
+   ================================================================ */
+.system-stats {
+    font-size: 0.85rem;
+}
+.sys-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(51, 51, 51, 0.5);
+}
+.sys-row:last-child {
+    border-bottom: none;
+}
+.sys-section {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(51, 51, 51, 0.5);
+}
+.sys-section:last-child {
+    border-bottom: none;
+}
+.sys-label {
+    color: #64748b;
+}
+.sys-value {
+    color: #eee;
+    font-family: monospace;
+}
+.progress-bar {
+    height: 6px;
+    background: #0f172a;
+    border-radius: 3px;
+    margin-top: 6px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+.progress-fill.warning {
+    background: linear-gradient(90deg, #f97316, #fbbf24);
+}
+.progress-fill.danger {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+}

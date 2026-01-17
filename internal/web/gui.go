@@ -75,6 +75,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/terminals", h.handleTerminals)
 	h.mux.HandleFunc("/workflow", h.handleWorkflow)
 	h.mux.HandleFunc("/activity", h.handleWorkflow) // Legacy redirect
+	h.mux.HandleFunc("/git", h.handleGit)
 
 	// Detail page routes (prefix matching)
 	h.mux.HandleFunc("/convoy/", h.handleConvoyDetail)
@@ -113,6 +114,13 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/convoy/create", h.handleAPICreateConvoy)
 	h.mux.HandleFunc("/api/bead/create", h.handleAPICreateBead)
 
+	// System and Git API routes
+	h.mux.HandleFunc("/api/version", h.handleAPIVersion)
+	h.mux.HandleFunc("/api/system", h.handleAPISystem)
+	h.mux.HandleFunc("/api/git/commits", h.handleAPIGitCommits)
+	h.mux.HandleFunc("/api/git/branches", h.handleAPIGitBranches)
+	h.mux.HandleFunc("/api/git/graph", h.handleAPIGitGraph)
+
 	// Shared API routes
 	h.mux.HandleFunc("/api/command", h.handleAPICommand)
 	h.mux.HandleFunc("/api/rigs", h.handleAPIRigs)
@@ -127,8 +135,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 // - If GT_WEB_ALLOW_REMOTE is not set: only allows localhost connections
 // - Fails closed: rejects requests that don't meet auth requirements
 func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Login/logout pages bypass auth
-	if r.URL.Path == "/login" || r.URL.Path == "/logout" {
+	// Login/logout pages and static files bypass auth
+	if r.URL.Path == "/login" || r.URL.Path == "/logout" || strings.HasPrefix(r.URL.Path, "/static/") {
 		h.mux.ServeHTTP(w, r)
 		return
 	}
@@ -136,13 +144,14 @@ func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check token auth if configured
 	if authConfig.token != "" {
 		if !h.isAuthenticated(r) {
-			// For browser requests, redirect to login page
-			if isHTMLRequest(r) {
+			// For browser page requests, redirect to login page
+			// Only redirect for explicit HTML requests, not API/WebSocket
+			if isPageRequest(r) {
 				http.Redirect(w, r, "/login", http.StatusFound)
 				return
 			}
-			// For API requests, return 401
-			log.Printf("Auth failed: invalid or missing token from %s", r.RemoteAddr)
+			// For API/WebSocket requests, return 401
+			log.Printf("Auth failed: invalid or missing token from %s for %s", r.RemoteAddr, r.URL.Path)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -180,6 +189,24 @@ func (h *GUIHandler) isAuthenticated(r *http.Request) bool {
 func isHTMLRequest(r *http.Request) bool {
 	accept := r.Header.Get("Accept")
 	return strings.Contains(accept, "text/html") || accept == "" || accept == "*/*"
+}
+
+// isPageRequest checks if this is a browser page navigation request.
+// More strict than isHTMLRequest - only redirects for explicit page requests.
+func isPageRequest(r *http.Request) bool {
+	// WebSocket upgrade requests should never redirect
+	if r.Header.Get("Upgrade") == "websocket" {
+		return false
+	}
+
+	// API and data requests should not redirect
+	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/ws/") {
+		return false
+	}
+
+	// Check Accept header for HTML
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "text/html")
 }
 
 // generateSessionToken creates a session token from the auth token.

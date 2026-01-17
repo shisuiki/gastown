@@ -26,7 +26,7 @@
 {{define "nav"}}
 <nav class="nav-bar">
     <div class="nav-container">
-        <a href="/" class="nav-brand">Gas Town <span class="status-indicator status-green" id="daemon-status"></span></a>
+        <a href="/" class="nav-brand">Gas Town <span class="version-badge" id="version-badge">v0.2.6</span> <span class="status-indicator status-green" id="daemon-status"></span></a>
         <button class="nav-toggle" onclick="toggleNav()">☰</button>
         <div class="nav-links" id="nav-links">
             <a href="/" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}">Dashboard</a>
@@ -34,6 +34,7 @@
             <a href="/mail" class="nav-link{{if eq .ActivePage "mail"}} active{{end}}">Mail</a>
             <a href="/terminals" class="nav-link{{if eq .ActivePage "terminals"}} active{{end}}">Terminals</a>
             <a href="/workflow" class="nav-link{{if eq .ActivePage "workflow"}} active{{end}}">Workflow</a>
+            <a href="/git" class="nav-link{{if eq .ActivePage "git"}} active{{end}}">Git</a>
         </div>
     </div>
 </nav>
