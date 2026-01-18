@@ -262,6 +262,110 @@ func (h *GUIHandler) fetchAgentsList() []map[string]string {
 	return agents
 }
 
+// handleAPIMailMarkRead marks a message as read.
+func (h *GUIHandler) handleAPIMailMarkRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID    string `json:"id"`
+		Agent string `json:"agent,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == "" {
+		http.Error(w, "Missing message ID", http.StatusBadRequest)
+		return
+	}
+
+	agent := req.Agent
+	if agent == "" {
+		agent = "mayor/"
+	}
+
+	// Set GT_ROLE environment variable to target agent
+	env := os.Environ()
+	// Remove existing GT_ROLE
+	env = filterEnv(env, "GT_ROLE")
+	// Add new GT_ROLE
+	env = append(env, "GT_ROLE="+agent)
+
+	cmd := exec.Command("gt", "mail", "mark-read", req.ID)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   string(output),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"output":  string(output),
+	})
+}
+
+// handleAPIMailMarkUnread marks a message as unread.
+func (h *GUIHandler) handleAPIMailMarkUnread(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ID    string `json:"id"`
+		Agent string `json:"agent,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.ID == "" {
+		http.Error(w, "Missing message ID", http.StatusBadRequest)
+		return
+	}
+
+	agent := req.Agent
+	if agent == "" {
+		agent = "mayor/"
+	}
+
+	// Set GT_ROLE environment variable to target agent
+	env := os.Environ()
+	// Remove existing GT_ROLE
+	env = filterEnv(env, "GT_ROLE")
+	// Add new GT_ROLE
+	env = append(env, "GT_ROLE="+agent)
+
+	cmd := exec.Command("gt", "mail", "mark-unread", req.ID)
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   string(output),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"output":  string(output),
+	})
+}
+
 // filterEnv returns a copy of env with the specified key removed.
 func filterEnv(env []string, key string) []string {
 	result := make([]string, 0, len(env))

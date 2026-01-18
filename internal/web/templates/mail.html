@@ -3,6 +3,22 @@
 <head>
     {{template "head" .}}
     <title>Mail Center - Gas Town</title>
+    <style>
+        .mail-message-unread .message-subject {
+            font-weight: bold;
+        }
+        .mail-message-read .message-subject {
+            font-weight: normal;
+            opacity: 0.8;
+        }
+        .mail-message .btn-sm {
+            padding: 2px 8px;
+            font-size: 0.75rem;
+        }
+        .mail-indicator {
+            user-select: none;
+        }
+    </style>
 </head>
 <body>
     {{template "nav" .}}
@@ -105,12 +121,7 @@
                     if (data.messages.length === 0) {
                         inbox.innerHTML = '<p class="text-muted">No messages</p>';
                     } else {
-                        inbox.innerHTML = data.messages.map(m =>
-                            '<div style="border-bottom: 1px solid #333; padding: 12px 0;">' +
-                            '<div style="font-weight: 500;" class="text-link">' + escapeHtml(m.subject || 'No subject') + '</div>' +
-                            '<div style="font-size: 0.8rem;" class="text-secondary">From: ' + escapeHtml(m.from || 'unknown') + '</div>' +
-                            '<div style="margin-top: 8px; color: #e2e8f0;">' + escapeHtml(m.body || m.content || '') + '</div></div>'
-                        ).join('');
+                        inbox.innerHTML = data.messages.map(renderMessage).join('');
                     }
                     stats.innerHTML = '<p>Agent: <strong>' + escapeHtml(agent) + '</strong></p><p>Messages: <strong>' + data.messages.length + '</strong></p>';
                 } else {
@@ -170,6 +181,74 @@
 
         function refreshInbox() {
             loadAgentMail();
+        }
+
+        // Render a single message with read/unread toggle
+        function renderMessage(m) {
+            const isRead = m.read === true;
+            const readClass = isRead ? 'mail-message-read' : 'mail-message-unread';
+            const indicator = isRead ? '○' : '●';
+            return '<div class="mail-message ' + readClass + '" data-id="' + escapeHtml(m.id) + '" style="border-bottom: 1px solid #333; padding: 12px 0;">' +
+                '<div style="display: flex; align-items: flex-start; gap: 8px;">' +
+                '<div class="mail-indicator" style="font-size: 1.2rem; cursor: pointer;" onclick="toggleReadStatus(\'' + escapeHtml(m.id) + '\', ' + isRead + ')" title="Click to toggle read status">' + indicator + '</div>' +
+                '<div style="flex: 1;">' +
+                '<div class="message-subject text-link" style="cursor: pointer;" onclick="markAsRead(\'' + escapeHtml(m.id) + '\')" title="Click to mark as read">' + escapeHtml(m.subject || 'No subject') + '</div>' +
+                '<div style="font-size: 0.8rem;" class="text-secondary">From: ' + escapeHtml(m.from || 'unknown') + '</div>' +
+                '<div style="margin-top: 8px; color: #e2e8f0;">' + escapeHtml(m.body || m.content || '') + '</div>' +
+                '<div style="margin-top: 8px; display: flex; gap: 8px;">' +
+                '<button onclick="markAsRead(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm ' + (isRead ? 'btn-secondary' : 'btn-primary') + '">Mark Read</button>' +
+                '<button onclick="markAsUnread(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm ' + (isRead ? 'btn-primary' : 'btn-secondary') + '">Mark Unread</button>' +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+        }
+
+        async function markAsRead(id) {
+            const agent = document.getElementById('mail-agent-select').value;
+            try {
+                const res = await fetch('/api/mail/mark-read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, agent })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadAgentMail(); // refresh inbox
+                } else {
+                    alert('Failed to mark as read: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function markAsUnread(id) {
+            const agent = document.getElementById('mail-agent-select').value;
+            try {
+                const res = await fetch('/api/mail/mark-unread', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, agent })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadAgentMail(); // refresh inbox
+                } else {
+                    alert('Failed to mark as unread: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function toggleReadStatus(id, isRead) {
+            // isRead is boolean indicating current read status
+            if (isRead) {
+                await markAsUnread(id);
+            } else {
+                await markAsRead(id);
+            }
         }
 
         // Initialize

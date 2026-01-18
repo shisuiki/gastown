@@ -102,6 +102,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/mail/inbox", h.handleAPIMailInbox)
 	h.mux.HandleFunc("/api/mail/all", h.handleAPIMailAll)
 	h.mux.HandleFunc("/api/agents/list", h.handleAPIAgentsList)
+	h.mux.HandleFunc("/api/mail/mark-read", h.handleAPIMailMarkRead)
+	h.mux.HandleFunc("/api/mail/mark-unread", h.handleAPIMailMarkUnread)
 
 	// Terminal API routes
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
