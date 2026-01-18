@@ -86,19 +86,19 @@ func (b *Boot) IsSessionAlive() bool {
 }
 
 // AcquireLock creates the marker file to indicate Boot is starting.
-// Returns error if Boot is already running.
+// Returns error if Boot is already starting (marker file exists).
 func (b *Boot) AcquireLock() error {
-	if b.IsRunning() {
-		return fmt.Errorf("boot is already running (session exists)")
-	}
-
 	if err := b.EnsureDir(); err != nil {
 		return fmt.Errorf("ensuring boot dir: %w", err)
 	}
 
-	// Create marker file
-	f, err := os.Create(b.markerPath())
+	// Create marker file atomically with O_EXCL to prevent race conditions
+	// If file already exists, this will fail with "file exists" error
+	f, err := os.OpenFile(b.markerPath(), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("boot is already starting (marker file exists)")
+		}
 		return fmt.Errorf("creating marker: %w", err)
 	}
 	return f.Close()
