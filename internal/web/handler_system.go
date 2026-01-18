@@ -30,6 +30,14 @@ type RigInfo struct {
 // Version is set from the main package
 var Version = "0.2.6"
 
+// Build info - set via ldflags at compile time
+var (
+	BuildNumber = "dev"              // git commit count or build number
+	BuildCommit = "unknown"          // git short hash
+	BuildTime   = "unknown"          // build timestamp
+	StartTime   = time.Now()         // service start time
+)
+
 // getGTRoot returns the GT_ROOT directory.
 func getGTRoot() string {
 	dir := os.Getenv("GT_ROOT")
@@ -136,6 +144,12 @@ type SystemInfo struct {
 	DiskTotal   string  `json:"disk_total"`
 	DiskUsed    string  `json:"disk_used"`
 	DiskPercent float64 `json:"disk_percent"`
+	// Build info
+	Version       string `json:"version"`
+	BuildNumber   string `json:"build_number"`
+	BuildCommit   string `json:"build_commit"`
+	BuildTime     string `json:"build_time"`
+	ServiceUptime string `json:"service_uptime"`
 }
 
 // GitCommit represents a git commit.
@@ -280,6 +294,25 @@ func (h *GUIHandler) fetchSystemInfo() SystemInfo {
 				}
 			}
 		}
+	}
+
+	// Build info
+	info.Version = Version
+	info.BuildNumber = BuildNumber
+	info.BuildCommit = BuildCommit
+	info.BuildTime = BuildTime
+
+	// Service uptime (time since this process started)
+	uptime := time.Since(StartTime)
+	days := int(uptime.Hours()) / 24
+	hours := int(uptime.Hours()) % 24
+	mins := int(uptime.Minutes()) % 60
+	if days > 0 {
+		info.ServiceUptime = strconv.Itoa(days) + "d " + strconv.Itoa(hours) + "h " + strconv.Itoa(mins) + "m"
+	} else if hours > 0 {
+		info.ServiceUptime = strconv.Itoa(hours) + "h " + strconv.Itoa(mins) + "m"
+	} else {
+		info.ServiceUptime = strconv.Itoa(mins) + "m"
 	}
 
 	return info

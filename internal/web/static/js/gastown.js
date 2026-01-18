@@ -426,10 +426,21 @@ function renderSystemInfo(info) {
     const diskBar = info.disk_percent ?
         '<div class="progress-bar"><div class="progress-fill" style="width: ' + info.disk_percent.toFixed(1) + '%"></div></div>' : '';
 
+    // Build version string with build number
+    let versionStr = info.version || '-';
+    if (info.build_number && info.build_number !== 'dev') {
+        versionStr += '.' + info.build_number;
+    }
+    if (info.build_commit && info.build_commit !== 'unknown') {
+        versionStr += ' <span class="text-muted" style="font-size: 0.75rem;">(' + escapeHtml(info.build_commit) + ')</span>';
+    }
+
     return '<div class="system-stats">' +
+        '<div class="sys-row"><span class="sys-label">Version</span><span class="sys-value">' + versionStr + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">Deployed</span><span class="sys-value">' + escapeHtml(info.build_time || '-') + '</span></div>' +
+        '<div class="sys-row"><span class="sys-label">Service Up</span><span class="sys-value">' + escapeHtml(info.service_uptime || '-') + '</span></div>' +
         '<div class="sys-row"><span class="sys-label">Host</span><span class="sys-value">' + escapeHtml(info.hostname || '-') + '</span></div>' +
         '<div class="sys-row"><span class="sys-label">OS</span><span class="sys-value">' + escapeHtml(info.os + '/' + info.arch) + '</span></div>' +
-        '<div class="sys-row"><span class="sys-label">CPUs</span><span class="sys-value">' + (info.cpus || '-') + '</span></div>' +
         '<div class="sys-row"><span class="sys-label">Uptime</span><span class="sys-value">' + escapeHtml(info.uptime || '-') + '</span></div>' +
         '<div class="sys-row"><span class="sys-label">Load</span><span class="sys-value">' + escapeHtml(info.load_avg || '-') + '</span></div>' +
         '<div class="sys-section"><span class="sys-label">Memory</span><span class="sys-value">' +
