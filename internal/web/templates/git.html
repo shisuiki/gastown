@@ -386,6 +386,8 @@
                 init() {
                     this.loadRigs();
                     this.loadAll();
+                    // Auto-refresh commits every 30 seconds
+                    setInterval(() => this.loadCommits(), 30000);
                 },
 
                 async loadRigs() {
