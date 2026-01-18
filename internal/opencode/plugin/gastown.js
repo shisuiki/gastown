@@ -19,7 +19,8 @@ export const GasTown = async ({ $, directory }) => {
     if (autonomousRoles.has(role)) {
       await run("gt mail check --inject");
     }
-    await run("gt nudge deacon session-started");
+    // NOTE: gt nudge deacon session-started was removed to fix a race condition.
+    // The manager's PropulsionNudge (sent after confirming agent is ready) handles startup.
   };
 
   return {
