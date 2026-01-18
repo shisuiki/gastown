@@ -247,7 +247,7 @@ func (m *SessionManager) Start(polecat string, opts SessionStartOptions) error {
 	}))
 
 	// GUPP: Send propulsion nudge to trigger autonomous work execution
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	debugSession("NudgeSession PropulsionNudge", m.tmux.NudgeSession(sessionID, session.PropulsionNudge()))
 
 	// Verify session survived startup - if the command crashed, the session may have died.

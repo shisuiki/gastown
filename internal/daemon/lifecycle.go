@@ -402,7 +402,9 @@ func (d *Daemon) restartSession(sessionName, identity string) error {
 
 	// Send propulsion nudge to trigger autonomous execution.
 	// Wait for beacon to be fully processed (needs to be separate prompt)
-	time.Sleep(2 * time.Second)
+	if err := d.tmux.WaitForClaudeUI(sessionName, 30*time.Second); err != nil {
+		return fmt.Errorf("waiting for Claude UI: %w", err)
+	}
 	_ = d.tmux.NudgeSession(sessionName, session.PropulsionNudgeForRole(parsed.RoleType, workDir)) // Non-fatal
 
 	return nil

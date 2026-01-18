@@ -936,6 +936,23 @@ func (t *Tmux) WaitForShellReady(session string, timeout time.Duration) error {
 	}
 	return fmt.Errorf("timeout waiting for shell")
 }
+// WaitForClaudeUI polls until Claude Code's chat interface is ready.
+// Claude UI is ready when the pane contains "Recent activity" (or "No recent activity").
+func (t *Tmux) WaitForClaudeUI(session string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		content, err := t.CapturePane(session, 20) // last 20 lines
+		if err != nil {
+			time.Sleep(constants.PollInterval)
+			continue
+		}
+		if strings.Contains(content, "Recent activity") {
+			return nil
+		}
+		time.Sleep(constants.PollInterval)
+	}
+	return fmt.Errorf("timeout waiting for Claude UI")
+}
 
 // WaitForRuntimeReady polls until the runtime's prompt indicator appears in the pane.
 // Runtime is ready when we see the configured prompt prefix at the start of a line.
