@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>System Prompts - Gas Town</title>
+    <style>
+        .prompts-section {
+            margin-bottom: 30px;
+        }
+        .prompts-section h3 {
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .prompt-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .prompt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .prompt-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .role-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .role-mayor { background: #8b5cf6; color: white; }
+        .role-deacon { background: #ec4899; color: white; }
+        .role-witness { background: #ef4444; color: white; }
+        .role-refinery { background: #a855f7; color: white; }
+        .role-polecat { background: #f59e0b; color: black; }
+        .role-crew { background: #22c55e; color: black; }
+        .source-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            background: var(--bg-input);
+            color: var(--text-secondary);
+        }
+        .prompt-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .prompt-content {
+            font-family: monospace;
+            white-space: pre-wrap;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .prompt-meta {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+        .btn-edit {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .btn-edit:hover {
+            border-color: var(--green);
+            color: var(--green);
+        }
+        .btn-save {
+            padding: 6px 12px;
+            background: var(--green);
+            color: var(--bg-dark);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .btn-save:hover {
+            opacity: 0.9;
+        }
+        .btn-cancel {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .btn-cancel:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+        .edit-textarea {
+            width: 100%;
+            min-height: 300px;
+            font-family: monospace;
+            padding: 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            resize: vertical;
+        }
+        .edit-textarea:focus {
+            outline: none;
+            border-color: var(--green);
+        }
+        .source-select {
+            padding: 6px 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+        .source-select:focus {
+            outline: none;
+            border-color: var(--green);
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .alert-success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid var(--green);
+            color: var(--green);
+        }
+        .alert-error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--red);
+            color: var(--red);
+        }
+        .rig-selector {
+            margin-bottom: 20px;
+        }
+        .rig-select {
+            padding: 8px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body x-data="promptsPanel()">
+    {{template "nav" .}}
+
+    <div class="container">
+        <!-- Loading overlay -->
+        <template x-if="loading">
+            <div class="loading-overlay">
+                <div class="loading-spinner"></div>
+            </div>
+        </template>
+
+        <!-- Alerts -->
+        <template x-if="message">
+            <div :class="'alert alert-' + messageType" x-text="message"></div>
+        </template>
+
+        <div class="card">
+            <h2>System Prompts</h2>
+            <p class="text-muted" style="margin-bottom: 20px;">View and edit system prompts for each agent role. Prompts can be inline text or stored in files.</p>
+
+            <!-- Rig selector (optional) -->
+            <div class="rig-selector" x-show="rigs.length > 0">
+                <label for="rig-select">Rig (optional):</label>
+                <select id="rig-select" class="rig-select" x-model="selectedRig" @change="loadPrompts">
+                    <option value="">Town-level (global)</option>
+                    <template x-for="rig in rigs" :key="rig.name">
+                        <option :value="rig.name" x-text="rig.name"></option>
+                    </template>
+                </select>
+                <p class="help-text">Select a rig to view/edit rig-level overrides. Leave empty for town-level prompts.</p>
+            </div>
+
+            <!-- Prompts list -->
+            <div class="prompts-section">
+                <template x-for="prompt in prompts" :key="prompt.role">
+                    <div class="prompt-card">
+                        <div class="prompt-header">
+                            <div class="prompt-title">
+                                <span class="role-badge" :class="'role-' + prompt.role" x-text="prompt.role"></span>
+                                <span class="source-badge" x-text="prompt.source"></span>
+                                <span class="source-badge" x-text="'From: ' + prompt.resolved_from"></span>
+                                <span x-show="prompt.file_path" class="source-badge" x-text="'File: ' + prompt.file_path"></span>
+                            </div>
+                            <div class="prompt-actions">
+                                <template x-if="!prompt.editing">
+                                    <button class="btn-edit" @click="startEdit(prompt)">Edit</button>
+                                </template>
+                                <template x-if="prompt.editing">
+                                    <button class="btn-save" @click="savePrompt(prompt)" :disabled="saving">Save</button>
+                                </template>
+                                <template x-if="prompt.editing">
+                                    <button class="btn-cancel" @click="cancelEdit(prompt)">Cancel</button>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="prompt-meta" x-show="!prompt.editing">
+                            <span x-text="'Resolved from: ' + prompt.resolved_from"></span>
+                            <span x-show="prompt.rig"> • Rig: <span x-text="prompt.rig"></span></span>
+                        </div>
+                        <template x-if="!prompt.editing">
+                            <div class="prompt-content" x-text="prompt.content"></div>
+                        </template>
+                        <template x-if="prompt.editing">
+                            <div>
+                                <label>Source:</label>
+                                <select class="source-select" x-model="prompt.editSource">
+                                    <option value="inline">Inline text</option>
+                                    <option value="file">File-backed</option>
+                                </select>
+                                <div x-show="prompt.editSource === 'file'" style="margin-top: 10px;">
+                                    <label>File path (relative to rig/town):</label>
+                                    <input type="text" class="config-input" x-model="prompt.editFilePath" placeholder="prompts/role.md">
+                                    <p class="help-text">File will be created if it doesn't exist. Use 'file:' prefix automatically.</p>
+                                </div>
+                                <textarea class="edit-textarea" x-model="prompt.editContent"></textarea>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        function promptsPanel() {
+            return {
+                loading: true,
+                saving: false,
+                message: '',
+                messageType: 'success',
+                selectedRig: '',
+                rigs: [],
+                prompts: [],
+
+                init() {
+                    this.loadRigs();
+                    this.loadPrompts();
+                },
+
+                async loadRigs() {
+                    try {
+                        const res = await fetch('/api/rigs');
+                        if (!res.ok) throw new Error('Failed to load rigs');
+                        const data = await res.json();
+                        this.rigs = data.rigs || [];
+                    } catch (e) {
+                        console.error('Failed to load rigs:', e);
+                    }
+                },
+
+                async loadPrompts() {
+                    this.loading = true;
+                    this.message = '';
+                    try {
+                        // Load prompts for each role
+                        const roles = ['mayor', 'deacon', 'witness', 'refinery', 'polecat', 'crew'];
+                        this.prompts = [];
+                        for (const role of roles) {
+                            let url = `/api/prompts/${role}`;
+                            if (this.selectedRig) {
+                                url += `?rig=${encodeURIComponent(this.selectedRig)}`;
+                            }
+                            const res = await fetch(url);
+                            if (!res.ok) {
+                                console.error(`Failed to load prompt for ${role}:`, await res.text());
+                                continue;
+                            }
+                            const prompt = await res.json();
+                            prompt.editing = false;
+                            prompt.editContent = prompt.content;
+                            prompt.editSource = prompt.source === 'file' ? 'file' : 'inline';
+                            prompt.editFilePath = prompt.file_path || '';
+                            this.prompts.push(prompt);
+                        }
+                    } catch (e) {
+                        this.message = 'Failed to load prompts: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                    this.loading = false;
+                },
+
+                startEdit(prompt) {
+                    prompt.editing = true;
+                    prompt.editContent = prompt.content;
+                    prompt.editSource = prompt.source === 'file' ? 'file' : 'inline';
+                    prompt.editFilePath = prompt.file_path || '';
+                },
+
+                cancelEdit(prompt) {
+                    prompt.editing = false;
+                },
+
+                async savePrompt(prompt) {
+                    this.saving = true;
+                    this.message = '';
+                    try {
+                        const payload = {
+                            content: prompt.editContent,
+                            source: prompt.editSource
+                        };
+                        if (prompt.editSource === 'file') {
+                            payload.file_path = prompt.editFilePath;
+                        }
+
+                        let url = `/api/prompts/${prompt.role}`;
+                        if (this.selectedRig) {
+                            url += `?rig=${encodeURIComponent(this.selectedRig)}`;
+                        }
+
+                        const res = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+
+                        this.message = `Prompt for ${prompt.role} updated successfully`;
+                        this.messageType = 'success';
+
+                        // Reload prompts
+                        await this.loadPrompts();
+                    } catch (e) {
+                        this.message = 'Failed to save prompt: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                    this.saving = false;
+                }
+            };
+        }
+    </script>
+</body>
+</html>
