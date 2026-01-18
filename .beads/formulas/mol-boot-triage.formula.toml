@@ -16,7 +16,7 @@ Boot is always fresh - no persistent state between invocations.
 Handoff mail provides continuity for the next Boot instance.
 """
 formula = "mol-boot-triage"
-version = 1
+version = 2
 
 [[steps]]
 id = "observe"
@@ -56,12 +56,23 @@ ls -lt ~/gt/.beads-wisp/*.wisp.json 2>/dev/null | head -5
 gt mail inbox deacon 2>/dev/null | head -10
 ```
 
+**Step 5: Check hook status for patrol agents**
+```bash
+# Check if patrol agents (witness/deacon) have work on their hooks
+gt hook show witness
+gt hook show deacon
+```
+
+Look for "(empty)" output indicating idle-but-alive state. If hook is empty for a patrol agent, intervention may be required (assign work or nudge).
+
 Record observations for the decide step:
 - deacon_alive: true/false
 - pane_activity: active/idle/stuck
 - last_activity_age: duration since last activity
 - pending_mail: count of unread messages
 - error_signals: any errors observed
+- hook_witness_empty: true/false
+- hook_deacon_empty: true/false
 """
 
 [[steps]]
@@ -83,6 +94,11 @@ Analyze observations and decide what action to take.
 | Alive, idle > 15 min | Any | WAKE |
 | Alive, stuck (errors) | Any | INTERRUPT |
 
+**Hook Status Considerations**
+
+- If `hook_witness_empty` is true: Witness agent is alive but has no work on hook. Consider nudging Witness to check for pending assignments.
+- If `hook_deacon_empty` is true: Deacon agent is alive but has no work on hook. This may indicate idle-but-alive state. Consider nudging Deacon or assigning work.
+
 **Judgment Guidance**
 
 Agents may take several minutes on legitimate work. Ten minutes or more in edge cases.
@@ -93,6 +109,7 @@ Signs of stuck:
 - Tool prompt waiting indefinitely
 - Silence with pending mail
 - Agent reporting issues but not progressing
+- Hook empty for patrol agent (idle-but-alive)
 
 Signs of working:
 - Tool calls in progress

@@ -67,6 +67,10 @@ bd show hq-deacon 2>/dev/null
 
 # Recent activity
 gt feed --since 10m --plain | head -20
+
+# Hook status for patrol agents
+gt hook show witness
+gt hook show deacon
 ```
 
 ### Step 2: Decide
@@ -82,6 +86,8 @@ Analyze observations using this decision matrix:
 | Alive, idle 5-15 min | Has mail | NUDGE |
 | Alive, idle > 15 min | Any | WAKE |
 | Alive, stuck (errors) | Any | INTERRUPT |
+
+**Hook Status**: Check if patrol agents (witness/deacon) have empty hooks. If hook is empty, consider nudging the agent to check for pending work.
 
 **Judgment Guidance**: Agents may take several minutes on legitimate work.
 Don't be too aggressive - false positives are disruptive.
