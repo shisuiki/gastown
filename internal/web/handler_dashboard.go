@@ -294,12 +294,14 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		}
 	}
 
-	// Filter out agent-type issues (shown in Role Beads section)
+	// Filter out system-type issues (agent=Role Beads, molecule/gate=patrols, convoy=separate section)
 	issues := make([]IssueRow, 0, len(allIssues))
 	for _, issue := range allIssues {
-		if issue.Type != "agent" {
-			issues = append(issues, issue)
+		switch issue.Type {
+		case "agent", "molecule", "gate", "convoy":
+			continue // skip system types
 		}
+		issues = append(issues, issue)
 	}
 
 	// Limit to first 20 issues for dashboard
