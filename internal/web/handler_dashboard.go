@@ -303,3 +303,58 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		"issues": issues,
 	}
 }
+
+// RoleBeadRow represents an agent role bead.
+type RoleBeadRow struct {
+	ID     string   `json:"id"`
+	Title  string   `json:"title"`
+	Status string   `json:"status"`
+	Labels []string `json:"labels"`
+}
+
+// handleAPIRoleBeads returns active agent role beads.
+func (h *GUIHandler) handleAPIRoleBeads(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cacheKey := "role_beads"
+
+	// Use stale-while-revalidate
+	cached := h.cache.GetStaleOrRefresh(cacheKey, IssuesCacheTTL, func() interface{} {
+		return h.fetchRoleBeads()
+	})
+
+	if cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
+	// No cache - fetch synchronously
+	result := h.fetchRoleBeads()
+	h.cache.Set(cacheKey, result, IssuesCacheTTL)
+	json.NewEncoder(w).Encode(result)
+}
+
+// fetchRoleBeads gets agent role beads from beads.
+func (h *GUIHandler) fetchRoleBeads() map[string]interface{} {
+	// Query beads with issue_type=agent and status=open
+	cmd := exec.Command("bd", "list", "--json", "--type=agent", "--status=open")
+	output, err := cmd.Output()
+	if err != nil {
+		return map[string]interface{}{
+			"error":  "Failed to fetch role beads",
+			"agents": []RoleBeadRow{},
+		}
+	}
+
+	var beads []RoleBeadRow
+	if err := json.Unmarshal(output, &beads); err != nil {
+		return map[string]interface{}{
+			"error":  "Failed to parse role beads",
+			"agents": []RoleBeadRow{},
+		}
+	}
+
+	return map[string]interface{}{
+		"agents": beads,
+	}
+}

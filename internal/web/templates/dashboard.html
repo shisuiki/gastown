@@ -56,6 +56,11 @@
                 <div class="card-content" id="claude-usage">Loading...</div>
             </div>
 
+            <div class="card">
+                <h2>🎭 Role Beads</h2>
+                <div class="card-content" id="role-beads">Loading...</div>
+            </div>
+
             <div class="card" style="grid-column: 1 / -1;">
                 <h2>📋 Active Issues</h2>
                 <div class="card-content" id="issues-list" style="max-height: 250px; overflow-y: auto;">Loading...</div>
@@ -240,15 +245,59 @@
             }
         }
 
+        async function loadRoleBeads() {
+            try {
+                const res = await fetch('/api/role-beads');
+                const data = await res.json();
+                document.getElementById('role-beads').innerHTML = renderRoleBeads(data.agents || []);
+            } catch (e) {
+                document.getElementById('role-beads').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
+            }
+        }
+
+        function renderRoleBeads(agents) {
+            if (!agents || agents.length === 0) {
+                return '<p class="text-muted">No active role beads</p>';
+            }
+            let html = '<table class="data-table"><thead><tr><th>ID</th><th>Role</th><th>Title</th></tr></thead><tbody>';
+            for (const a of agents) {
+                const roleType = (a.labels || []).find(l => l.startsWith('role_type:'));
+                const role = roleType ? roleType.replace('role_type:', '') : 'agent';
+                html += '<tr>';
+                html += '<td><code>' + escapeHtml(a.id) + '</code></td>';
+                html += '<td>' + roleIcon(role) + ' ' + escapeHtml(role) + '</td>';
+                html += '<td>' + escapeHtml(a.title) + '</td>';
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function roleIcon(role) {
+            const icons = {
+                'mayor': '🏛️',
+                'deacon': '⛪',
+                'witness': '👁️',
+                'refinery': '🏭',
+                'crew': '👷',
+                'polecat': '🐱',
+                'dog': '🐕',
+                'boot': '🥾'
+            };
+            return icons[role] || '🎭';
+        }
+
         // Initialize
         loadStatus();
         loadActivity();
         loadIssues();
+        loadRoleBeads();
         loadSystemInfo('system-info');
         loadClaudeUsage('claude-usage');
         setInterval(loadStatus, 5000);  // Poll status every 5s
         setInterval(loadActivity, 30000);
         setInterval(loadIssues, 30000);
+        setInterval(loadRoleBeads, 30000);
         setInterval(() => loadSystemInfo('system-info'), 60000);
         setInterval(() => loadClaudeUsage('claude-usage'), 60000);
     </script>
