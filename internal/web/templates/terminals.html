@@ -74,8 +74,31 @@
             }
         }
 
+        // Check URL for session parameter and auto-connect
+        function checkUrlAndConnect() {
+            const params = new URLSearchParams(window.location.search);
+            const sessionId = params.get('session');
+            if (sessionId) {
+                // Wait a moment for sessions to load, then select and connect
+                setTimeout(() => {
+                    const select = document.getElementById('terminal-session');
+                    if (select) {
+                        // Check if the session exists in the dropdown
+                        const option = Array.from(select.options).find(o => o.value === sessionId);
+                        if (option) {
+                            select.value = sessionId;
+                            terminal.connect();
+                        } else {
+                            // Session not found yet, try again after next load
+                            console.log('Session not found in dropdown, will retry...');
+                        }
+                    }
+                }, 500);
+            }
+        }
+
         // Initialize
-        loadAgents();
+        loadAgents().then(() => checkUrlAndConnect());
         setInterval(loadAgents, 5000);
     </script>
 </body>

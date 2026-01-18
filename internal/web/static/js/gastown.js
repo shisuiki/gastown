@@ -310,7 +310,7 @@ function renderAgentsTable(agents) {
     return '<table><tr><th>Type</th><th>Name</th><th>Rig</th><th>Activity</th></tr>' +
         agents.map(a =>
             '<tr><td>' + agentTypeIcon(a.AgentType) + '</td>' +
-            '<td><a href="/agent/' + escapeHtml(a.SessionID) + '">' + escapeHtml(a.Name) + '</a></td>' +
+            '<td><a href="/terminals?session=' + encodeURIComponent(a.SessionID) + '">' + escapeHtml(a.Name) + '</a></td>' +
             '<td>' + escapeHtml(a.Rig) + '</td>' +
             '<td><span class="badge badge-' + getColorClass(a.LastActivity.ColorClass) + '">' +
             escapeHtml(a.LastActivity.FormattedAge) + '</span></td></tr>'
