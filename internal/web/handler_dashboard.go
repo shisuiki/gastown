@@ -286,11 +286,19 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		}
 	}
 
-	var issues []IssueRow
-	if err := json.Unmarshal(output, &issues); err != nil {
+	var allIssues []IssueRow
+	if err := json.Unmarshal(output, &allIssues); err != nil {
 		return map[string]interface{}{
 			"error":  "Failed to parse issues",
 			"issues": []IssueRow{},
+		}
+	}
+
+	// Filter out agent-type issues (shown in Role Beads section)
+	issues := make([]IssueRow, 0, len(allIssues))
+	for _, issue := range allIssues {
+		if issue.Type != "agent" {
+			issues = append(issues, issue)
 		}
 	}
 
