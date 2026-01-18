@@ -202,6 +202,7 @@ func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request)
 // fetchAgentsList gets available agents for mail.
 func (h *GUIHandler) fetchAgentsList() []map[string]string {
 	agents := []map[string]string{
+		{"address": "overseer", "name": "Overseer", "type": "overseer"},
 		{"address": "mayor/", "name": "Mayor", "type": "mayor"},
 		{"address": "deacon/", "name": "Deacon", "type": "deacon"},
 	}
