@@ -231,6 +231,7 @@ func (d *Daemon) heartbeat(state *State) {
 	// Only run if Deacon patrol is enabled
 	if IsPatrolEnabled(d.patrolConfig, "deacon") {
 		d.checkDeaconHeartbeat()
+		d.checkDeaconHookStatus()
 	}
 
 	// 4. Ensure Witnesses are running for all rigs (restart if dead)
@@ -439,7 +440,7 @@ func (d *Daemon) checkDeaconHeartbeat() {
 	} else {
 		// Stuck but not critically - nudge to wake up
 		d.logger.Printf("Deacon stuck for %s - nudging session", age.Round(time.Minute))
-		if err := d.tmux.NudgeSession(sessionName, "HEALTH_CHECK: heartbeat stale, respond to confirm responsiveness"); err != nil {
+		if err := d.tmux.NudgeSession(sessionName, "PATROL_CHECK: run gt hook and report if empty"); err != nil {
 			d.logger.Printf("Error nudging stuck Deacon: %v", err)
 		}
 	}
@@ -1008,4 +1009,100 @@ func (d *Daemon) cleanupOrphanedProcesses() {
 			}
 		}
 	}
+}
+
+// checkDeaconHookStatus checks if the Deacon has a patrol molecule attached.
+// If the hook is empty, auto-attaches a patrol molecule.
+func (d *Daemon) checkDeaconHookStatus() {
+	// Only check if Deacon patrol is enabled
+	if !IsPatrolEnabled(d.patrolConfig, "deacon") {
+		return
+	}
+
+	// Run gt hook show deacon to check hook status
+	cmd := exec.Command("gt", "hook", "show", "deacon")
+	cmd.Dir = d.config.TownRoot
+	output, err := cmd.Output()
+	if err != nil {
+		d.logger.Printf("Error checking Deacon hook status: %v", err)
+		return
+	}
+
+	// Parse output: "deacon: (empty)" or "deacon: <bead-id> '<title>' [status]"
+	outputStr := strings.TrimSpace(string(output))
+	if strings.Contains(outputStr, ": (empty)") {
+		d.logger.Println("Deacon hook is empty - auto-attaching patrol molecule")
+		if err := d.attachPatrolMoleculeToDeacon(); err != nil {
+			d.logger.Printf("Error attaching patrol molecule: %v", err)
+		}
+	} else {
+		d.logger.Printf("Deacon hook has work: %s", outputStr)
+	}
+}
+
+// attachPatrolMoleculeToDeacon creates and hooks a mol-deacon-patrol molecule.
+func (d *Daemon) attachPatrolMoleculeToDeacon() error {
+	// Find beads directory (town-level .beads)
+	beadsDir := filepath.Join(d.config.TownRoot, ".beads")
+	if _, err := os.Stat(beadsDir); os.IsNotExist(err) {
+		return fmt.Errorf("beads directory not found: %s", beadsDir)
+	}
+
+	// 1. Find proto ID for mol-deacon-patrol
+	catalogCmd := exec.Command("bd", "--no-daemon", "mol", "catalog")
+	catalogCmd.Dir = beadsDir
+	catalogOut, err := catalogCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to list molecule catalog: %w", err)
+	}
+
+	var protoID string
+	lines := strings.Split(string(catalogOut), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "mol-deacon-patrol") {
+			parts := strings.Fields(line)
+			if len(parts) > 0 {
+				protoID = strings.TrimSuffix(parts[0], ":")
+				break
+			}
+		}
+	}
+	if protoID == "" {
+		return fmt.Errorf("proto mol-deacon-patrol not found in catalog")
+	}
+
+	// 2. Create patrol wisp
+	spawnCmd := exec.Command("bd", "--no-daemon", "mol", "wisp", "create", protoID, "--actor", "deacon")
+	spawnCmd.Dir = beadsDir
+	spawnOut, err := spawnCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to create patrol wisp: %w", err)
+	}
+
+	// Parse created molecule ID from output
+	var patrolID string
+	for _, line := range strings.Split(string(spawnOut), "\n") {
+		if strings.Contains(line, "Root issue:") || strings.Contains(line, "Created") {
+			parts := strings.Fields(line)
+			for _, p := range parts {
+				if strings.HasPrefix(p, "wisp-") || strings.HasPrefix(p, "gt-") {
+					patrolID = p
+					break
+				}
+			}
+		}
+	}
+	if patrolID == "" {
+		return fmt.Errorf("created wisp but could not parse ID from output")
+	}
+
+	// 3. Hook the wisp to deacon
+	hookCmd := exec.Command("bd", "--no-daemon", "update", patrolID, "--status=hooked", "--assignee=deacon")
+	hookCmd.Dir = beadsDir
+	if err := hookCmd.Run(); err != nil {
+		return fmt.Errorf("failed to hook patrol wisp: %w", err)
+	}
+
+	d.logger.Printf("Attached patrol molecule %s to Deacon", patrolID)
+	return nil
 }

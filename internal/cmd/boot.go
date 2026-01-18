@@ -309,7 +309,7 @@ func runDegradedTriage(b *boot.Boot) (action, target string, err error) {
 			} else {
 				// Stuck but not critically - try nudging first
 				fmt.Printf("Deacon heartbeat is %s old - nudging session\n", age.Round(time.Minute))
-				_ = tm.NudgeSession(deaconSession, "HEALTH_CHECK: heartbeat is stale, respond to confirm responsiveness")
+				_ = tm.NudgeSession(deaconSession, "PATROL_CHECK: run gt hook and report if empty")
 				return "nudge", "deacon-stale", nil
 			}
 		}
