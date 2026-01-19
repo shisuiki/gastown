@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/steveyegge/gastown/internal/mail"
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // MailPageData is the data passed to the mail template.
@@ -44,30 +45,32 @@ func (h *GUIHandler) handleAPISendMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send via gt mail send
-	args := []string{"mail", "send", req.To, "-s", req.Subject}
-	if req.Body != "" {
-		args = append(args, "-m", req.Body)
+	router, err := h.mailRouter()
+	if err != nil {
+		http.Error(w, "Mail router error", http.StatusInternalServerError)
+		return
 	}
 
-	cmd, cancel := command("gt", args...)
-	defer cancel()
-	// Clear GT_ROLE so mail is sent from "overseer" (human via web), not mayor
-	cmd.Env = filterEnv(os.Environ(), "GT_ROLE")
-	output, err := cmd.CombinedOutput()
+	msg := &mail.Message{
+		From:     "overseer",
+		To:       req.To,
+		Subject:  req.Subject,
+		Body:     req.Body,
+		Priority: mail.PriorityNormal,
+		Type:     mail.TypeNotification,
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err != nil {
+	if err := router.Send(msg); err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   string(output),
+			"error":   err.Error(),
 		})
 		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"output":  string(output),
 	})
 }
 
@@ -96,24 +99,31 @@ func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) 
 
 // fetchMailInbox gets mail inbox data.
 func (h *GUIHandler) fetchMailInbox(limit int) map[string]interface{} {
-	cmd, cancel := command("gt", "mail", "inbox", "--json")
-	defer cancel()
-	output, err := cmd.Output()
+	router, err := h.mailRouter()
 	if err != nil {
 		return map[string]interface{}{
-			"messages": []mail.Message{},
+			"messages": []*mail.Message{},
 			"error":    err.Error(),
 		}
 	}
 
-	var messages []mail.Message
-	if err := json.Unmarshal(output, &messages); err != nil {
+	mailbox, err := router.GetMailbox("mayor/")
+	if err != nil {
 		return map[string]interface{}{
-			"messages": []mail.Message{},
-			"error":    "parse error",
+			"messages": []*mail.Message{},
+			"error":    err.Error(),
 		}
 	}
-	return buildMailResponse("", messages, limit)
+
+	messages, err := mailbox.List()
+	if err != nil {
+		return map[string]interface{}{
+			"messages": []*mail.Message{},
+			"error":    err.Error(),
+		}
+	}
+
+	return buildMailResponse("mayor/", messages, limit)
 }
 
 // handleAPIMailAll gets mail for any agent.
@@ -159,27 +169,30 @@ func sanitizeAgentKey(agent string) string {
 
 // fetchMailForAgent gets mail for a specific agent.
 func (h *GUIHandler) fetchMailForAgent(agent string, limit int) map[string]interface{} {
-	cmd, cancel := command("gt", "mail", "inbox", agent, "--json")
-	defer cancel()
-	output, err := cmd.Output()
+	router, err := h.mailRouter()
 	if err != nil {
-		// Try without --json if it fails
-		cmd2, cmdCancel := command("gt", "mail", "inbox", agent)
-		defer cmdCancel()
-		output2, _ := cmd2.CombinedOutput()
 		return map[string]interface{}{
-			"agent": agent,
-			"raw":   string(output2),
-			"error": err.Error(),
+			"agent":    agent,
+			"messages": []*mail.Message{},
+			"error":    err.Error(),
 		}
 	}
 
-	// Parse and forward the JSON
-	var messages []mail.Message
-	if err := json.Unmarshal(output, &messages); err != nil {
+	mailbox, err := router.GetMailbox(agent)
+	if err != nil {
 		return map[string]interface{}{
-			"agent": agent,
-			"raw":   string(output),
+			"agent":    agent,
+			"messages": []*mail.Message{},
+			"error":    err.Error(),
+		}
+	}
+
+	messages, err := mailbox.List()
+	if err != nil {
+		return map[string]interface{}{
+			"agent":    agent,
+			"messages": []*mail.Message{},
+			"error":    err.Error(),
 		}
 	}
 
@@ -198,11 +211,11 @@ func parseLimitParam(r *http.Request, defaultLimit int) int {
 	return limit
 }
 
-func buildMailResponse(agent string, messages []mail.Message, limit int) map[string]interface{} {
+func buildMailResponse(agent string, messages []*mail.Message, limit int) map[string]interface{} {
 	total := len(messages)
 	unread := 0
 	for _, msg := range messages {
-		if !msg.Read {
+		if msg != nil && !msg.Read {
 			unread++
 		}
 	}
@@ -337,30 +350,26 @@ func (h *GUIHandler) handleAPIMailMarkRead(w http.ResponseWriter, r *http.Reques
 		agent = "mayor/"
 	}
 
-	// Set GT_ROLE environment variable to target agent
-	env := os.Environ()
-	// Remove existing GT_ROLE
-	env = filterEnv(env, "GT_ROLE")
-	// Add new GT_ROLE
-	env = append(env, "GT_ROLE="+agent)
-
-	cmd, cancel := command("gt", "mail", "mark-read", req.ID)
-	defer cancel()
-	cmd.Env = env
-	output, err := cmd.CombinedOutput()
-
 	w.Header().Set("Content-Type", "application/json")
+	mailbox, err := h.mailboxForAgent(agent)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   string(output),
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if err := mailbox.MarkReadOnly(req.ID); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
 		})
 		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"output":  string(output),
 	})
 }
 
@@ -390,30 +399,26 @@ func (h *GUIHandler) handleAPIMailMarkUnread(w http.ResponseWriter, r *http.Requ
 		agent = "mayor/"
 	}
 
-	// Set GT_ROLE environment variable to target agent
-	env := os.Environ()
-	// Remove existing GT_ROLE
-	env = filterEnv(env, "GT_ROLE")
-	// Add new GT_ROLE
-	env = append(env, "GT_ROLE="+agent)
-
-	cmd, cancel := command("gt", "mail", "mark-unread", req.ID)
-	defer cancel()
-	cmd.Env = env
-	output, err := cmd.CombinedOutput()
-
 	w.Header().Set("Content-Type", "application/json")
+	mailbox, err := h.mailboxForAgent(agent)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   string(output),
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if err := mailbox.MarkUnreadOnly(req.ID); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
 		})
 		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"output":  string(output),
 	})
 }
 
@@ -443,41 +448,45 @@ func (h *GUIHandler) handleAPIMailArchive(w http.ResponseWriter, r *http.Request
 		agent = "mayor/"
 	}
 
-	// Set GT_ROLE environment variable to target agent
-	env := os.Environ()
-	// Remove existing GT_ROLE
-	env = filterEnv(env, "GT_ROLE")
-	// Add new GT_ROLE
-	env = append(env, "GT_ROLE="+agent)
-
-	cmd, cancel := command("gt", "mail", "archive", req.ID)
-	defer cancel()
-	cmd.Env = env
-	output, err := cmd.CombinedOutput()
-
 	w.Header().Set("Content-Type", "application/json")
+	mailbox, err := h.mailboxForAgent(agent)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   string(output),
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if err := mailbox.Archive(req.ID); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
 		})
 		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"output":  string(output),
 	})
 }
 
-// filterEnv returns a copy of env with the specified key removed.
-func filterEnv(env []string, key string) []string {
-	result := make([]string, 0, len(env))
-	prefix := key + "="
-	for _, e := range env {
-		if !strings.HasPrefix(e, prefix) {
-			result = append(result, e)
+func (h *GUIHandler) mailRouter() (*mail.Router, error) {
+	townRoot := os.Getenv("GT_ROOT")
+	if townRoot == "" {
+		root, err := workspace.FindFromCwdOrError()
+		if err != nil {
+			return nil, err
 		}
+		townRoot = root
 	}
-	return result
+	return mail.NewRouterWithTownRoot(townRoot, townRoot), nil
+}
+
+func (h *GUIHandler) mailboxForAgent(agent string) (*mail.Mailbox, error) {
+	router, err := h.mailRouter()
+	if err != nil {
+		return nil, err
+	}
+	return router.GetMailbox(agent)
 }

@@ -146,8 +146,8 @@ func TestGUIHandler_APISendMail(t *testing.T) {
 	if out["success"] != true {
 		t.Fatalf("success = %v, want true", out["success"])
 	}
-	if !strings.Contains(out["output"].(string), "sent") {
-		t.Fatalf("output = %q, want contains \"sent\"", out["output"])
+	if out["error"] != nil {
+		t.Fatalf("error = %v, want nil", out["error"])
 	}
 }
 
