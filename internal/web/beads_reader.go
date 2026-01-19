@@ -57,6 +57,11 @@ type AgentHook struct {
 	WorkTitle string `json:"work_title,omitempty"`
 }
 
+// GetAgentHookStatus returns hook status for a specific agent.
+func (r *BeadsReader) GetAgentHookStatus(agent string) AgentHook {
+	return r.getAgentHook(agent, "")
+}
+
 // NewBeadsReader creates a BeadsReader for the given town root.
 func NewBeadsReader(townRoot string) (*BeadsReader, error) {
 	return newBeadsReader(townRoot, "")

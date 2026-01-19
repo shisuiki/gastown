@@ -3,11 +3,8 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // MayorPageData is the data passed to the mayor template.
@@ -109,17 +106,13 @@ func (h *GUIHandler) handleAPIMayorStatus(w http.ResponseWriter, r *http.Request
 	sessionExists := cmd.Run() == nil
 
 	hookStatus := "Nothing on hook"
-	if townRoot, err := workspace.FindFromCwdOrError(); err == nil && townRoot != "" {
-		reader, err := NewBeadsReaderWithBeadsDir(townRoot, filepath.Join(townRoot, ".beads"))
-		if err == nil {
-			hooked, err := reader.ListBeads(BeadFilter{
-				Status:           "hooked",
-				Assignee:         "mayor",
-				IncludeEphemeral: true,
-				Limit:            1,
-			})
-			if err == nil && len(hooked) > 0 {
-				hookStatus = "Hooked: " + hooked[0].ID
+	if reader, err := NewBeadsReader(""); err == nil {
+		hook := reader.GetAgentHookStatus("mayor")
+		if hook.HasWork {
+			if hook.WorkID != "" {
+				hookStatus = "Hooked: " + hook.WorkID
+			} else {
+				hookStatus = "Hooked work"
 			}
 		}
 	}

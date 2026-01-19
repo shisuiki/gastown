@@ -27,3 +27,4 @@
 - P4: Documented data layer modernization decision (JSONL-first, defer sqlite driver).
 - P5: Post-refactor review complete; follow-up beads filed (hq-fw9b, hq-1t5q, hq-jxfy).
 - P5: ReadyBeads now ignores non-blocking dependency types to match bd ready semantics.
+- P5: Mayor hook status now uses agent hook lookup to include mail/molecule hooks.
