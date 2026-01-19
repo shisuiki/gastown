@@ -62,6 +62,21 @@ prefix maps to its beads location (the mayor's clone in that rig).
 
 Debug routing: `BD_DEBUG_ROUTING=1 bd show <id>`
 
+## Command Safety (Confirmations)
+
+Some high-impact `gt` commands require an explicit `--confirm` flag to run. This prevents accidental destructive or state-changing actions.
+
+Commands that require `--confirm`:
+
+- `gt down --confirm` (unless `--dry-run`)
+- `gt shutdown --confirm`
+- `gt uninstall --confirm`
+- `gt rig remove <name> --confirm`
+- `gt rig reset --confirm` (unless `--dry-run`)
+- `gt polecat nuke ... --confirm` (unless `--dry-run`)
+- `gt unsling ... --confirm` (unless `--dry-run`)
+- `gt release ... --confirm`
+
 ## Configuration
 
 ### Rig Config (`config.json`)

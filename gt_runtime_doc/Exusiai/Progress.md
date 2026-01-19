@@ -2,6 +2,7 @@
 
 - Added prompt partials and reordered role templates with critical rules and Do-Not-Do sections.
 - Added AgentName to role data and updated crew/polecat templates for naming clarity.
-- Aligned system prompts with role boundaries.
-- Added --confirm guardrails to high-risk gt commands (down, shutdown, uninstall, rig remove/reset, polecat nuke, unsling, release).
+- Aligned system prompts with role boundaries and commit-granularity guidance.
+- Added --confirm guardrails to high-risk gt commands and documented new requirement.
+- Closed prompt optimization issues: hq-zqyl, hq-5abf, hq-gpxx, hq-dy59, hq-u9lw.
 - Ran `go test ./internal/templates`.
