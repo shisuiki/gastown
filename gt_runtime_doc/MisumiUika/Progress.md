@@ -12,3 +12,4 @@
 - P1: Cached agent hook API and switched hook parsing to `gt hook status --json` first.
 - P2: Added mobile-friendly login link (GET token link + copy/share) on WebUI login page.
 - P1: WebUI mail handlers now use mail router/mailboxes instead of `gt mail` CLI.
+- P3: Added WebUI development notes doc with data layer modernization plan.
