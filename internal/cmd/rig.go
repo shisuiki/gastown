@@ -261,6 +261,8 @@ var (
 	rigResetStale      bool
 	rigResetDryRun     bool
 	rigResetRole       string
+	rigResetConfirm    bool
+	rigRemoveConfirm   bool
 	rigShutdownForce   bool
 	rigShutdownNuclear bool
 	rigStopForce       bool
@@ -287,11 +289,14 @@ func init() {
 	rigAddCmd.Flags().StringVar(&rigAddLocalRepo, "local-repo", "", "Local repo path to share git objects (optional)")
 	rigAddCmd.Flags().StringVar(&rigAddBranch, "branch", "", "Default branch name (default: auto-detected from remote)")
 
+	rigRemoveCmd.Flags().BoolVar(&rigRemoveConfirm, "confirm", false, "Confirm rig removal from registry")
+
 	rigResetCmd.Flags().BoolVar(&rigResetHandoff, "handoff", false, "Clear handoff content")
 	rigResetCmd.Flags().BoolVar(&rigResetMail, "mail", false, "Clear stale mail messages")
 	rigResetCmd.Flags().BoolVar(&rigResetStale, "stale", false, "Reset orphaned in_progress issues (no active session)")
 	rigResetCmd.Flags().BoolVar(&rigResetDryRun, "dry-run", false, "Show what would be reset without making changes")
 	rigResetCmd.Flags().StringVar(&rigResetRole, "role", "", "Role to reset (default: auto-detect from cwd)")
+	rigResetCmd.Flags().BoolVar(&rigResetConfirm, "confirm", false, "Confirm rig reset (required unless --dry-run)")
 
 	rigShutdownCmd.Flags().BoolVarP(&rigShutdownForce, "force", "f", false, "Force immediate shutdown")
 	rigShutdownCmd.Flags().BoolVar(&rigShutdownNuclear, "nuclear", false, "DANGER: Bypass ALL safety checks (loses uncommitted work!)")
@@ -492,6 +497,10 @@ func runRigList(cmd *cobra.Command, args []string) error {
 func runRigRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
+	if err := requireConfirm(rigRemoveConfirm, "remove rig"); err != nil {
+		return err
+	}
+
 	// Find workspace
 	townRoot, err := workspace.FindFromCwdOrError()
 	if err != nil {
@@ -526,6 +535,12 @@ func runRigRemove(cmd *cobra.Command, args []string) error {
 }
 
 func runRigReset(cmd *cobra.Command, args []string) error {
+	if !rigResetDryRun {
+		if err := requireConfirm(rigResetConfirm, "reset rig state"); err != nil {
+			return err
+		}
+	}
+
 	// Find workspace
 	townRoot, err := workspace.FindFromCwdOrError()
 	if err != nil {

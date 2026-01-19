@@ -65,6 +65,7 @@ var (
 	downNuke     bool
 	downDryRun   bool
 	downPolecats bool
+	downConfirm  bool
 )
 
 func init() {
@@ -74,6 +75,7 @@ func init() {
 	downCmd.Flags().BoolVarP(&downAll, "all", "a", false, "Stop bd daemons/activity and verify shutdown")
 	downCmd.Flags().BoolVar(&downNuke, "nuke", false, "Kill entire tmux server (DESTRUCTIVE - kills non-GT sessions!)")
 	downCmd.Flags().BoolVar(&downDryRun, "dry-run", false, "Preview what would be stopped without taking action")
+	downCmd.Flags().BoolVar(&downConfirm, "confirm", false, "Confirm stopping services (required unless --dry-run)")
 	rootCmd.AddCommand(downCmd)
 }
 
@@ -86,6 +88,12 @@ func runDown(cmd *cobra.Command, args []string) error {
 	t := tmux.NewTmux()
 	if !t.IsAvailable() {
 		return fmt.Errorf("tmux not available (is tmux installed and on PATH?)")
+	}
+
+	if !downDryRun {
+		if err := requireConfirm(downConfirm, "stop services"); err != nil {
+			return err
+		}
 	}
 
 	// Phase 0: Acquire shutdown lock (skip for dry-run)

@@ -34,6 +34,7 @@ type RoleData struct {
 	WorkDir        string   // current working directory
 	DefaultBranch  string   // default branch for merges (e.g., "main", "develop")
 	Polecat        string   // polecat name (for polecat role)
+	AgentName      string   // agent name for role display (crew/polecat)
 	Polecats       []string // list of polecats (for witness role)
 	BeadsDir       string   // BEADS_DIR path
 	IssuePrefix    string   // beads issue prefix

@@ -42,6 +42,7 @@ var (
 	shutdownYes            bool
 	shutdownPolecatsOnly   bool
 	shutdownNuclear        bool
+	shutdownConfirm        bool
 )
 
 var startCmd = &cobra.Command{
@@ -133,6 +134,8 @@ func init() {
 		"Skip confirmation prompt (alias for --yes)")
 	shutdownCmd.Flags().BoolVarP(&shutdownYes, "yes", "y", false,
 		"Skip confirmation prompt")
+	shutdownCmd.Flags().BoolVar(&shutdownConfirm, "confirm", false,
+		"Confirm shutdown (required to proceed)")
 	shutdownCmd.Flags().BoolVar(&shutdownPolecatsOnly, "polecats-only", false,
 		"Only stop polecats (minimal shutdown)")
 	shutdownCmd.Flags().BoolVar(&shutdownNuclear, "nuclear", false,
@@ -441,6 +444,10 @@ func runShutdown(cmd *cobra.Command, args []string) error {
 	if len(toStop) == 0 {
 		fmt.Printf("%s Gas Town was not running\n", style.Dim.Render("○"))
 		return nil
+	}
+
+	if err := requireConfirm(shutdownConfirm, "shutdown"); err != nil {
+		return err
 	}
 
 	// Show what will happen

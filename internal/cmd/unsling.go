@@ -42,17 +42,25 @@ Related commands:
 var (
 	unslingDryRun bool
 	unslingForce  bool
+	unslingConfirm bool
 )
 
 func init() {
 	unslingCmd.Flags().BoolVarP(&unslingDryRun, "dry-run", "n", false, "Show what would be done")
 	unslingCmd.Flags().BoolVarP(&unslingForce, "force", "f", false, "Unsling even if work is incomplete")
+	unslingCmd.Flags().BoolVar(&unslingConfirm, "confirm", false, "Confirm unsling (required unless --dry-run)")
 	rootCmd.AddCommand(unslingCmd)
 }
 
 func runUnsling(cmd *cobra.Command, args []string) error {
 	var targetBeadID string
 	var targetAgent string
+
+	if !unslingDryRun {
+		if err := requireConfirm(unslingConfirm, "unsling work"); err != nil {
+			return err
+		}
+	}
 
 	// Parse args: [bead-id] [target]
 	switch len(args) {

@@ -62,6 +62,7 @@ func TestRenderRole_Polecat(t *testing.T) {
 		WorkDir:       "/test/town/myrig/polecats/TestCat",
 		DefaultBranch: "main",
 		Polecat:       "TestCat",
+		AgentName:     "TestCat",
 		MayorSession:  "gt-town-mayor",
 		DeaconSession: "gt-town-deacon",
 	}
@@ -288,6 +289,9 @@ func TestGetAllRoleTemplates_ContentValidity(t *testing.T) {
 	for name, content := range templates {
 		if !strings.HasSuffix(name, ".md.tmpl") {
 			t.Errorf("unexpected file %s (should end with .md.tmpl)", name)
+		}
+		if strings.HasPrefix(name, "_") || strings.HasPrefix(name, "partials") {
+			continue
 		}
 		contentStr := string(content)
 		if !strings.Contains(contentStr, "Context") {

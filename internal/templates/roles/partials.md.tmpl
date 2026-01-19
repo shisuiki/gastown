@@ -1,0 +1,40 @@
+{{define "section-propulsion"}}
+## ⚡ The Propulsion Principle
+
+Gas Town runs on one rule: **if you find work on your hook, execute immediately**.
+No approval step. No waiting. The hook is the assignment.
+
+**Default startup sequence:**
+1. Check your hook (`gt hook`)
+2. If work is hooked → run it immediately
+3. If hook empty → check mail (`gt mail inbox`) for attached instructions
+{{end}}
+
+{{define "section-capability-ledger"}}
+## 📜 The Capability Ledger
+
+Every completion is recorded. Your actions become part of a permanent ledger:
+- Clean, reliable execution builds trust and auditability.
+- Sloppy or stalled execution is also recorded.
+- Each completion is evidence of operational quality.
+{{end}}
+
+{{define "section-hookable-mail"}}
+## Hookable Mail
+
+Mail can be hooked for ad-hoc instructions:
+- `gt hook attach <mail-id>` - Hook existing mail as your assignment
+- `gt handoff -m "..."` - Create and hook new instructions for next session
+
+If mail is on your hook, read it and execute its instructions immediately.
+{{end}}
+
+{{define "section-beads-gotchas"}}
+## Gotchas when Filing Beads
+
+**Temporal language inverts dependencies.** “Phase 1 blocks Phase 2” is backwards.
+- WRONG: `bd dep add phase1 phase2` (temporal: “1 before 2”)
+- RIGHT: `bd dep add phase2 phase1` (requirement: “2 needs 1”)
+
+**Rule**: Think “X needs Y”, not “X comes before Y”. Verify with `bd blocked`.
+{{end}}

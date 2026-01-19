@@ -20,6 +20,7 @@ import (
 var (
 	uninstallWorkspace bool
 	uninstallForce     bool
+	uninstallConfirm   bool
 )
 
 var uninstallCmd = &cobra.Command{
@@ -51,10 +52,16 @@ func init() {
 		"Also remove the workspace directory (DESTRUCTIVE)")
 	uninstallCmd.Flags().BoolVarP(&uninstallForce, "force", "f", false,
 		"Skip confirmation prompts")
+	uninstallCmd.Flags().BoolVar(&uninstallConfirm, "confirm", false,
+		"Confirm uninstall (required to proceed)")
 	rootCmd.AddCommand(uninstallCmd)
 }
 
 func runUninstall(cmd *cobra.Command, args []string) error {
+	if err := requireConfirm(uninstallConfirm, "uninstall"); err != nil {
+		return err
+	}
+
 	if !uninstallForce {
 		fmt.Println("This will remove Gas Town from your system.")
 		fmt.Println()

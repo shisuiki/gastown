@@ -10,6 +10,7 @@ import (
 )
 
 var releaseReason string
+var releaseConfirm bool
 
 var releaseCmd = &cobra.Command{
 	Use:     "release <issue-id>...",
@@ -34,10 +35,15 @@ retried by releasing and reclaiming stuck steps.`,
 
 func init() {
 	releaseCmd.Flags().StringVarP(&releaseReason, "reason", "r", "", "Reason for releasing (added as note)")
+	releaseCmd.Flags().BoolVar(&releaseConfirm, "confirm", false, "Confirm release of issues")
 	rootCmd.AddCommand(releaseCmd)
 }
 
 func runRelease(cmd *cobra.Command, args []string) error {
+	if err := requireConfirm(releaseConfirm, "release issues"); err != nil {
+		return err
+	}
+
 	// Get working directory for beads
 	cwd, err := os.Getwd()
 	if err != nil {

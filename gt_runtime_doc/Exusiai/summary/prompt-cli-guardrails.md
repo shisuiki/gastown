@@ -1,0 +1,1 @@
+Prompt work completed: shared partials, reordered role templates with critical rules/Do-Not-Do sections, AgentName naming cleanup, and system-prompt boundary alignment. Added --confirm guardrails to high-risk gt commands and verified templates via go test.

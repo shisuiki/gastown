@@ -154,6 +154,7 @@ var (
 	polecatNukeAll           bool
 	polecatNukeDryRun        bool
 	polecatNukeForce         bool
+	polecatNukeConfirm       bool
 	polecatCheckRecoveryJSON bool
 )
 
@@ -302,6 +303,7 @@ func init() {
 	polecatNukeCmd.Flags().BoolVar(&polecatNukeAll, "all", false, "Nuke all polecats in the rig")
 	polecatNukeCmd.Flags().BoolVar(&polecatNukeDryRun, "dry-run", false, "Show what would be nuked without doing it")
 	polecatNukeCmd.Flags().BoolVarP(&polecatNukeForce, "force", "f", false, "Force nuke, bypassing all safety checks (LOSES WORK)")
+	polecatNukeCmd.Flags().BoolVar(&polecatNukeConfirm, "confirm", false, "Confirm nuke (required unless --dry-run)")
 
 	// Check-recovery flags
 	polecatCheckRecoveryCmd.Flags().BoolVar(&polecatCheckRecoveryJSON, "json", false, "Output as JSON")
@@ -1142,6 +1144,12 @@ func runPolecatNuke(cmd *cobra.Command, args []string) error {
 	if len(targets) == 0 {
 		fmt.Println("No polecats to nuke.")
 		return nil
+	}
+
+	if !polecatNukeDryRun {
+		if err := requireConfirm(polecatNukeConfirm, "nuke polecats"); err != nil {
+			return err
+		}
 	}
 
 	// Safety checks: refuse to nuke polecats with active work unless --force is set
