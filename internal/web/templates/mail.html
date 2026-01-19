@@ -26,24 +26,24 @@
     <div class="container">
         <div class="card" style="margin-bottom: 20px;">
             <h2>📬 Mail Center</h2>
-            <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
-                <div style="flex: 1; min-width: 200px;">
+            <div class="mail-controls">
+                <div class="mail-control">
                     <label class="text-muted" style="font-size: 0.8rem;">View Inbox For:</label>
                     <select id="mail-agent-select" onchange="loadAgentMail()" class="input-field" style="margin-top: 5px;"></select>
                 </div>
-                <div style="flex: 1; min-width: 200px;">
+                <div class="mail-control">
                     <label class="text-muted" style="font-size: 0.8rem;">Send To:</label>
                     <select id="mail-to-select" class="input-field" style="margin-top: 5px;"></select>
                 </div>
             </div>
-            <div id="mail-inbox" style="background: #0f172a; border-radius: 8px; padding: 15px; max-height: 400px; overflow-y: auto; margin-bottom: 15px;">
+            <div id="mail-inbox" class="mail-inbox">
                 <p class="text-muted">Loading agents...</p>
             </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+            <div class="mail-limit-row">
                 <div id="mail-limit-info" class="text-muted" style="font-size: 0.8rem;"></div>
                 <button id="mail-load-more" class="btn btn-secondary btn-sm" onclick="loadMoreMail()" style="display: none;">Load more</button>
             </div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="mail-compose">
                 <input type="text" id="mail-subject" placeholder="Subject" class="input-field">
                 <textarea id="mail-body" placeholder="Message body..." rows="4" class="input-field"></textarea>
                 <button onclick="sendMailToAgent()" class="btn btn-primary">Send Mail</button>
@@ -54,11 +54,11 @@
         <div class="grid">
             <div class="card">
                 <h2>⚡ Quick Actions</h2>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button onclick="quickMessageToMayor()" class="btn btn-primary" style="text-align: left;">
+                <div class="mail-quick-actions">
+                    <button onclick="quickMessageToMayor()" class="btn btn-primary">
                         📨 Message Mayor
                     </button>
-                    <button onclick="refreshInbox()" class="btn btn-secondary" style="text-align: left;">
+                    <button onclick="refreshInbox()" class="btn btn-secondary">
                         🔄 Refresh Inbox
                     </button>
                     <p class="text-muted" style="font-size: 0.8rem; margin-top: 10px;">

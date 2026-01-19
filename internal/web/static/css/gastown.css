@@ -126,6 +126,17 @@ textarea.input-field { resize: vertical; }
 .message.received { background: #334155; }
 
 /* ================================================================
+   Mail Page
+   ================================================================ */
+.mail-controls { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 15px; }
+.mail-control { flex: 1; min-width: 200px; }
+.mail-inbox { background: #0f172a; border-radius: 8px; padding: 15px; max-height: 400px; overflow-y: auto; margin-bottom: 15px; }
+.mail-limit-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+.mail-compose { display: flex; flex-direction: column; gap: 10px; }
+.mail-quick-actions { display: flex; flex-direction: column; gap: 10px; }
+.mail-quick-actions .btn { text-align: left; }
+
+/* ================================================================
    Text Utilities
    ================================================================ */
 .text-muted { color: #64748b; }
