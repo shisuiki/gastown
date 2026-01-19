@@ -264,6 +264,66 @@ class ReconnectingEventSource {
 // API Utilities
 // ============================================================================
 
+function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[2]) : '';
+}
+
+function getCSRFToken() {
+    return getCookie('gt_csrf');
+}
+
+function isStateChangingMethod(method) {
+    return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+}
+
+function isSameOriginUrl(url) {
+    if (url.startsWith('/')) return true;
+    try {
+        const parsed = new URL(url, window.location.origin);
+        return parsed.origin === window.location.origin;
+    } catch (err) {
+        return false;
+    }
+}
+
+const originalFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+    let url = '';
+    let method = 'GET';
+    let headers = new Headers();
+
+    if (input instanceof Request) {
+        url = input.url;
+        method = input.method || method;
+        headers = new Headers(input.headers);
+    } else if (typeof input === 'string') {
+        url = input;
+    }
+
+    if (init.method) {
+        method = init.method;
+    }
+    if (init.headers) {
+        headers = new Headers(init.headers);
+    }
+
+    if (isStateChangingMethod(method) && isSameOriginUrl(url)) {
+        const token = getCSRFToken();
+        if (token && !headers.has('X-CSRF-Token')) {
+            headers.set('X-CSRF-Token', token);
+        }
+    }
+
+    const finalInit = { ...init, headers };
+
+    if (input instanceof Request) {
+        return originalFetch(new Request(input, finalInit));
+    }
+
+    return originalFetch(input, finalInit);
+};
+
 /**
  * Fetch JSON from API endpoint
  * @param {string} url - API URL

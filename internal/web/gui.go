@@ -184,6 +184,14 @@ func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		if isStateChangingMethod(r.Method) && !validateCSRF(r) {
+			log.Printf("CSRF failed: missing or invalid token from %s for %s", r.RemoteAddr, r.URL.Path)
+			http.Error(w, "Forbidden: invalid CSRF token", http.StatusForbidden)
+			return
+		}
+
+		ensureCSRFCookie(w, r)
 	}
 
 	// Check localhost unless remote explicitly allowed
@@ -260,6 +268,7 @@ func (h *GUIHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 				SameSite: http.SameSiteLaxMode,
 				MaxAge:   86400 * 30, // 30 days
 			})
+			ensureCSRFCookie(w, r)
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
