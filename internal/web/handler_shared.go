@@ -3,6 +3,12 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
+
+	"github.com/steveyegge/gastown/internal/config"
+	"github.com/steveyegge/gastown/internal/git"
+	"github.com/steveyegge/gastown/internal/rig"
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // handleAPIRigs returns rigs status.
@@ -70,32 +76,30 @@ func (h *GUIHandler) handleAPICommand(w http.ResponseWriter, r *http.Request) {
 
 // getRigs parses the gt rig list output.
 func (h *GUIHandler) getRigs() []RigStatus {
-	cmd, cancel := command("gt", "rig", "list", "--json")
-	defer cancel()
-	output, err := cmd.Output()
+	townRoot, err := workspace.FindFromCwdOrError()
 	if err != nil {
 		return nil
 	}
 
-	var raw []struct {
-		Name       string `json:"name"`
-		Path       string `json:"path"`
-		Polecats   int    `json:"polecats"`
-		Crew       int    `json:"crew"`
-		HasWitness bool   `json:"has_witness"`
-	}
-
-	if err := json.Unmarshal(output, &raw); err != nil {
+	rigsConfigPath := filepath.Join(townRoot, "mayor", "rigs.json")
+	rigsConfig, err := config.LoadRigsConfig(rigsConfigPath)
+	if err != nil {
 		return nil
 	}
 
-	rigs := make([]RigStatus, 0, len(raw))
-	for _, item := range raw {
+	manager := rig.NewManager(townRoot, rigsConfig, git.NewGit(townRoot))
+	found, err := manager.DiscoverRigs()
+	if err != nil {
+		return nil
+	}
+
+	rigs := make([]RigStatus, 0, len(found))
+	for _, item := range found {
 		rigs = append(rigs, RigStatus{
 			Name:       item.Name,
 			Path:       item.Path,
-			Polecats:   item.Polecats,
-			Crew:       item.Crew,
+			Polecats:   len(item.Polecats),
+			Crew:       len(item.Crew),
 			HasWitness: item.HasWitness,
 		})
 	}

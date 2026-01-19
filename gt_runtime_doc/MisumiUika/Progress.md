@@ -17,3 +17,4 @@
 - P1: Workflow ready list now prefers `bd ready --json` with text fallback.
 - P2: Moved mail page layout styles into shared CSS classes.
 - P2: Dashboard terminology updated from issues to beads for consistency.
+- P3: Replaced rig list CLI usage with rig manager filesystem discovery.
