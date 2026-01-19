@@ -477,6 +477,14 @@ func (m *Manager) RemoveWithOptions(name string, force, nuclear bool) error {
 	m.namePool.Release(name)
 	_ = m.namePool.Save()
 
+	// Clear issue assignment (non-fatal: beads may not be available)
+	if err := m.ClearIssue(name); err != nil {
+		// Only log if not "not found" - it's ok if beads not available
+		if !errors.Is(err, beads.ErrNotFound) {
+			fmt.Printf("Warning: could not clear issue assignment for %s: %v\n", name, err)
+		}
+	}
+
 	// Close agent bead (non-fatal: may not exist or beads may not be available)
 	// NOTE: We use CloseAndClearAgentBead instead of DeleteAgentBead because bd delete --hard
 	// creates tombstones that cannot be reopened.
