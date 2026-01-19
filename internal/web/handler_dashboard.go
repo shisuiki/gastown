@@ -169,26 +169,19 @@ func (h *GUIHandler) getDaemonStatus() DaemonStatus {
 }
 
 func (h *GUIHandler) getMailStatus() MailStatus {
-	cmd, cancel := command("gt", "mail", "inbox", "--json")
-	defer cancel()
-	output, err := cmd.Output()
+	router, err := h.mailRouter()
 	if err != nil {
 		return MailStatus{}
 	}
 
-	var messages []struct {
-		Read bool `json:"read"`
-	}
-	if err := json.Unmarshal(output, &messages); err != nil {
+	mailbox, err := router.GetMailbox("mayor/")
+	if err != nil {
 		return MailStatus{}
 	}
 
-	total := len(messages)
-	unread := 0
-	for _, msg := range messages {
-		if !msg.Read {
-			unread++
-		}
+	total, unread, err := mailbox.Count()
+	if err != nil {
+		return MailStatus{}
 	}
 
 	return MailStatus{

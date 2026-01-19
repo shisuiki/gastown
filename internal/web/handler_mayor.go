@@ -111,14 +111,13 @@ func (h *GUIHandler) handleAPIMayorStatus(w http.ResponseWriter, r *http.Request
 	hookOutput, _ := hookCmd.Output()
 
 	// Get mail count
-	mailCmd, mailCancel := command("gt", "mail", "inbox", "mayor/", "--json")
-	defer mailCancel()
-	mailOutput, _ := mailCmd.Output()
-
-	var mailCount int
-	var messages []interface{}
-	if err := json.Unmarshal(mailOutput, &messages); err == nil {
-		mailCount = len(messages)
+	mailCount := 0
+	if router, err := h.mailRouter(); err == nil {
+		if mailbox, err := router.GetMailbox("mayor/"); err == nil {
+			if total, _, err := mailbox.Count(); err == nil {
+				mailCount = total
+			}
+		}
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
