@@ -14,3 +14,4 @@
 - P1: WebUI mail handlers now use mail router/mailboxes instead of `gt mail` CLI.
 - P3: Added WebUI development notes doc with data layer modernization plan.
 - P1: Dashboard and mayor mail counts now use mail mailbox counts instead of `gt mail` CLI.
+- P1: Workflow ready list now prefers `bd ready --json` with text fallback.

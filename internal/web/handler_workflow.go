@@ -188,9 +188,40 @@ func (h *GUIHandler) handleAPIWorkflowReady(w http.ResponseWriter, r *http.Reque
 
 // fetchReadyIssues gets ready issues from bd ready.
 func (h *GUIHandler) fetchReadyIssues() map[string]interface{} {
-	cmd, cancel := command("bd", "ready")
+	cmd, cancel := command("bd", "ready", "--json")
 	defer cancel()
 	output, err := cmd.Output()
+	if err != nil {
+		return map[string]interface{}{
+			"issues": []interface{}{},
+			"error":  err.Error(),
+		}
+	}
+
+	var raw []struct {
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Priority int    `json:"priority"`
+		Type     string `json:"issue_type"`
+	}
+	if err := json.Unmarshal(output, &raw); err == nil {
+		issues := make([]ReadyIssue, 0, len(raw))
+		for _, item := range raw {
+			issues = append(issues, ReadyIssue{
+				ID:       item.ID,
+				Title:    item.Title,
+				Priority: item.Priority,
+				Type:     item.Type,
+			})
+		}
+		return map[string]interface{}{
+			"issues": issues,
+		}
+	}
+
+	cmd, cancel = command("bd", "ready")
+	defer cancel()
+	output, err = cmd.Output()
 	if err != nil {
 		return map[string]interface{}{
 			"issues": []interface{}{},
