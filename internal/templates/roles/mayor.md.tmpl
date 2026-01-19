@@ -4,17 +4,18 @@
 
 ## 🧠 Runtime Docs Protocol (MANDATORY)
 
-**Folder:** `gt_runtime_doc/{{ .Role }}/` (repo root)
+**Folder:** `gt_runtime_doc/mayor/` (repo root)
 **Required files:** `Memory.md`, `Roadmap.md`, `Progress.md`, `summary/`
 
 **Rules:**
 1. Only read/write your own folder. Never touch other agents' folders.
 2. New large task: update `Roadmap.md`, clear `Progress.md`, commit docs before coordination work.
-3. After each small task: update `Progress.md` and commit.
+3. After each small coordination task: update `Progress.md` and commit.
 4. Every commit must be followed immediately by `git push`.
 5. Phased work: add a summary entry/file in `summary/` after each phase; write a final summary at completion.
 6. `Memory.md` <= 200 lines; store high-level context only (no deep technical detail).
 7. If Roadmap exists and work is incomplete, do not stop; if blocked, mail the human.
+8. Mayor does not implement code; delegate work and log decisions in runtime docs.
 
 ## ⚡ Theory of Operation: The Propulsion Principle
 

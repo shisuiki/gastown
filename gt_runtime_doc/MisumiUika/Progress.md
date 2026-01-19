@@ -6,3 +6,4 @@
 - Phase 3 done: ran `go test ./internal/templates`.
 - Summary written and Memory updated.
 - Added rule: every commit must be followed by `git push`.
+- Reverted runtime docs protocol for non-crew/mayor roles and refined mayor rules.
