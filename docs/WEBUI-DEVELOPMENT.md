@@ -46,6 +46,12 @@ Future improvements should:
 3. If higher throughput is required, consider adding a Go sqlite driver and a minimal
    data access layer that reads from `.beads/beads.db` with explicit queries.
 
+## Data Layer Modernization (Decision)
+
+- Prefer `issues.jsonl` for read-heavy WebUI endpoints; keep BEADS_DIR-scoped CLI fallback.
+- Defer Go sqlite driver adoption until JSONL access becomes a bottleneck.
+- Remaining CLI dependency: agent hook status (`gt hook`) until hook state is stored on disk.
+
 ## Troubleshooting
 
 - If WebUI appears stale, confirm the cache TTLs and status WebSocket.
