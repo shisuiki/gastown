@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/steveyegge/gastown/internal/mail"
 )
 
 // MailPageData is the data passed to the mail template.
@@ -72,9 +75,12 @@ func (h *GUIHandler) handleAPISendMail(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	limit := parseLimitParam(r, 200)
+	cacheKey := "mail_inbox_" + strconv.Itoa(limit)
+
 	// Use stale-while-revalidate
-	cached := h.cache.GetStaleOrRefresh("mail_inbox", 10*time.Second, func() interface{} {
-		return h.fetchMailInbox()
+	cached := h.cache.GetStaleOrRefresh(cacheKey, 10*time.Second, func() interface{} {
+		return h.fetchMailInbox(limit)
 	})
 
 	if cached != nil {
@@ -83,31 +89,31 @@ func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// No cache - fetch synchronously
-	result := h.fetchMailInbox()
-	h.cache.Set("mail_inbox", result, 10*time.Second)
+	result := h.fetchMailInbox(limit)
+	h.cache.Set(cacheKey, result, 10*time.Second)
 	json.NewEncoder(w).Encode(result)
 }
 
 // fetchMailInbox gets mail inbox data.
-func (h *GUIHandler) fetchMailInbox() interface{} {
+func (h *GUIHandler) fetchMailInbox(limit int) map[string]interface{} {
 	cmd, cancel := command("gt", "mail", "inbox", "--json")
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]interface{}{
-			"messages": []interface{}{},
+			"messages": []mail.Message{},
 			"error":    err.Error(),
 		}
 	}
 
-	var result interface{}
-	if err := json.Unmarshal(output, &result); err != nil {
+	var messages []mail.Message
+	if err := json.Unmarshal(output, &messages); err != nil {
 		return map[string]interface{}{
-			"messages": []interface{}{},
+			"messages": []mail.Message{},
 			"error":    "parse error",
 		}
 	}
-	return result
+	return buildMailResponse("", messages, limit)
 }
 
 // handleAPIMailAll gets mail for any agent.
@@ -119,11 +125,12 @@ func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
 		agent = "mayor/"
 	}
 
-	cacheKey := "mail_agent_" + sanitizeAgentKey(agent)
+	limit := parseLimitParam(r, 200)
+	cacheKey := "mail_agent_" + sanitizeAgentKey(agent) + "_" + strconv.Itoa(limit)
 
 	// Use stale-while-revalidate
 	cached := h.cache.GetStaleOrRefresh(cacheKey, 10*time.Second, func() interface{} {
-		return h.fetchMailForAgent(agent)
+		return h.fetchMailForAgent(agent, limit)
 	})
 
 	if cached != nil {
@@ -132,7 +139,7 @@ func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// No cache - fetch synchronously
-	result := h.fetchMailForAgent(agent)
+	result := h.fetchMailForAgent(agent, limit)
 	h.cache.Set(cacheKey, result, 10*time.Second)
 	json.NewEncoder(w).Encode(result)
 }
@@ -151,7 +158,7 @@ func sanitizeAgentKey(agent string) string {
 }
 
 // fetchMailForAgent gets mail for a specific agent.
-func (h *GUIHandler) fetchMailForAgent(agent string) map[string]interface{} {
+func (h *GUIHandler) fetchMailForAgent(agent string, limit int) map[string]interface{} {
 	cmd, cancel := command("gt", "mail", "inbox", agent, "--json")
 	defer cancel()
 	output, err := cmd.Output()
@@ -168,7 +175,7 @@ func (h *GUIHandler) fetchMailForAgent(agent string) map[string]interface{} {
 	}
 
 	// Parse and forward the JSON
-	var messages interface{}
+	var messages []mail.Message
 	if err := json.Unmarshal(output, &messages); err != nil {
 		return map[string]interface{}{
 			"agent": agent,
@@ -176,10 +183,47 @@ func (h *GUIHandler) fetchMailForAgent(agent string) map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{
-		"agent":    agent,
-		"messages": messages,
+	return buildMailResponse(agent, messages, limit)
+}
+
+func parseLimitParam(r *http.Request, defaultLimit int) int {
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr == "" {
+		return defaultLimit
 	}
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 0 {
+		return defaultLimit
+	}
+	return limit
+}
+
+func buildMailResponse(agent string, messages []mail.Message, limit int) map[string]interface{} {
+	total := len(messages)
+	unread := 0
+	for _, msg := range messages {
+		if !msg.Read {
+			unread++
+		}
+	}
+
+	hasMore := false
+	if limit > 0 && total > limit {
+		messages = messages[:limit]
+		hasMore = true
+	}
+
+	resp := map[string]interface{}{
+		"messages": messages,
+		"total":    total,
+		"unread":   unread,
+		"limit":    limit,
+		"has_more": hasMore,
+	}
+	if agent != "" {
+		resp["agent"] = agent
+	}
+	return resp
 }
 
 // handleAPIAgentsList returns all available agents for mail recipients.

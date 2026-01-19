@@ -35,6 +35,9 @@ func (h *GUIHandler) handleAPIBeads(w http.ResponseWriter, r *http.Request) {
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		filter.Limit, _ = strconv.Atoi(limitStr)
 	}
+	if filter.Limit == 0 {
+		filter.Limit = 200
+	}
 
 	beads, err := reader.ListBeads(filter)
 	if err != nil {

@@ -39,6 +39,10 @@
             <div id="mail-inbox" style="background: #0f172a; border-radius: 8px; padding: 15px; max-height: 400px; overflow-y: auto; margin-bottom: 15px;">
                 <p class="text-muted">Loading agents...</p>
             </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                <div id="mail-limit-info" class="text-muted" style="font-size: 0.8rem;"></div>
+                <button id="mail-load-more" class="btn btn-secondary btn-sm" onclick="loadMoreMail()" style="display: none;">Load more</button>
+            </div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <input type="text" id="mail-subject" placeholder="Subject" class="input-field">
                 <textarea id="mail-body" placeholder="Message body..." rows="4" class="input-field"></textarea>
@@ -75,6 +79,10 @@
         // Mail Page JavaScript
         // ================================================================
 
+        const mailLimitStep = 50;
+        let mailLimit = mailLimitStep;
+        let lastAgent = '';
+
         async function loadAgentsList() {
             try {
                 const res = await fetch('/api/agents/list');
@@ -108,27 +116,51 @@
             const agent = document.getElementById('mail-agent-select').value;
             const inbox = document.getElementById('mail-inbox');
             const stats = document.getElementById('mail-stats');
+            const limitInfo = document.getElementById('mail-limit-info');
+            const loadMoreBtn = document.getElementById('mail-load-more');
+
+            if (agent !== lastAgent) {
+                mailLimit = mailLimitStep;
+                lastAgent = agent;
+            }
 
             inbox.innerHTML = '<p class="text-muted">Loading...</p>';
 
             try {
-                const res = await fetch('/api/mail/all?agent=' + encodeURIComponent(agent));
+                const res = await fetch('/api/mail/all?agent=' + encodeURIComponent(agent) + '&limit=' + mailLimit);
                 const data = await res.json();
 
                 if (data.raw) {
                     inbox.innerHTML = '<pre style="white-space: pre-wrap; color: #e2e8f0; margin: 0;">' + escapeHtml(data.raw) + '</pre>';
+                    if (limitInfo) limitInfo.textContent = '';
+                    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
                 } else if (data.messages && Array.isArray(data.messages)) {
+                    const total = data.total ?? data.messages.length;
+                    const showing = data.messages.length;
+                    const unread = data.unread ?? 0;
                     if (data.messages.length === 0) {
                         inbox.innerHTML = '<p class="text-muted">No messages</p>';
                     } else {
                         inbox.innerHTML = data.messages.map(renderMessage).join('');
                     }
-                    stats.innerHTML = '<p>Agent: <strong>' + escapeHtml(agent) + '</strong></p><p>Messages: <strong>' + data.messages.length + '</strong></p>';
+                    stats.innerHTML = '<p>Agent: <strong>' + escapeHtml(agent) + '</strong></p>' +
+                        '<p>Messages: <strong>' + total + '</strong></p>' +
+                        '<p>Unread: <strong>' + unread + '</strong></p>';
+                    if (limitInfo) {
+                        limitInfo.textContent = total ? ('Showing ' + showing + ' of ' + total) : '';
+                    }
+                    if (loadMoreBtn) {
+                        loadMoreBtn.style.display = data.has_more ? 'inline-flex' : 'none';
+                    }
                 } else {
                     inbox.innerHTML = '<p class="text-muted">No messages for ' + escapeHtml(agent) + '</p>';
+                    if (limitInfo) limitInfo.textContent = '';
+                    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
                 }
             } catch (e) {
                 inbox.innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
+                if (limitInfo) limitInfo.textContent = '';
+                if (loadMoreBtn) loadMoreBtn.style.display = 'none';
             }
         }
 
@@ -180,6 +212,11 @@
         }
 
         function refreshInbox() {
+            loadAgentMail();
+        }
+
+        function loadMoreMail() {
+            mailLimit += mailLimitStep;
             loadAgentMail();
         }
 
