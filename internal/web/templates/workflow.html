@@ -4,94 +4,409 @@
     {{template "head" .}}
     <title>Workflow - Gas Town</title>
     <style>
-        .hook-status {
-            padding: 15px;
-            border-radius: 8px;
+        /* Workflow Layout */
+        .workflow-container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        @media (min-width: 1200px) {
+            .workflow-container {
+                grid-template-columns: 280px 1fr;
+            }
+        }
+
+        /* Sidebar */
+        .workflow-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Main Content */
+        .workflow-main {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Tabs */
+        .workflow-tabs {
+            display: flex;
+            gap: 5px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 0;
             margin-bottom: 15px;
+            overflow-x: auto;
         }
-        .hook-empty {
-            background: rgba(100, 100, 100, 0.2);
-            border: 1px dashed var(--border);
-        }
-        .hook-active {
-            background: rgba(74, 222, 128, 0.15);
-            border: 1px solid var(--green);
-        }
-        .hook-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
             color: var(--text-secondary);
-            margin-bottom: 5px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            font-size: 0.95rem;
+            white-space: nowrap;
         }
-        .hook-content {
-            font-size: 1.1rem;
+        .tab-btn:hover {
+            color: var(--text-primary);
         }
-        .hook-id {
+        .tab-btn.active {
+            color: var(--green);
+            border-bottom-color: var(--green);
+        }
+
+        /* Board View */
+        .board-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+        .board-column {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 300px;
+        }
+        .board-column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .board-column-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .board-column-count {
+            background: var(--bg-dark);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+        }
+
+        /* Bead Cards */
+        .bead-card {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .bead-card:hover {
+            border-color: var(--green);
+            transform: translateY(-1px);
+        }
+        .bead-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        .bead-card-id {
             font-family: monospace;
+            font-size: 0.8rem;
             color: var(--green);
         }
+        .bead-card-title {
+            font-size: 0.9rem;
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+        .bead-card-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Badges */
         .priority-badge {
             display: inline-block;
             padding: 2px 8px;
             border-radius: 4px;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: 600;
-            margin-right: 5px;
         }
         .priority-1 { background: var(--red); color: var(--bg-dark); }
         .priority-2 { background: var(--yellow); color: var(--bg-dark); }
         .priority-3 { background: var(--green); color: var(--bg-dark); }
-        .priority-4 { background: var(--text-secondary); color: var(--bg-dark); }
         .type-badge {
             display: inline-block;
             padding: 2px 8px;
             border-radius: 4px;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             background: var(--bg-card);
             border: 1px solid var(--border);
-            margin-right: 5px;
         }
-        .issue-row {
-            padding: 10px;
+        .status-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+        .status-open { background: rgba(74, 222, 128, 0.2); color: var(--green); }
+        .status-in_progress { background: rgba(251, 191, 36, 0.2); color: var(--yellow); }
+        .status-closed { background: rgba(100, 100, 100, 0.3); color: var(--text-secondary); }
+
+        /* List View */
+        .bead-list {
+            background: var(--bg-card);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .bead-list-header {
+            display: grid;
+            grid-template-columns: 100px 1fr 80px 80px 120px;
+            gap: 15px;
+            padding: 12px 15px;
+            background: var(--bg-dark);
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .bead-list-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 80px 80px 120px;
+            gap: 15px;
+            padding: 12px 15px;
             border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .bead-list-row:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .bead-list-row:last-child {
+            border-bottom: none;
+        }
+
+        /* Agent Hooks */
+        .hook-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .hook-card {
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+        }
+        .hook-card.has-work {
+            border-color: var(--green);
+            background: rgba(74, 222, 128, 0.05);
+        }
+        .hook-agent {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+        .hook-work {
+            font-family: monospace;
+            color: var(--green);
+        }
+
+        /* Convoy Cards */
+        .convoy-card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .convoy-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .convoy-progress {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        .issue-row:last-child {
-            border-bottom: none;
+        .progress-bar {
+            width: 100px;
+            height: 6px;
+            background: var(--bg-dark);
+            border-radius: 3px;
+            overflow: hidden;
         }
-        .issue-row:hover {
-            background: rgba(255, 255, 255, 0.02);
+        .progress-fill {
+            height: 100%;
+            background: var(--green);
+            transition: width 0.3s;
         }
-        .issue-id {
-            font-family: monospace;
-            color: var(--text-primary);
-            min-width: 80px;
+        .convoy-beads {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
         }
-        .issue-title {
-            flex: 1;
-            color: var(--text-secondary);
-        }
-        .section-icon {
-            margin-right: 8px;
-        }
-        .section-header {
+        .convoy-bead-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 5px 0;
+            font-size: 0.85rem;
+        }
+
+        /* Search and Filters */
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 10px 15px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: var(--green);
+        }
+        .filter-select {
+            padding: 10px 15px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
             cursor: pointer;
-            user-select: none;
         }
-        .section-header:hover {
-            opacity: 0.8;
+
+        /* Quick Stats */
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
         }
-        .collapse-icon {
-            transition: transform 0.2s;
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
         }
-        .collapse-icon.collapsed {
-            transform: rotate(-90deg);
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--green);
         }
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 15px 20px;
+            border-top: 1px solid var(--border);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Form elements */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+        }
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--green);
+            color: var(--bg-dark);
+        }
+        .btn-primary:hover {
+            filter: brightness(1.1);
+        }
+        .btn-secondary {
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+        .btn-danger {
+            background: var(--red);
+            color: white;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+        }
+
+        /* Loading */
         .loading-spinner {
             display: inline-block;
             width: 16px;
@@ -104,16 +419,29 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        .refresh-btn {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            padding: 5px;
-            font-size: 1rem;
+
+        /* Section */
+        .section-card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 20px;
         }
-        .refresh-btn:hover {
-            color: var(--text-primary);
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
         }
     </style>
 </head>
@@ -121,96 +449,374 @@
     {{template "nav" .}}
 
     <div class="container">
-        <div class="card" style="margin-bottom: 20px;">
-            <div class="section-header" @click="sections.hook = !sections.hook">
-                <h2><span class="section-icon">🪝</span>Current Hook</h2>
-                <span class="collapse-icon" :class="{ 'collapsed': !sections.hook }">▼</span>
+        <!-- Quick Stats -->
+        <div class="quick-stats" style="margin-bottom: 20px;">
+            <div class="stat-card">
+                <div class="stat-number" x-text="stats.open || 0"></div>
+                <div class="stat-label">Open</div>
             </div>
-            <div x-show="sections.hook" x-collapse>
-                <div style="margin-top: 15px;">
-                    <template x-if="loading.hook">
-                        <div class="hook-status hook-empty">
-                            <span class="loading-spinner"></span> Loading...
-                        </div>
-                    </template>
-                    <template x-if="!loading.hook">
-                        <div :class="hookStatus.has_work ? 'hook-status hook-active' : 'hook-status hook-empty'">
-                            <template x-if="!hookStatus.has_work">
-                                <div>
-                                    <div class="hook-label">Hook Status</div>
-                                    <div class="hook-content">No work currently hooked</div>
-                                    <p class="text-muted" style="margin-top: 10px; font-size: 0.85rem;">
-                                        Check mail or use <code>gt sling</code> to assign work
-                                    </p>
-                                </div>
-                            </template>
-                            <template x-if="hookStatus.has_work">
-                                <div>
-                                    <div class="hook-label" x-text="(hookStatus.work_type === 'molecule' ? '📦 Molecule' : '📬 Mail') + ' Hooked'"></div>
-                                    <div class="hook-content">
-                                        <span class="hook-id" x-text="hookStatus.work_id"></span>
-                                        <template x-if="hookStatus.work_title">
-                                            <br><span class="text-secondary" x-text="hookStatus.work_title"></span>
-                                        </template>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-                </div>
+            <div class="stat-card">
+                <div class="stat-number" x-text="stats.in_progress || 0"></div>
+                <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" x-text="stats.ready || 0"></div>
+                <div class="stat-label">Ready</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" x-text="hooks.filter(h => h.has_work).length"></div>
+                <div class="stat-label">Active Hooks</div>
             </div>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <div class="section-header" @click="sections.ready = !sections.ready">
-                    <h2><span class="section-icon">📋</span>Ready Issues</h2>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <button class="refresh-btn" @click.stop="loadReadyIssues()" title="Refresh">🔄</button>
-                        <span class="collapse-icon" :class="{ 'collapsed': !sections.ready }">▼</span>
+        <div class="workflow-container">
+            <!-- Sidebar -->
+            <div class="workflow-sidebar">
+                <!-- Create Bead Button -->
+                <button class="btn btn-primary" style="width: 100%;" @click="showCreateModal = true">
+                    + Create Bead
+                </button>
+
+                <!-- Agent Hooks -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-title">Agent Hooks</span>
+                        <button class="btn btn-sm btn-secondary" @click="loadHooks()">Refresh</button>
+                    </div>
+                    <template x-if="loading.hooks">
+                        <div class="empty-state"><span class="loading-spinner"></span></div>
+                    </template>
+                    <template x-if="!loading.hooks && hooks.length === 0">
+                        <div class="empty-state">No active agents</div>
+                    </template>
+                    <div class="hook-grid" x-show="!loading.hooks && hooks.length > 0">
+                        <template x-for="hook in hooks" :key="hook.agent">
+                            <div class="hook-card" :class="{ 'has-work': hook.has_work }">
+                                <div class="hook-agent" x-text="hook.agent.split('/').pop()"></div>
+                                <template x-if="hook.has_work">
+                                    <div>
+                                        <span class="type-badge" x-text="hook.work_type"></span>
+                                        <a :href="'/bead/' + hook.work_id" class="hook-work" x-text="hook.work_id"></a>
+                                    </div>
+                                </template>
+                                <template x-if="!hook.has_work">
+                                    <div class="text-muted" style="font-size: 0.8rem;">No work</div>
+                                </template>
+                            </div>
+                        </template>
                     </div>
                 </div>
-                <div x-show="sections.ready" x-collapse>
-                    <p class="text-muted" style="font-size: 0.85rem; margin: 10px 0;">Issues with no blockers</p>
-                    <template x-if="loading.ready">
-                        <p><span class="loading-spinner"></span> Loading...</p>
+
+                <!-- Active Convoys -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-title">Active Convoys</span>
+                    </div>
+                    <template x-if="loading.convoys">
+                        <div class="empty-state"><span class="loading-spinner"></span></div>
                     </template>
-                    <template x-if="!loading.ready && readyIssues.length === 0">
-                        <p class="text-muted">No ready issues</p>
+                    <template x-if="!loading.convoys && convoys.length === 0">
+                        <div class="empty-state">No active convoys</div>
                     </template>
-                    <template x-if="!loading.ready && readyIssues.length > 0">
-                        <div>
-                            <template x-for="issue in readyIssues" :key="issue.id">
-                                <a :href="'/bead/' + issue.id" class="issue-row" style="text-decoration: none; color: inherit;">
-                                    <span class="priority-badge" :class="'priority-' + issue.priority" x-text="'P' + issue.priority"></span>
-                                    <span class="type-badge" x-text="issue.type"></span>
-                                    <span class="issue-id" x-text="issue.id"></span>
-                                    <span class="issue-title" x-text="issue.title"></span>
+                    <div x-show="!loading.convoys && convoys.length > 0">
+                        <template x-for="convoy in convoys" :key="convoy.ID">
+                            <div class="convoy-card" style="padding: 10px; margin-bottom: 8px;">
+                                <a :href="'/convoy/' + convoy.ID" style="color: var(--green); font-family: monospace;">
+                                    <span x-text="convoy.ID"></span>
                                 </a>
-                            </template>
+                                <div class="convoy-progress">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" :style="'width: ' + (convoy.Total > 0 ? (convoy.Completed / convoy.Total * 100) : 0) + '%'"></div>
+                                    </div>
+                                    <span style="font-size: 0.8rem;" x-text="convoy.Progress || '0/0'"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="workflow-main">
+                <!-- Tabs -->
+                <div class="workflow-tabs">
+                    <button class="tab-btn" :class="{ 'active': currentTab === 'board' }" @click="currentTab = 'board'">Board</button>
+                    <button class="tab-btn" :class="{ 'active': currentTab === 'list' }" @click="currentTab = 'list'">List</button>
+                    <button class="tab-btn" :class="{ 'active': currentTab === 'ready' }" @click="currentTab = 'ready'">Ready</button>
+                    <button class="tab-btn" :class="{ 'active': currentTab === 'convoys' }" @click="currentTab = 'convoys'">Convoys</button>
+                </div>
+
+                <!-- Search and Filters -->
+                <div class="search-bar">
+                    <input type="text" class="search-input" placeholder="Search beads..." x-model="searchQuery" @input.debounce.300ms="searchBeads()">
+                    <select class="filter-select" x-model="filterType" @change="loadBeads()">
+                        <option value="">All Types</option>
+                        <option value="task">Task</option>
+                        <option value="bug">Bug</option>
+                        <option value="feature">Feature</option>
+                        <option value="epic">Epic</option>
+                        <option value="convoy">Convoy</option>
+                    </select>
+                    <select class="filter-select" x-model="filterStatus" @change="loadBeads()">
+                        <option value="">All Status</option>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+
+                <!-- Board View -->
+                <div x-show="currentTab === 'board'" class="board-container">
+                    <div class="board-column">
+                        <div class="board-column-header">
+                            <span class="board-column-title">Open</span>
+                            <span class="board-column-count" x-text="beadsByStatus.open?.length || 0"></span>
+                        </div>
+                        <template x-for="bead in beadsByStatus.open || []" :key="bead.id">
+                            <div class="bead-card" @click="selectBead(bead)">
+                                <div class="bead-card-header">
+                                    <span class="bead-card-id" x-text="bead.id"></span>
+                                    <span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span>
+                                </div>
+                                <div class="bead-card-title" x-text="bead.title"></div>
+                                <div class="bead-card-meta">
+                                    <span class="type-badge" x-text="bead.issue_type"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="board-column">
+                        <div class="board-column-header">
+                            <span class="board-column-title">In Progress</span>
+                            <span class="board-column-count" x-text="beadsByStatus.in_progress?.length || 0"></span>
+                        </div>
+                        <template x-for="bead in beadsByStatus.in_progress || []" :key="bead.id">
+                            <div class="bead-card" @click="selectBead(bead)">
+                                <div class="bead-card-header">
+                                    <span class="bead-card-id" x-text="bead.id"></span>
+                                    <span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span>
+                                </div>
+                                <div class="bead-card-title" x-text="bead.title"></div>
+                                <div class="bead-card-meta">
+                                    <span class="type-badge" x-text="bead.issue_type"></span>
+                                    <template x-if="bead.assignee">
+                                        <span class="text-muted" style="font-size: 0.75rem;" x-text="bead.assignee.split('/').pop()"></span>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="board-column">
+                        <div class="board-column-header">
+                            <span class="board-column-title">Closed</span>
+                            <span class="board-column-count" x-text="beadsByStatus.closed?.length || 0"></span>
+                        </div>
+                        <template x-for="bead in (beadsByStatus.closed || []).slice(0, 10)" :key="bead.id">
+                            <div class="bead-card" @click="selectBead(bead)" style="opacity: 0.7;">
+                                <div class="bead-card-header">
+                                    <span class="bead-card-id" x-text="bead.id"></span>
+                                </div>
+                                <div class="bead-card-title" x-text="bead.title"></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- List View -->
+                <div x-show="currentTab === 'list'" class="bead-list">
+                    <div class="bead-list-header">
+                        <div>ID</div>
+                        <div>Title</div>
+                        <div>Priority</div>
+                        <div>Type</div>
+                        <div>Status</div>
+                    </div>
+                    <template x-if="loading.beads">
+                        <div class="empty-state"><span class="loading-spinner"></span> Loading...</div>
+                    </template>
+                    <template x-if="!loading.beads && beads.length === 0">
+                        <div class="empty-state">No beads found</div>
+                    </template>
+                    <template x-for="bead in beads" :key="bead.id">
+                        <div class="bead-list-row" @click="selectBead(bead)">
+                            <div><code class="text-link" x-text="bead.id"></code></div>
+                            <div x-text="bead.title"></div>
+                            <div><span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span></div>
+                            <div><span class="type-badge" x-text="bead.issue_type"></span></div>
+                            <div><span class="status-badge" :class="'status-' + bead.status" x-text="bead.status"></span></div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Ready View -->
+                <div x-show="currentTab === 'ready'" class="bead-list">
+                    <div class="bead-list-header">
+                        <div>ID</div>
+                        <div>Title</div>
+                        <div>Priority</div>
+                        <div>Type</div>
+                        <div>Actions</div>
+                    </div>
+                    <template x-if="loading.ready">
+                        <div class="empty-state"><span class="loading-spinner"></span> Loading...</div>
+                    </template>
+                    <template x-if="!loading.ready && readyBeads.length === 0">
+                        <div class="empty-state">No ready beads</div>
+                    </template>
+                    <template x-for="bead in readyBeads" :key="bead.id">
+                        <div class="bead-list-row">
+                            <div><a :href="'/bead/' + bead.id" class="text-link"><code x-text="bead.id"></code></a></div>
+                            <div x-text="bead.title"></div>
+                            <div><span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span></div>
+                            <div><span class="type-badge" x-text="bead.type"></span></div>
+                            <div>
+                                <button class="btn btn-sm btn-primary" @click="showSlingModal(bead)">Sling</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Convoys View -->
+                <div x-show="currentTab === 'convoys'">
+                    <template x-if="loading.convoys">
+                        <div class="empty-state"><span class="loading-spinner"></span> Loading...</div>
+                    </template>
+                    <template x-if="!loading.convoys && convoys.length === 0">
+                        <div class="empty-state">No convoys</div>
+                    </template>
+                    <template x-for="convoy in convoys" :key="convoy.ID">
+                        <div class="convoy-card">
+                            <div class="convoy-header">
+                                <div>
+                                    <a :href="'/convoy/' + convoy.ID" class="text-link" style="font-family: monospace;" x-text="convoy.ID"></a>
+                                    <span x-text="convoy.Title" style="margin-left: 10px;"></span>
+                                </div>
+                                <div class="convoy-progress">
+                                    <div class="progress-bar" style="width: 150px;">
+                                        <div class="progress-fill" :style="'width: ' + (convoy.Total > 0 ? (convoy.Completed / convoy.Total * 100) : 0) + '%'"></div>
+                                    </div>
+                                    <span x-text="convoy.Progress || '0/0'"></span>
+                                </div>
+                            </div>
+                            <div class="convoy-beads" x-show="convoy.TrackedIssues && convoy.TrackedIssues.length > 0">
+                                <template x-for="issue in convoy.TrackedIssues || []" :key="issue.ID">
+                                    <div class="convoy-bead-item">
+                                        <a :href="'/bead/' + issue.ID" class="text-link" x-text="issue.ID + ': ' + issue.Title"></a>
+                                        <span class="status-badge" :class="'status-' + issue.Status" x-text="issue.Status"></span>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </template>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <div class="card">
-                <div class="section-header" @click="sections.convoys = !sections.convoys">
-                    <h2><span class="section-icon">🚚</span>Active Convoys</h2>
-                    <span class="collapse-icon" :class="{ 'collapsed': !sections.convoys }">▼</span>
+    <!-- Bead Detail Modal -->
+    <div class="modal-backdrop" x-show="selectedBead" @click.self="selectedBead = null" style="display: none;">
+        <div class="modal-content" x-show="selectedBead">
+            <div class="modal-header">
+                <h3 x-text="selectedBead?.id"></h3>
+                <button class="modal-close" @click="selectedBead = null">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h4 x-text="selectedBead?.title" style="margin-bottom: 15px;"></h4>
+                <div class="bead-card-meta" style="margin-bottom: 15px;">
+                    <span class="priority-badge" :class="'priority-' + selectedBead?.priority" x-text="'P' + selectedBead?.priority"></span>
+                    <span class="type-badge" x-text="selectedBead?.issue_type"></span>
+                    <span class="status-badge" :class="'status-' + selectedBead?.status" x-text="selectedBead?.status"></span>
                 </div>
-                <div x-show="sections.convoys" x-collapse id="convoys-list">
-                    <div style="margin-top: 10px;">Loading...</div>
-                </div>
+                <template x-if="selectedBead?.description">
+                    <div style="margin-bottom: 15px;">
+                        <strong>Description:</strong>
+                        <p x-text="selectedBead?.description" style="white-space: pre-wrap; margin-top: 5px;"></p>
+                    </div>
+                </template>
+                <template x-if="selectedBead?.assignee">
+                    <div style="margin-bottom: 10px;">
+                        <strong>Assignee:</strong> <span x-text="selectedBead?.assignee"></span>
+                    </div>
+                </template>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @click="selectedBead = null">Close</button>
+                <a :href="'/bead/' + selectedBead?.id" class="btn btn-secondary">View Details</a>
+                <template x-if="selectedBead?.status === 'open'">
+                    <button class="btn btn-primary" @click="showSlingModal(selectedBead)">Sling</button>
+                </template>
+                <template x-if="selectedBead?.status !== 'closed'">
+                    <button class="btn btn-danger" @click="closeBead(selectedBead?.id)">Close</button>
+                </template>
             </div>
         </div>
+    </div>
 
-        <div class="card" style="margin-top: 20px;">
-            <div class="section-header" @click="sections.commits = !sections.commits">
-                <h2><span class="section-icon">📝</span>Recent Commits</h2>
-                <span class="collapse-icon" :class="{ 'collapsed': !sections.commits }">▼</span>
+    <!-- Create Bead Modal -->
+    <div class="modal-backdrop" x-show="showCreateModal" @click.self="showCreateModal = false" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Bead</h3>
+                <button class="modal-close" @click="showCreateModal = false">&times;</button>
             </div>
-            <div x-show="sections.commits" x-collapse id="commits-list" style="max-height: 300px; overflow-y: auto; margin-top: 10px;">
-                Loading...
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Title *</label>
+                    <input type="text" class="form-input" x-model="newBead.title" placeholder="Enter title...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-textarea" x-model="newBead.description" placeholder="Enter description..."></textarea>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" x-model="newBead.type">
+                            <option value="task">Task</option>
+                            <option value="bug">Bug</option>
+                            <option value="feature">Feature</option>
+                            <option value="epic">Epic</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Priority</label>
+                        <select class="form-select" x-model="newBead.priority">
+                            <option value="1">P1 - Critical</option>
+                            <option value="2" selected>P2 - Normal</option>
+                            <option value="3">P3 - Low</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @click="showCreateModal = false">Cancel</button>
+                <button class="btn btn-primary" @click="createBead()" :disabled="!newBead.title">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sling Modal -->
+    <div class="modal-backdrop" x-show="showSling" @click.self="showSling = false" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Sling Bead</h3>
+                <button class="modal-close" @click="showSling = false">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 15px;">Sling <strong x-text="slingBead?.id"></strong> to:</p>
+                <div class="form-group">
+                    <label class="form-label">Target Agent</label>
+                    <select class="form-select" x-model="slingTarget">
+                        <option value="">Select agent...</option>
+                        <template x-for="agent in availableAgents" :key="agent">
+                            <option :value="agent" x-text="agent"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @click="showSling = false">Cancel</button>
+                <button class="btn btn-primary" @click="slingBeadTo()" :disabled="!slingTarget">Sling</button>
             </div>
         </div>
     </div>
@@ -219,83 +825,233 @@
     <script>
         function workflow() {
             return {
-                sections: {
-                    hook: true,
-                    ready: true,
-                    convoys: true,
-                    commits: true
-                },
+                currentTab: 'board',
+                searchQuery: '',
+                filterType: '',
+                filterStatus: '',
+
                 loading: {
-                    hook: true,
+                    beads: true,
+                    hooks: true,
+                    convoys: true,
                     ready: true
                 },
-                hookStatus: {
-                    has_work: false,
-                    work_type: 'none',
-                    work_id: '',
-                    work_title: ''
+
+                stats: {},
+                beads: [],
+                beadsByStatus: {},
+                hooks: [],
+                convoys: [],
+                readyBeads: [],
+                availableAgents: [],
+
+                selectedBead: null,
+                showCreateModal: false,
+                showSling: false,
+                slingBead: null,
+                slingTarget: '',
+
+                newBead: {
+                    title: '',
+                    description: '',
+                    type: 'task',
+                    priority: 2
                 },
-                readyIssues: [],
 
                 init() {
-                    this.loadHookStatus();
-                    this.loadReadyIssues();
-                    loadConvoys();
-                    loadCommits();
-
+                    this.loadAll();
                     // Refresh periodically
-                    setInterval(() => this.loadHookStatus(), 10000);
-                    setInterval(() => this.loadReadyIssues(), 30000);
-                    setInterval(loadConvoys, 30000);
-                    setInterval(loadCommits, 60000);
+                    setInterval(() => this.loadHooks(), 15000);
+                    setInterval(() => this.loadConvoys(), 30000);
+                    setInterval(() => this.loadReady(), 30000);
                 },
 
-                async loadHookStatus() {
-                    this.loading.hook = true;
+                async loadAll() {
+                    await Promise.all([
+                        this.loadBeads(),
+                        this.loadHooks(),
+                        this.loadConvoys(),
+                        this.loadReady(),
+                        this.loadStats(),
+                        this.loadAgents()
+                    ]);
+                },
+
+                async loadBeads() {
+                    this.loading.beads = true;
                     try {
-                        const res = await fetch('/api/workflow/hook');
-                        this.hookStatus = await res.json();
+                        let url = '/api/beads?limit=100';
+                        if (this.filterType) url += '&type=' + this.filterType;
+                        if (this.filterStatus) url += '&status=' + this.filterStatus;
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        this.beads = data.beads || [];
+                        this.groupBeadsByStatus();
                     } catch (e) {
-                        console.error('Failed to load hook status:', e);
+                        console.error('Failed to load beads:', e);
                     }
-                    this.loading.hook = false;
+                    this.loading.beads = false;
                 },
 
-                async loadReadyIssues() {
+                groupBeadsByStatus() {
+                    this.beadsByStatus = {
+                        open: this.beads.filter(b => b.status === 'open'),
+                        in_progress: this.beads.filter(b => b.status === 'in_progress'),
+                        closed: this.beads.filter(b => b.status === 'closed')
+                    };
+                },
+
+                async loadHooks() {
+                    this.loading.hooks = true;
+                    try {
+                        const res = await fetch('/api/agents/hooks');
+                        const data = await res.json();
+                        this.hooks = data.hooks || [];
+                    } catch (e) {
+                        console.error('Failed to load hooks:', e);
+                    }
+                    this.loading.hooks = false;
+                },
+
+                async loadConvoys() {
+                    this.loading.convoys = true;
+                    try {
+                        const res = await fetch('/api/convoys');
+                        const data = await res.json();
+                        this.convoys = Array.isArray(data) ? data : [];
+                    } catch (e) {
+                        console.error('Failed to load convoys:', e);
+                    }
+                    this.loading.convoys = false;
+                },
+
+                async loadReady() {
                     this.loading.ready = true;
                     try {
                         const res = await fetch('/api/workflow/ready');
                         const data = await res.json();
-                        this.readyIssues = data.issues || [];
+                        this.readyBeads = data.issues || [];
+                        this.stats.ready = this.readyBeads.length;
                     } catch (e) {
-                        console.error('Failed to load ready issues:', e);
+                        console.error('Failed to load ready:', e);
                     }
                     this.loading.ready = false;
+                },
+
+                async loadStats() {
+                    try {
+                        const res = await fetch('/api/beads/stats');
+                        const data = await res.json();
+                        this.stats.open = data.status_open || 0;
+                        this.stats.in_progress = data.status_in_progress || 0;
+                        this.stats.closed = data.status_closed || 0;
+                    } catch (e) {
+                        console.error('Failed to load stats:', e);
+                    }
+                },
+
+                async loadAgents() {
+                    try {
+                        const res = await fetch('/api/agents/available');
+                        const data = await res.json();
+                        this.availableAgents = data.agents || [];
+                    } catch (e) {
+                        console.error('Failed to load agents:', e);
+                    }
+                },
+
+                async searchBeads() {
+                    if (!this.searchQuery) {
+                        return this.loadBeads();
+                    }
+                    this.loading.beads = true;
+                    try {
+                        const res = await fetch('/api/beads/search?q=' + encodeURIComponent(this.searchQuery));
+                        const data = await res.json();
+                        this.beads = data.beads || [];
+                        this.groupBeadsByStatus();
+                    } catch (e) {
+                        console.error('Failed to search:', e);
+                    }
+                    this.loading.beads = false;
+                },
+
+                selectBead(bead) {
+                    this.selectedBead = bead;
+                },
+
+                showSlingModal(bead) {
+                    this.slingBead = bead;
+                    this.slingTarget = '';
+                    this.showSling = true;
+                    this.selectedBead = null;
+                },
+
+                async slingBeadTo() {
+                    if (!this.slingBead || !this.slingTarget) return;
+                    try {
+                        const res = await fetch('/api/bead/action', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'sling',
+                                bead_id: this.slingBead.id,
+                                target: this.slingTarget
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            this.showSling = false;
+                            this.loadAll();
+                        } else {
+                            alert('Failed to sling: ' + (data.output || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        alert('Error: ' + e.message);
+                    }
+                },
+
+                async closeBead(beadId) {
+                    if (!confirm('Close this bead?')) return;
+                    try {
+                        const res = await fetch('/api/bead/action', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'close', bead_id: beadId })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            this.selectedBead = null;
+                            this.loadAll();
+                        } else {
+                            alert('Failed to close: ' + (data.output || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        alert('Error: ' + e.message);
+                    }
+                },
+
+                async createBead() {
+                    if (!this.newBead.title) return;
+                    try {
+                        const res = await fetch('/api/bead/create-v2', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.newBead)
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            this.showCreateModal = false;
+                            this.newBead = { title: '', description: '', type: 'task', priority: 2 };
+                            this.loadAll();
+                        } else {
+                            alert('Failed to create: ' + (data.output || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        alert('Error: ' + e.message);
+                    }
                 }
             };
-        }
-
-        async function loadConvoys() {
-            try {
-                const res = await fetch('/api/convoys');
-                const convoys = await res.json();
-                document.getElementById('convoys-list').innerHTML =
-                    '<div style="margin-top: 10px;">' + renderConvoysTable(convoys) + '</div>';
-            } catch (e) {
-                document.getElementById('convoys-list').innerHTML =
-                    '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
-            }
-        }
-
-        async function loadCommits() {
-            try {
-                const res = await fetch('/api/activity');
-                const data = await res.json();
-                document.getElementById('commits-list').innerHTML = renderCommitsTable(data.commits);
-            } catch (e) {
-                document.getElementById('commits-list').innerHTML =
-                    '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
-            }
         }
     </script>
 </body>

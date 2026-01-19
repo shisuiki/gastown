@@ -116,7 +116,18 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/workflow/hook", h.handleAPIWorkflowHook)
 	h.mux.HandleFunc("/api/workflow/ready", h.handleAPIWorkflowReady)
 
+	// Enhanced Beads API routes (v2)
+	h.mux.HandleFunc("/api/beads", h.handleAPIBeads)
+	h.mux.HandleFunc("/api/beads/search", h.handleAPIBeadSearch)
+	h.mux.HandleFunc("/api/beads/stats", h.handleAPIBeadStats)
+	h.mux.HandleFunc("/api/beads/", h.handleAPIBeadByID)
+	h.mux.HandleFunc("/api/agents/hooks", h.handleAPIAllAgentHooks)
+	h.mux.HandleFunc("/api/agents/available", h.handleAPIAvailableAgents)
+	h.mux.HandleFunc("/api/bead/action", h.handleAPIBeadAction)
+	h.mux.HandleFunc("/api/bead/create-v2", h.handleAPICreateBeadV2)
+
 	// Detail API routes (prefix matching)
+	h.mux.HandleFunc("/api/convoy/beads/", h.handleAPIConvoyBeads) // Must be before /api/convoy/
 	h.mux.HandleFunc("/api/convoy/", h.handleAPIConvoyDetail)
 	h.mux.HandleFunc("/api/bead/", h.handleAPIBeadDetail)
 
