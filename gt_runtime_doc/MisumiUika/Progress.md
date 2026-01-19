@@ -23,3 +23,4 @@
 - P3: Convoy/bead detail APIs now use BeadsReader before CLI parsing.
 - P3: Dashboard status now uses daemon state and BeadsReader-backed issues/role beads.
 - P3: Convoy fetcher now reads convoys and tracked issues from town issues.jsonl with BEADS_DIR-scoped CLI fallback.
+- P3: Workflow ready list now derives from JSONL dependencies, and mayor hook status avoids gt hook by reading hooked beads.

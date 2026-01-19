@@ -3,8 +3,11 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // MayorPageData is the data passed to the mayor template.
@@ -105,10 +108,21 @@ func (h *GUIHandler) handleAPIMayorStatus(w http.ResponseWriter, r *http.Request
 	defer cancel()
 	sessionExists := cmd.Run() == nil
 
-	// Get hook status
-	hookCmd, hookCancel := command("gt", "hook")
-	defer hookCancel()
-	hookOutput, _ := hookCmd.Output()
+	hookStatus := "Nothing on hook"
+	if townRoot, err := workspace.FindFromCwdOrError(); err == nil && townRoot != "" {
+		reader, err := NewBeadsReaderWithBeadsDir(townRoot, filepath.Join(townRoot, ".beads"))
+		if err == nil {
+			hooked, err := reader.ListBeads(BeadFilter{
+				Status:           "hooked",
+				Assignee:         "mayor",
+				IncludeEphemeral: true,
+				Limit:            1,
+			})
+			if err == nil && len(hooked) > 0 {
+				hookStatus = "Hooked: " + hooked[0].ID
+			}
+		}
+	}
 
 	// Get mail count
 	mailCount := 0
@@ -123,7 +137,7 @@ func (h *GUIHandler) handleAPIMayorStatus(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"session_exists": sessionExists,
 		"session_name":   "hq-mayor",
-		"hook":           strings.TrimSpace(string(hookOutput)),
+		"hook":           hookStatus,
 		"mail_count":     mailCount,
 	})
 }

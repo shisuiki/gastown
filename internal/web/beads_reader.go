@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -173,6 +174,75 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 	}
 
 	return filtered, nil
+}
+
+// ReadyBeads returns open beads that are not blocked by dependencies.
+func (r *BeadsReader) ReadyBeads() ([]Bead, error) {
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		statusByID := make(map[string]string, len(jsonl))
+		for _, b := range jsonl {
+			statusByID[b.ID] = b.Status
+		}
+
+		ready := make([]Bead, 0, len(jsonl))
+		for _, b := range jsonl {
+			if b.Status != "open" || b.Ephemeral {
+				continue
+			}
+			blocked := false
+			for _, dep := range b.Dependencies {
+				depID := dep.DependsOnID
+				if depID == "" {
+					continue
+				}
+				if strings.HasPrefix(depID, "external:") {
+					blocked = true
+					break
+				}
+				if status, ok := statusByID[depID]; !ok || status != "closed" {
+					blocked = true
+					break
+				}
+			}
+			if !blocked {
+				ready = append(ready, b)
+			}
+		}
+
+		sort.Slice(ready, func(i, j int) bool {
+			pi := ready[i].Priority
+			pj := ready[j].Priority
+			if pi == 0 {
+				pi = 99
+			}
+			if pj == 0 {
+				pj = 99
+			}
+			if pi != pj {
+				return pi < pj
+			}
+			if !ready[i].CreatedAt.IsZero() && !ready[j].CreatedAt.IsZero() && !ready[i].CreatedAt.Equal(ready[j].CreatedAt) {
+				return ready[i].CreatedAt.Before(ready[j].CreatedAt)
+			}
+			return ready[i].ID < ready[j].ID
+		})
+
+		return ready, nil
+	}
+
+	cmd, cancel := r.beadsCommand("ready", "--json")
+	defer cancel()
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("bd ready failed: %w", err)
+	}
+
+	var beads []Bead
+	if err := json.Unmarshal(output, &beads); err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
+
+	return beads, nil
 }
 
 // GetBead returns a single bead by ID using bd show --json.

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // WorkflowPageData is the data passed to the workflow template.
@@ -15,13 +17,13 @@ type WorkflowPageData struct {
 
 // HookStatus represents the current hook status for an agent.
 type HookStatus struct {
-	Actor       string `json:"actor"`
-	Role        string `json:"role"`
-	HasWork     bool   `json:"has_work"`
-	WorkType    string `json:"work_type,omitempty"`    // "molecule", "mail", "none"
-	WorkID      string `json:"work_id,omitempty"`      // ID of hooked work
-	WorkTitle   string `json:"work_title,omitempty"`   // Title/subject of hooked work
-	RawOutput   string `json:"raw_output"`             // Full output for display
+	Actor     string `json:"actor"`
+	Role      string `json:"role"`
+	HasWork   bool   `json:"has_work"`
+	WorkType  string `json:"work_type,omitempty"`  // "molecule", "mail", "none"
+	WorkID    string `json:"work_id,omitempty"`    // ID of hooked work
+	WorkTitle string `json:"work_title,omitempty"` // Title/subject of hooked work
+	RawOutput string `json:"raw_output"`           // Full output for display
 }
 
 type hookStatusJSON struct {
@@ -188,9 +190,7 @@ func (h *GUIHandler) handleAPIWorkflowReady(w http.ResponseWriter, r *http.Reque
 
 // fetchReadyIssues gets ready issues from bd ready.
 func (h *GUIHandler) fetchReadyIssues() map[string]interface{} {
-	cmd, cancel := command("bd", "ready", "--json")
-	defer cancel()
-	output, err := cmd.Output()
+	reader, err := NewBeadsReader("")
 	if err != nil {
 		return map[string]interface{}{
 			"issues": []interface{}{},
@@ -198,38 +198,26 @@ func (h *GUIHandler) fetchReadyIssues() map[string]interface{} {
 		}
 	}
 
-	var raw []struct {
-		ID       string `json:"id"`
-		Title    string `json:"title"`
-		Priority int    `json:"priority"`
-		Type     string `json:"issue_type"`
-	}
-	if err := json.Unmarshal(output, &raw); err == nil {
-		issues := make([]ReadyIssue, 0, len(raw))
-		for _, item := range raw {
-			issues = append(issues, ReadyIssue{
-				ID:       item.ID,
-				Title:    item.Title,
-				Priority: item.Priority,
-				Type:     item.Type,
-			})
-		}
-		return map[string]interface{}{
-			"issues": issues,
-		}
-	}
-
-	cmd, cancel = command("bd", "ready")
-	defer cancel()
-	output, err = cmd.Output()
+	beads, err := reader.ReadyBeads()
 	if err != nil {
 		return map[string]interface{}{
 			"issues": []interface{}{},
 			"error":  err.Error(),
 		}
 	}
+
+	issues := make([]ReadyIssue, 0, len(beads))
+	for _, bead := range beads {
+		issues = append(issues, ReadyIssue{
+			ID:       bead.ID,
+			Title:    bead.Title,
+			Priority: bead.Priority,
+			Type:     bead.Type,
+		})
+	}
+
 	return map[string]interface{}{
-		"issues": parseReadyOutput(string(output)),
+		"issues": issues,
 	}
 }
 
@@ -314,13 +302,8 @@ func (h *GUIHandler) handleAPIActivity(w http.ResponseWriter, r *http.Request) {
 func (h *GUIHandler) fetchActivity() map[string]interface{} {
 	// Get recent commits from the current rig's repo
 	rigDir := "/home/shisui/gt"
-
-	// Check if GT_ROOT is set
-	if gtRoot, cancel := command("gt", "env", "GT_ROOT"); gtRoot != nil {
-		defer cancel()
-		if out, err := gtRoot.Output(); err == nil {
-			rigDir = strings.TrimSpace(string(out))
-		}
+	if townRoot, err := workspace.FindFromCwdOrError(); err == nil && townRoot != "" {
+		rigDir = townRoot
 	}
 
 	cmd, cancel := command("git", "log", "--oneline", "-20", "--format=%h|%s|%cr|%an")

@@ -21,7 +21,8 @@ This document tracks WebUI development conventions and current architecture.
 - Status: `GET /api/status` builds a cached status snapshot.
 - WebSocket: `/ws/status` pushes status updates for dashboards.
 - Mail: WebUI uses the mail router/mailbox APIs for listing, mark read/unread, and archive.
-- Beads and convoys: currently sourced from CLI-backed readers and cached fetchers.
+- Beads and convoys: prefer `issues.jsonl` via `BeadsReader`/convoy fetcher with BEADS_DIR-scoped CLI fallback.
+- Agent hook status: still uses `gt hook` for now (no direct hook file/state).
 
 ## Caching
 
@@ -49,4 +50,3 @@ Future improvements should:
 
 - If WebUI appears stale, confirm the cache TTLs and status WebSocket.
 - If mail actions fail, verify the town `.beads` directory and `GT_ROOT`.
-
