@@ -31,7 +31,6 @@ func NewLiveConvoyFetcher() (*LiveConvoyFetcher, error) {
 	}, nil
 }
 
-
 // FetchConvoys fetches all open convoys with their activity data.
 func (f *LiveConvoyFetcher) FetchConvoys() ([]ConvoyRow, error) {
 	// Refresh function for cache
@@ -76,28 +75,19 @@ func (f *LiveConvoyFetcher) FetchConvoys() ([]ConvoyRow, error) {
 
 // fetchConvoysUncached does the actual convoy fetching without caching.
 func (f *LiveConvoyFetcher) fetchConvoysUncached() ([]ConvoyRow, error) {
-	// List all open convoy-type issues
-	dbPath := filepath.Join(f.townBeads, "beads.db")
-	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--status=open", "--json"}
-	listCmd, cancel := command("bd", listArgs...)
-	defer cancel()
-	listCmd.Dir = f.townBeads
+	reader, err := NewBeadsReaderWithBeadsDir(filepath.Dir(f.townBeads), f.townBeads)
+	if err != nil {
+		return nil, err
+	}
 
-	var stdout bytes.Buffer
-	listCmd.Stdout = &stdout
-
-	if err := listCmd.Run(); err != nil {
+	convoys, err := reader.ListBeads(BeadFilter{
+		Status:           "open",
+		Type:             "convoy",
+		IncludeEphemeral: true,
+		Limit:            200,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("listing convoys: %w", err)
-	}
-
-	var convoys []struct {
-		ID        string `json:"id"`
-		Title     string `json:"title"`
-		Status    string `json:"status"`
-		CreatedAt string `json:"created_at"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &convoys); err != nil {
-		return nil, fmt.Errorf("parsing convoy list: %w", err)
 	}
 
 	// Build convoy rows with activity data
@@ -110,7 +100,45 @@ func (f *LiveConvoyFetcher) fetchConvoysUncached() ([]ConvoyRow, error) {
 		}
 
 		// Get tracked issues for progress and activity calculation
-		tracked := f.getTrackedIssues(c.ID)
+		trackedBeads, err := reader.GetConvoyTrackedIssues(c.ID)
+		if err != nil {
+			trackedBeads = nil
+		}
+
+		tracked := make([]trackedIssueInfo, 0, len(trackedBeads))
+		issueDetails := make(map[string]*issueDetail, len(trackedBeads))
+		for _, bead := range trackedBeads {
+			title := bead.Title
+			status := bead.Status
+			if title == "" {
+				title = "(external)"
+			}
+			if status == "" {
+				status = "unknown"
+			}
+
+			tracked = append(tracked, trackedIssueInfo{
+				ID:        bead.ID,
+				Title:     title,
+				Status:    status,
+				Assignee:  bead.Assignee,
+				UpdatedAt: bead.UpdatedAt,
+			})
+			issueDetails[bead.ID] = &issueDetail{
+				ID:        bead.ID,
+				Title:     title,
+				Status:    status,
+				Assignee:  bead.Assignee,
+				UpdatedAt: bead.UpdatedAt,
+			}
+		}
+
+		workers := f.getWorkersFromAssignees(issueDetails)
+		for i := range tracked {
+			if w, ok := workers[tracked[i].ID]; ok && w.LastActivity != nil {
+				tracked[i].LastActivity = *w.LastActivity
+			}
+		}
 		row.Total = len(tracked)
 
 		var mostRecentActivity time.Time

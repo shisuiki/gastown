@@ -22,3 +22,4 @@
 - P3: Beads reader now prefers issues.jsonl for list/search/stats with CLI fallback.
 - P3: Convoy/bead detail APIs now use BeadsReader before CLI parsing.
 - P3: Dashboard status now uses daemon state and BeadsReader-backed issues/role beads.
+- P3: Convoy fetcher now reads convoys and tracked issues from town issues.jsonl with BEADS_DIR-scoped CLI fallback.

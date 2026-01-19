@@ -2,9 +2,11 @@ package web
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -21,19 +23,20 @@ type BeadsReader struct {
 
 // Bead represents a bead from the database.
 type Bead struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description,omitempty"`
-	Status      string     `json:"status"`
-	Priority    int        `json:"priority"`
-	Type        string     `json:"issue_type"`
-	Owner       string     `json:"owner,omitempty"`
-	Assignee    string     `json:"assignee,omitempty"`
-	Labels      []string   `json:"labels,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	ClosedAt    *time.Time `json:"closed_at,omitempty"`
-	Ephemeral   bool       `json:"ephemeral,omitempty"`
+	ID           string           `json:"id"`
+	Title        string           `json:"title"`
+	Description  string           `json:"description,omitempty"`
+	Status       string           `json:"status"`
+	Priority     int              `json:"priority"`
+	Type         string           `json:"issue_type"`
+	Owner        string           `json:"owner,omitempty"`
+	Assignee     string           `json:"assignee,omitempty"`
+	Labels       []string         `json:"labels,omitempty"`
+	CreatedAt    time.Time        `json:"created_at"`
+	UpdatedAt    time.Time        `json:"updated_at"`
+	ClosedAt     *time.Time       `json:"closed_at,omitempty"`
+	Ephemeral    bool             `json:"ephemeral,omitempty"`
+	Dependencies []BeadDependency `json:"dependencies,omitempty"`
 }
 
 // BeadDependency represents a dependency between beads.
@@ -45,8 +48,8 @@ type BeadDependency struct {
 
 // AgentHook represents an agent's hook status.
 type AgentHook struct {
-	Agent     string `json:"agent"`     // e.g., "TerraNomadicCity/crew/Myrtle"
-	Role      string `json:"role"`      // e.g., "crew"
+	Agent     string `json:"agent"` // e.g., "TerraNomadicCity/crew/Myrtle"
+	Role      string `json:"role"`  // e.g., "crew"
 	HasWork   bool   `json:"has_work"`
 	WorkType  string `json:"work_type"` // "molecule", "mail", "none"
 	WorkID    string `json:"work_id,omitempty"`
@@ -55,6 +58,15 @@ type AgentHook struct {
 
 // NewBeadsReader creates a BeadsReader for the given town root.
 func NewBeadsReader(townRoot string) (*BeadsReader, error) {
+	return newBeadsReader(townRoot, "")
+}
+
+// NewBeadsReaderWithBeadsDir creates a BeadsReader that targets a specific beads directory.
+func NewBeadsReaderWithBeadsDir(townRoot, beadsDir string) (*BeadsReader, error) {
+	return newBeadsReader(townRoot, beadsDir)
+}
+
+func newBeadsReader(townRoot, beadsDir string) (*BeadsReader, error) {
 	if townRoot == "" {
 		townRoot = os.Getenv("GT_ROOT")
 		if townRoot == "" {
@@ -68,10 +80,14 @@ func NewBeadsReader(townRoot string) (*BeadsReader, error) {
 		workDir = townRoot
 	}
 
+	if beadsDir == "" {
+		beadsDir = beads.ResolveBeadsDir(workDir)
+	}
+
 	return &BeadsReader{
 		townRoot: townRoot,
 		workDir:  workDir,
-		beadsDir: beads.ResolveBeadsDir(workDir),
+		beadsDir: beadsDir,
 	}, nil
 }
 
@@ -109,7 +125,7 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 	if jsonl, err := r.readIssuesJSONL(); err == nil {
 		beads = jsonl
 	} else {
-		cmd, cancel := command("bd", args...)
+		cmd, cancel := r.beadsCommand(args...)
 		defer cancel()
 		output, err := cmd.Output()
 		if err != nil {
@@ -170,7 +186,7 @@ func (r *BeadsReader) GetBead(id string) (*Bead, error) {
 		}
 	}
 
-	cmd, cancel := command("bd", "show", id, "--json")
+	cmd, cancel := r.beadsCommand("show", id, "--json")
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
@@ -191,8 +207,43 @@ func (r *BeadsReader) GetBead(id string) (*Bead, error) {
 // GetConvoyTrackedIssues returns the issues tracked by a convoy.
 // Convoys use dependency type "tracks" to link to their issues.
 func (r *BeadsReader) GetConvoyTrackedIssues(convoyID string) ([]Bead, error) {
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		beadsByID := make(map[string]Bead, len(jsonl))
+		for _, b := range jsonl {
+			beadsByID[b.ID] = b
+		}
+
+		if convoy, ok := beadsByID[convoyID]; ok {
+			tracked := make([]Bead, 0, len(convoy.Dependencies))
+			for _, dep := range convoy.Dependencies {
+				if dep.Type != "tracks" {
+					continue
+				}
+				issueID := dep.DependsOnID
+				if strings.HasPrefix(issueID, "external:") {
+					parts := strings.SplitN(issueID, ":", 3)
+					if len(parts) == 3 {
+						issueID = parts[2]
+					}
+				}
+				if issueID == "" {
+					continue
+				}
+				if bead, found := beadsByID[issueID]; found {
+					tracked = append(tracked, bead)
+				} else {
+					tracked = append(tracked, Bead{
+						ID:    issueID,
+						Title: "(external)",
+					})
+				}
+			}
+			return tracked, nil
+		}
+	}
+
 	// Use bd show with --json to get the convoy and its dependents
-	cmd, cancel := command("bd", "show", convoyID, "--json")
+	cmd, cancel := r.beadsCommand("show", convoyID, "--json")
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
@@ -382,8 +433,16 @@ func (r *BeadsReader) getAgentHook(agent, role string) AgentHook {
 
 // GetBeadDependencies returns all dependencies for a bead.
 func (r *BeadsReader) GetBeadDependencies(beadID string) ([]BeadDependency, error) {
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		for _, bead := range jsonl {
+			if bead.ID == beadID {
+				return bead.Dependencies, nil
+			}
+		}
+	}
+
 	// Use bd show --json to get dependencies
-	cmd, cancel := command("bd", "show", beadID, "--json")
+	cmd, cancel := r.beadsCommand("show", beadID, "--json")
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
@@ -427,7 +486,7 @@ func (r *BeadsReader) GetBeadStats() (map[string]int, error) {
 		beads = jsonl
 	} else {
 		// Get all beads with JSON
-		cmd, cancel := command("bd", "list", "--json", "--limit=0")
+		cmd, cancel := r.beadsCommand("list", "--json", "--limit=0")
 		defer cancel()
 		output, err := cmd.Output()
 		if err != nil {
@@ -477,7 +536,7 @@ func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error)
 		args = append(args, fmt.Sprintf("--limit=%d", limit))
 	}
 
-	cmd, cancel := command("bd", args...)
+	cmd, cancel := r.beadsCommand(args...)
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
@@ -494,20 +553,21 @@ func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error)
 }
 
 type issueJSONL struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Status      string   `json:"status"`
-	Priority    int      `json:"priority"`
-	Type        string   `json:"issue_type"`
-	Owner       string   `json:"owner"`
-	Assignee    string   `json:"assignee"`
-	Labels      []string `json:"labels"`
-	CreatedAt   string   `json:"created_at"`
-	UpdatedAt   string   `json:"updated_at"`
-	ClosedAt    *string  `json:"closed_at"`
-	Ephemeral   bool     `json:"ephemeral"`
-	Wisp        bool     `json:"wisp"`
+	ID           string           `json:"id"`
+	Title        string           `json:"title"`
+	Description  string           `json:"description"`
+	Status       string           `json:"status"`
+	Priority     int              `json:"priority"`
+	Type         string           `json:"issue_type"`
+	Owner        string           `json:"owner"`
+	Assignee     string           `json:"assignee"`
+	Labels       []string         `json:"labels"`
+	CreatedAt    string           `json:"created_at"`
+	UpdatedAt    string           `json:"updated_at"`
+	ClosedAt     *string          `json:"closed_at"`
+	Ephemeral    bool             `json:"ephemeral"`
+	Wisp         bool             `json:"wisp"`
+	Dependencies []BeadDependency `json:"dependencies"`
 }
 
 func (r *BeadsReader) readIssuesJSONL() ([]Bead, error) {
@@ -537,16 +597,17 @@ func (r *BeadsReader) readIssuesJSONL() ([]Bead, error) {
 		}
 
 		bead := Bead{
-			ID:          entry.ID,
-			Title:       entry.Title,
-			Description: entry.Description,
-			Status:      entry.Status,
-			Priority:    entry.Priority,
-			Type:        entry.Type,
-			Owner:       entry.Owner,
-			Assignee:    entry.Assignee,
-			Labels:      entry.Labels,
-			Ephemeral:   entry.Ephemeral || entry.Wisp,
+			ID:           entry.ID,
+			Title:        entry.Title,
+			Description:  entry.Description,
+			Status:       entry.Status,
+			Priority:     entry.Priority,
+			Type:         entry.Type,
+			Owner:        entry.Owner,
+			Assignee:     entry.Assignee,
+			Labels:       entry.Labels,
+			Ephemeral:    entry.Ephemeral || entry.Wisp,
+			Dependencies: entry.Dependencies,
 		}
 
 		if entry.CreatedAt != "" {
@@ -574,6 +635,12 @@ func (r *BeadsReader) readIssuesJSONL() ([]Bead, error) {
 		return nil, fmt.Errorf("no issues loaded from %s", issuesPath)
 	}
 	return beadsOut, nil
+}
+
+func (r *BeadsReader) beadsCommand(args ...string) (*exec.Cmd, context.CancelFunc) {
+	cmd, cancel := command("bd", args...)
+	cmd.Env = append(os.Environ(), "BEADS_DIR="+r.beadsDir)
+	return cmd, cancel
 }
 
 // ListAgents returns all available agents for assignment.
