@@ -233,6 +233,28 @@
                 </template>
             </div>
 
+            <!-- Role-specific Models -->
+            <div class="config-section">
+                <h3>Role-Specific Models</h3>
+                <p class="help-text" style="margin-bottom: 15px;">Select specific models for each role. Models are discovered from the CLI of the assigned agent.</p>
+
+                <template x-for="role in roles" :key="role.id">
+                    <div class="config-row">
+                        <span class="config-label">
+                            <span class="role-badge" :class="'role-' + role.id" x-text="role.label"></span>
+                        </span>
+                        <select class="config-input"
+                                :value="config.role_models[role.id]?.model || ''"
+                                @change="setRoleModel(role.id, $event.target.value)">
+                            <option value="">(use agent default)</option>
+                            <template x-for="model in modelsForRole(role.id)" :key="model">
+                                <option :value="model" x-text="model"></option>
+                            </template>
+                        </select>
+                    </div>
+                </template>
+            </div>
+
             <!-- Custom Agents -->
             <div class="config-section">
                 <h3>Custom Agents</h3>
@@ -317,9 +339,11 @@
                 config: {
                     default_agent: '',
                     role_agents: {},
+                    role_models: {},
                     agents: {},
                     agent_email_domain: ''
                 },
+                availableModels: {},
                 roles: [
                     { id: 'mayor', label: 'Mayor' },
                     { id: 'deacon', label: 'Deacon' },
@@ -345,14 +369,57 @@
                         this.config = {
                             default_agent: data.default_agent || '',
                             role_agents: data.role_agents || {},
+                            role_models: data.role_models || {},
                             agents: data.agents || {},
                             agent_email_domain: data.agent_email_domain || ''
                         };
+                        // Fetch available models for dropdowns
+                        await this.fetchModels();
                     } catch (e) {
                         this.message = 'Failed to load config: ' + e.message;
                         this.messageType = 'error';
                     }
                     this.loading = false;
+                },
+
+                async fetchModels() {
+                    try {
+                        const res = await fetch('/api/models/list');
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+                        this.availableModels = await res.json();
+                    } catch (e) {
+                        console.error('Failed to fetch models:', e);
+                        this.availableModels = {};
+                    }
+                },
+
+                // Return list of models for a given role based on assigned agent
+                modelsForRole(roleId) {
+                    const agent = this.config.role_agents[roleId] || this.config.default_agent || 'claude';
+                    return this.availableModels[agent] || [];
+                },
+
+                setRoleModel(roleId, value) {
+                    if (!this.config.role_models) {
+                        this.config.role_models = {};
+                    }
+                    if (value && value.trim()) {
+                        if (!this.config.role_models[roleId]) {
+                            this.config.role_models[roleId] = {};
+                        }
+                        this.config.role_models[roleId].model = value.trim();
+                    } else {
+                        // Remove model if empty
+                        if (this.config.role_models[roleId]) {
+                            delete this.config.role_models[roleId].model;
+                            // If no other fields, remove entire entry
+                            if (Object.keys(this.config.role_models[roleId]).length === 0) {
+                                delete this.config.role_models[roleId];
+                            }
+                        }
+                    }
                 },
 
                 async saveConfig() {
@@ -370,6 +437,7 @@
                         const payload = {
                             default_agent: this.config.default_agent || 'claude',
                             role_agents: cleanRoleAgents,
+                            role_models: this.config.role_models || {},
                             agents: this.config.agents,
                             agent_email_domain: this.config.agent_email_domain || ''
                         };

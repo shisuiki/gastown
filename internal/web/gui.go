@@ -133,6 +133,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 
 	// Config API routes
 	h.mux.HandleFunc("/api/config", h.handleAPIConfig)
+	h.mux.HandleFunc("/api/models/list", h.handleAPIModelsList)
 	h.mux.HandleFunc("/api/prompts/", h.handleAPIPrompts)
 
 	// Shared API routes
