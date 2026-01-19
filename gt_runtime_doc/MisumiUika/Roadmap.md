@@ -1,19 +1,27 @@
 # Roadmap
 
-## Phase 0: Bootstrap runtime docs
-- Create required files and folder layout under `gt_runtime_doc/MisumiUika/`.
-- Commit the initial runtime docs.
+## Phase 0: Load context and triage
+- Locate/read `docs/gastown-webui-report.md` and extract issues.
+- Map current WebUI architecture (auth flow, data sources, CLI usage).
+- Decide target data sources (existing sqlite vs new db) and constraints.
 
-## Phase 1: Understand current role templates
-- Review role templates in `internal/templates/roles/`.
-- Identify where to inject runtime docs workflow instructions.
+## Phase 1: Fix report issues (urgent to non-urgent)
+- Address each issue in order of urgency.
+- One issue per commit with focused tests/notes.
 
-## Phase 2: Implement runtime docs workflow
-- Add AI-friendly instructions for runtime docs (Memory/Roadmap/Progress/summary).
-- Ensure crew and mayor emphasize long-term memory, progress updates, and summaries.
-- Add consistent guidance for other roles as needed.
+## Phase 2: Mobile-friendly authentication
+- Research options that fit the repo (passkeys, magic links, QR-based login).
+- Implement the chosen flow and update WebUI templates/handlers.
 
-## Phase 3: Validate and land
-- Run relevant tests (templates or minimal Go tests if available).
-- Update Progress and write summary when phases complete.
-- Commit and push changes.
+## Phase 3: Replace CLI-driven data population
+- Identify handlers calling `gt`/`bd` CLI or shelling out.
+- Replace with direct data access (state/sqlite/files) where feasible.
+- Keep behavior parity and update tests.
+
+## Phase 4: Data layer modernization
+- Evaluate existing sqlite usage (gt/bd) for reuse.
+- If insufficient, propose and implement a new db + minimal backend.
+
+## Phase 5: Documentation + review
+- Maintain a Web development manual during refactor.
+- Perform a post-refactor code review and capture findings.
