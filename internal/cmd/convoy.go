@@ -273,7 +273,7 @@ func getTownBeadsDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("not in a Gas Town workspace: %w", err)
 	}
-	return filepath.Join(townRoot, ".beads"), nil
+	return beads.ResolveBeadsDir(townRoot), nil
 }
 
 func runConvoyCreate(cmd *cobra.Command, args []string) error {
@@ -1223,7 +1223,9 @@ func getTrackedIssues(townBeads, convoyID string) []trackedIssueInfo {
 	var stdout bytes.Buffer
 	queryCmd.Stdout = &stdout
 	if err := queryCmd.Run(); err != nil {
-		return nil
+		// sqlite3 may not be installed or database inaccessible
+		// fallback to reading dependencies from convoy bead JSON
+		return getTrackedIssuesFromBead(townBeads, convoyID)
 	}
 
 	var deps []struct {
@@ -1231,7 +1233,12 @@ func getTrackedIssues(townBeads, convoyID string) []trackedIssueInfo {
 		Type        string `json:"type"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &deps); err != nil {
-		return nil
+		// SQLite query returned invalid JSON, fallback
+		return getTrackedIssuesFromBead(townBeads, convoyID)
+	}
+	if len(deps) == 0 {
+		// No dependencies in SQLite, fallback
+		return getTrackedIssuesFromBead(townBeads, convoyID)
 	}
 
 	// First pass: collect all issue IDs (normalized from external refs)
@@ -1291,6 +1298,55 @@ func getTrackedIssues(townBeads, convoyID string) []trackedIssueInfo {
 		tracked = append(tracked, info)
 	}
 
+	return tracked
+}
+
+// getTrackedIssuesFromBead fetches tracked issues from convoy bead JSON when SQLite unavailable.
+func getTrackedIssuesFromBead(townBeads, convoyID string) []trackedIssueInfo {
+	dbPath := filepath.Join(townBeads, "beads.db")
+	cmd := exec.Command("bd", "--db="+dbPath, "show", convoyID, "--json")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	var convoyData []struct {
+		Dependencies []struct {
+			ID        string `json:"id"`
+			Title     string `json:"title"`
+			Status    string `json:"status"`
+			IssueType string `json:"issue_type"`
+			Assignee  string `json:"assignee"`
+		} `json:"dependencies"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &convoyData); err != nil {
+		return nil
+	}
+	if len(convoyData) == 0 {
+		return nil
+	}
+	deps := convoyData[0].Dependencies
+	issueIDs := make([]string, 0, len(deps))
+	for _, dep := range deps {
+		issueIDs = append(issueIDs, dep.ID)
+	}
+	workersMap := getWorkersForIssues(issueIDs)
+	var tracked []trackedIssueInfo
+	for _, dep := range deps {
+		info := trackedIssueInfo{
+			ID:        dep.ID,
+			Title:     dep.Title,
+			Status:    dep.Status,
+			IssueType: dep.IssueType,
+			Assignee:  dep.Assignee,
+			Type:      "tracks",
+		}
+		if worker, ok := workersMap[dep.ID]; ok {
+			info.Worker = worker.Worker
+			info.WorkerAge = worker.Age
+		}
+		tracked = append(tracked, info)
+	}
 	return tracked
 }
 
