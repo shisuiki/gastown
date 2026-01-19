@@ -74,12 +74,15 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 
 	// Page routes
 	h.mux.HandleFunc("/", h.handleDashboard)
+	h.mux.HandleFunc("/dashboard", h.handleDashboard)
 	h.mux.HandleFunc("/mayor", h.handleMayor)
 	h.mux.HandleFunc("/mail", h.handleMail)
 	h.mux.HandleFunc("/terminals", h.handleTerminals)
 	h.mux.HandleFunc("/workflow", h.handleWorkflow)
 	h.mux.HandleFunc("/activity", h.handleWorkflow) // Legacy redirect
 	h.mux.HandleFunc("/git", h.handleGit)
+	h.mux.HandleFunc("/config", h.handleConfig)
+	h.mux.HandleFunc("/prompts", h.handlePrompts)
 
 	// Detail page routes (prefix matching)
 	h.mux.HandleFunc("/convoy/", h.handleConvoyDetail)
@@ -127,6 +130,10 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/git/commits", h.handleAPIGitCommits)
 	h.mux.HandleFunc("/api/git/branches", h.handleAPIGitBranches)
 	h.mux.HandleFunc("/api/git/graph", h.handleAPIGitGraph)
+
+	// Config API routes
+	h.mux.HandleFunc("/api/config", h.handleAPIConfig)
+	h.mux.HandleFunc("/api/prompts/", h.handleAPIPrompts)
 
 	// Shared API routes
 	h.mux.HandleFunc("/api/command", h.handleAPICommand)

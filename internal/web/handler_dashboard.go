@@ -19,8 +19,8 @@ type DashboardPageData struct {
 
 // handleDashboard serves the dashboard page.
 func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	// Only handle exact "/" path, not all paths
-	if r.URL.Path != "/" {
+	// Only handle exact "/" and "/dashboard" paths
+	if r.URL.Path != "/" && r.URL.Path != "/dashboard" {
 		http.NotFound(w, r)
 		return
 	}
