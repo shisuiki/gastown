@@ -29,6 +29,7 @@ func (h *GUIHandler) handleConfig(w http.ResponseWriter, r *http.Request) {
 type ConfigResponse struct {
 	DefaultAgent     string                        `json:"default_agent"`
 	RoleAgents       map[string]string             `json:"role_agents"`
+	RoleModels       map[string]*config.RoleModelConfig `json:"role_models,omitempty"`
 	Agents           map[string]*config.RuntimeConfig `json:"agents"`
 	AgentEmailDomain string                        `json:"agent_email_domain"`
 }
@@ -37,6 +38,7 @@ type ConfigResponse struct {
 type ConfigRequest struct {
 	DefaultAgent     string                        `json:"default_agent"`
 	RoleAgents       map[string]string             `json:"role_agents"`
+	RoleModels       map[string]*config.RoleModelConfig `json:"role_models,omitempty"`
 	Agents           map[string]*config.RuntimeConfig `json:"agents"`
 	AgentEmailDomain string                        `json:"agent_email_domain"`
 }
@@ -76,6 +78,7 @@ func (h *GUIHandler) handleAPIConfigGet(w http.ResponseWriter, r *http.Request) 
 	resp := ConfigResponse{
 		DefaultAgent:     settings.DefaultAgent,
 		RoleAgents:       settings.RoleAgents,
+		RoleModels:       settings.RoleModels,
 		Agents:           settings.Agents,
 		AgentEmailDomain: settings.AgentEmailDomain,
 	}
@@ -83,6 +86,9 @@ func (h *GUIHandler) handleAPIConfigGet(w http.ResponseWriter, r *http.Request) 
 	// Ensure maps are not nil for JSON encoding
 	if resp.RoleAgents == nil {
 		resp.RoleAgents = make(map[string]string)
+	}
+	if resp.RoleModels == nil {
+		resp.RoleModels = make(map[string]*config.RoleModelConfig)
 	}
 	if resp.Agents == nil {
 		resp.Agents = make(map[string]*config.RuntimeConfig)
@@ -123,6 +129,13 @@ func (h *GUIHandler) handleAPIConfigPost(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
+	// Validate role names in RoleModels
+	for role := range req.RoleModels {
+		if !validRoles[role] {
+			http.Error(w, "Invalid role: "+role, http.StatusBadRequest)
+			return
+		}
+	}
 
 	// Validate custom agents have required fields
 	for name, agent := range req.Agents {
@@ -154,6 +167,10 @@ func (h *GUIHandler) handleAPIConfigPost(w http.ResponseWriter, r *http.Request)
 	settings.RoleAgents = req.RoleAgents
 	if settings.RoleAgents == nil {
 		settings.RoleAgents = make(map[string]string)
+	}
+	settings.RoleModels = req.RoleModels
+	if settings.RoleModels == nil {
+		settings.RoleModels = make(map[string]*config.RoleModelConfig)
 	}
 
 	settings.Agents = req.Agents

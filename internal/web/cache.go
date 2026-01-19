@@ -276,6 +276,9 @@ const (
 	// AgentCacheTTL for agent data.
 	AgentCacheTTL = 10 * time.Second
 
+	// ModelsCacheTTL for model discovery data.
+	ModelsCacheTTL = 10 * time.Second
+
 	// IssuesCacheTTL for issue lists.
 	IssuesCacheTTL = 20 * time.Second
 
