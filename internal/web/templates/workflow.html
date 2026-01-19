@@ -443,26 +443,21 @@
                     + Create Bead
                 </button>
 
-                <!-- Agent Hooks -->
+                <!-- Agent Hooks (only show agents with work) -->
                 <div class="section-card">
                     <div class="section-header">
-                        <span class="section-title">Agent Hooks</span>
+                        <span class="section-title">Active Hooks</span>
                     </div>
-                    <template x-if="hooks.length === 0">
-                        <div class="empty-state" style="padding: 15px;">No active agents</div>
+                    <template x-if="hooks.filter(h => h.has_work).length === 0">
+                        <div class="empty-state" style="padding: 15px;">No agents with hooked work</div>
                     </template>
-                    <template x-for="hook in hooks" :key="hook.agent">
-                        <div class="hook-item" :class="{ 'has-work': hook.has_work }">
+                    <template x-for="hook in hooks.filter(h => h.has_work)" :key="hook.agent">
+                        <div class="hook-item has-work">
                             <div class="hook-agent" x-text="hook.agent.split('/').pop()"></div>
-                            <template x-if="hook.has_work">
-                                <div>
-                                    <span class="type-badge" x-text="hook.work_type"></span>
-                                    <a :href="'/bead/' + hook.work_id" class="hook-work" x-text="hook.work_id"></a>
-                                </div>
-                            </template>
-                            <template x-if="!hook.has_work">
-                                <div style="font-size: 0.8rem; color: #64748b;">Idle</div>
-                            </template>
+                            <div>
+                                <span class="type-badge" x-text="hook.work_type"></span>
+                                <a :href="'/bead/' + hook.work_id" class="hook-work" x-text="hook.work_id"></a>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -525,7 +520,7 @@
                             <span class="board-column-count" x-text="beadsByStatus.open?.length || 0"></span>
                         </div>
                         <template x-for="bead in beadsByStatus.open || []" :key="bead.id">
-                            <div class="bead-card" @click="selectBead(bead)">
+                            <a :href="'/bead/' + bead.id" class="bead-card" style="display: block; text-decoration: none; color: inherit;">
                                 <div class="bead-card-header">
                                     <span class="bead-card-id" x-text="bead.id"></span>
                                     <span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span>
@@ -534,7 +529,7 @@
                                 <div class="bead-card-meta">
                                     <span class="type-badge" x-text="bead.issue_type || 'task'"></span>
                                 </div>
-                            </div>
+                            </a>
                         </template>
                         <template x-if="!beadsByStatus.open?.length">
                             <div class="empty-state">No open beads</div>
@@ -546,7 +541,7 @@
                             <span class="board-column-count" x-text="beadsByStatus.in_progress?.length || 0"></span>
                         </div>
                         <template x-for="bead in beadsByStatus.in_progress || []" :key="bead.id">
-                            <div class="bead-card" @click="selectBead(bead)">
+                            <a :href="'/bead/' + bead.id" class="bead-card" style="display: block; text-decoration: none; color: inherit;">
                                 <div class="bead-card-header">
                                     <span class="bead-card-id" x-text="bead.id"></span>
                                     <span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span>
@@ -558,7 +553,7 @@
                                         <span style="font-size: 0.75rem; color: #94a3b8;" x-text="'@' + bead.assignee.split('/').pop()"></span>
                                     </template>
                                 </div>
-                            </div>
+                            </a>
                         </template>
                         <template x-if="!beadsByStatus.in_progress?.length">
                             <div class="empty-state">No in-progress beads</div>
@@ -570,12 +565,12 @@
                             <span class="board-column-count" x-text="beadsByStatus.closed?.length || 0"></span>
                         </div>
                         <template x-for="bead in (beadsByStatus.closed || []).slice(0, 10)" :key="bead.id">
-                            <div class="bead-card" style="opacity: 0.6;" @click="selectBead(bead)">
+                            <a :href="'/bead/' + bead.id" class="bead-card" style="display: block; text-decoration: none; color: inherit; opacity: 0.6;">
                                 <div class="bead-card-header">
                                     <span class="bead-card-id" x-text="bead.id"></span>
                                 </div>
                                 <div class="bead-card-title" x-text="bead.title"></div>
-                            </div>
+                            </a>
                         </template>
                         <template x-if="!beadsByStatus.closed?.length">
                             <div class="empty-state">No closed beads</div>
@@ -596,13 +591,13 @@
                         <div class="empty-state">No beads found</div>
                     </template>
                     <template x-for="bead in beads" :key="bead.id">
-                        <div class="bead-list-row" @click="selectBead(bead)">
+                        <a :href="'/bead/' + bead.id" class="bead-list-row" style="text-decoration: none; color: inherit;">
                             <div><code style="color: #4ade80;" x-text="bead.id"></code></div>
                             <div x-text="bead.title"></div>
                             <div><span class="priority-badge" :class="'priority-' + bead.priority" x-text="'P' + bead.priority"></span></div>
                             <div><span class="type-badge" x-text="bead.issue_type || 'task'"></span></div>
                             <div><span class="status-badge" :class="'status-' + bead.status" x-text="bead.status"></span></div>
-                        </div>
+                        </a>
                     </template>
                 </div>
 
@@ -620,12 +615,12 @@
                     </template>
                     <template x-for="bead in readyBeads" :key="bead.ID || bead.id">
                         <div class="bead-list-row">
-                            <div><code style="color: #4ade80;" x-text="bead.ID || bead.id"></code></div>
+                            <div><a :href="'/bead/' + (bead.ID || bead.id)" style="color: #4ade80;"><code x-text="bead.ID || bead.id"></code></a></div>
                             <div x-text="bead.Title || bead.title"></div>
                             <div><span class="priority-badge" :class="'priority-' + (bead.Priority || bead.priority || 2)" x-text="'P' + (bead.Priority || bead.priority || 2)"></span></div>
                             <div><span class="type-badge" x-text="bead.Type || bead.issue_type || 'task'"></span></div>
                             <div>
-                                <button class="btn btn-sm btn-primary" @click="showSlingModal(bead)">Sling</button>
+                                <button class="btn btn-sm btn-primary" @click.stop="showSlingModal(bead)">Sling</button>
                             </div>
                         </div>
                     </template>

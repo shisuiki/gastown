@@ -126,10 +126,10 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/bead/action", h.handleAPIBeadAction)
 	h.mux.HandleFunc("/api/bead/create-v2", h.handleAPICreateBeadV2)
 
-	// Detail API routes (prefix matching)
+	// Detail API routes (prefix matching) - use fast direct DB handlers
 	h.mux.HandleFunc("/api/convoy/beads/", h.handleAPIConvoyBeads) // Must be before /api/convoy/
-	h.mux.HandleFunc("/api/convoy/", h.handleAPIConvoyDetail)
-	h.mux.HandleFunc("/api/bead/", h.handleAPIBeadDetail)
+	h.mux.HandleFunc("/api/convoy/", h.handleAPIConvoyDetailFast)
+	h.mux.HandleFunc("/api/bead/", h.handleAPIBeadDetailFast)
 
 	// Quick action API routes
 	h.mux.HandleFunc("/api/action", h.handleAPIActions)

@@ -430,6 +430,121 @@ func (h *GUIHandler) handleAPICreateBeadV2(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// handleAPIBeadDetailFast returns detailed bead info using direct DB access.
+// This is the fast version that replaces the CLI-based handler.
+func (h *GUIHandler) handleAPIBeadDetailFast(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Extract ID from path: /api/bead/te-xxx
+	id := strings.TrimPrefix(r.URL.Path, "/api/bead/")
+	if id == "" {
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing bead ID"})
+		return
+	}
+
+	reader, err := NewBeadsReader("")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":    id,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	bead, err := reader.GetBead(id)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":    id,
+			"error": "Bead not found: " + err.Error(),
+		})
+		return
+	}
+
+	// Get dependencies
+	deps, _ := reader.GetBeadDependencies(id)
+
+	// Return in format compatible with detail page
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":           bead.ID,
+		"title":        bead.Title,
+		"type":         bead.Type,
+		"priority":     bead.Priority,
+		"status":       bead.Status,
+		"owner":        bead.Owner,
+		"assignee":     bead.Assignee,
+		"description":  bead.Description,
+		"labels":       bead.Labels,
+		"created":      bead.CreatedAt.Format("2006-01-02 15:04"),
+		"updated":      bead.UpdatedAt.Format("2006-01-02 15:04"),
+		"dependencies": deps,
+	})
+}
+
+// handleAPIConvoyDetailFast returns detailed convoy info using direct DB access.
+func (h *GUIHandler) handleAPIConvoyDetailFast(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Extract ID from path: /api/convoy/hq-cv-xxx
+	id := strings.TrimPrefix(r.URL.Path, "/api/convoy/")
+	// Remove "beads/" suffix if present (different endpoint)
+	if strings.HasPrefix(id, "beads/") {
+		h.handleAPIConvoyBeads(w, r)
+		return
+	}
+
+	if id == "" {
+		json.NewEncoder(w).Encode(map[string]string{"error": "missing convoy ID"})
+		return
+	}
+
+	reader, err := NewBeadsReader("")
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":    id,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Get convoy bead
+	convoy, err := reader.GetBead(id)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":    id,
+			"error": "Convoy not found: " + err.Error(),
+		})
+		return
+	}
+
+	// Get tracked issues
+	trackedIssues, _ := reader.GetConvoyTrackedIssues(id)
+
+	// Calculate progress
+	completed := 0
+	for _, issue := range trackedIssues {
+		if issue.Status == "closed" {
+			completed++
+		}
+	}
+	total := len(trackedIssues)
+
+	progress := "0/0"
+	if total > 0 {
+		progress = strconv.Itoa(completed) + "/" + strconv.Itoa(total)
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":             convoy.ID,
+		"title":          convoy.Title,
+		"status":         convoy.Status,
+		"progress":       progress,
+		"completed":      completed,
+		"total":          total,
+		"created":        convoy.CreatedAt.Format("2006-01-02 15:04"),
+		"tracked_issues": trackedIssues,
+	})
+}
+
 // max returns the larger of a or b.
 func max(a, b int) int {
 	if a > b {
