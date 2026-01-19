@@ -35,35 +35,51 @@ func NewLiveConvoyFetcher() (*LiveConvoyFetcher, error) {
 
 // FetchConvoys fetches all open convoys with their activity data.
 func (f *LiveConvoyFetcher) FetchConvoys() ([]ConvoyRow, error) {
-	// Check cache first - handle both typed and JSON-loaded cache
-	if cached := f.cache.Get("convoys"); cached != nil {
-		if rows, ok := cached.([]ConvoyRow); ok {
-			return rows, nil
+	// Refresh function for cache
+	refresh := func() interface{} {
+		rows, err := f.fetchConvoysUncached()
+		if err != nil {
+			return nil
 		}
-		// Cache loaded from disk as []interface{} - convert via JSON
-		if arr, ok := cached.([]interface{}); ok {
-			data, _ := json.Marshal(arr)
-			var rows []ConvoyRow
-			if json.Unmarshal(data, &rows) == nil {
-				return rows, nil
-			}
-		}
+		return rows
 	}
 
-	convoys, err := f.fetchConvoysUncached()
+	// Get cached data (possibly stale) and trigger background refresh if needed
+	cached := f.cache.GetStaleOrRefresh("convoys", ConvoyCacheTTL, refresh)
+	if cached == nil {
+		// No cached data, fetch synchronously
+		rows, err := f.fetchConvoysUncached()
+		if err != nil {
+			return nil, err
+		}
+		return rows, nil
+	}
+
+	// Handle both typed and JSON-loaded cache
+	if rows, ok := cached.([]ConvoyRow); ok {
+		return rows, nil
+	}
+	// Cache loaded from disk as []interface{} - convert via JSON
+	if arr, ok := cached.([]interface{}); ok {
+		data, _ := json.Marshal(arr)
+		var rows []ConvoyRow
+		if json.Unmarshal(data, &rows) == nil {
+			return rows, nil
+		}
+	}
+	// Conversion failed, fetch fresh
+	rows, err := f.fetchConvoysUncached()
 	if err != nil {
 		return nil, err
 	}
-
-	// Cache successful result
-	f.cache.Set("convoys", convoys, ConvoyCacheTTL)
-	return convoys, nil
+	return rows, nil
 }
 
 // fetchConvoysUncached does the actual convoy fetching without caching.
 func (f *LiveConvoyFetcher) fetchConvoysUncached() ([]ConvoyRow, error) {
 	// List all open convoy-type issues
-	listArgs := []string{"list", "--type=convoy", "--status=open", "--json"}
+	dbPath := filepath.Join(f.townBeads, "beads.db")
+	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--status=open", "--json"}
 	listCmd := exec.Command("bd", listArgs...)
 	listCmd.Dir = f.townBeads
 
