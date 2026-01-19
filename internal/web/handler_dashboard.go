@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/steveyegge/gastown/internal/daemon"
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 // DashboardPageData is the data passed to the dashboard template.
@@ -159,13 +161,32 @@ func (h *GUIHandler) buildStatusUncached() StatusResponse {
 }
 
 func (h *GUIHandler) getDaemonStatus() DaemonStatus {
-	cmd, cancel := command("gt", "daemon", "status")
-	defer cancel()
-	output, err := cmd.CombinedOutput()
-
-	return DaemonStatus{
-		Running: err == nil && strings.Contains(string(output), "running"),
+	townRoot, err := workspace.FindFromCwdOrError()
+	if err != nil {
+		return DaemonStatus{}
 	}
+
+	running, pid, err := daemon.IsRunning(townRoot)
+	if err != nil {
+		return DaemonStatus{}
+	}
+
+	status := DaemonStatus{
+		Running: running,
+		PID:     pid,
+	}
+
+	if running {
+		if state, err := daemon.LoadState(townRoot); err == nil && !state.StartedAt.IsZero() {
+			uptime := time.Since(state.StartedAt).Truncate(time.Second)
+			if uptime < 0 {
+				uptime = 0
+			}
+			status.Uptime = uptime.String()
+		}
+	}
+
+	return status
 }
 
 func (h *GUIHandler) getMailStatus() MailStatus {
@@ -251,14 +272,7 @@ func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 
 // fetchIssues gets issues from beads.
 func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
-	args := []string{"list", "--json"}
-	if status != "" {
-		args = append(args, "--status="+status)
-	}
-
-	cmd, cancel := command("bd", args...)
-	defer cancel()
-	output, err := cmd.Output()
+	reader, err := NewBeadsReader("")
 	if err != nil {
 		return map[string]interface{}{
 			"error":  "Failed to fetch issues",
@@ -266,28 +280,41 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		}
 	}
 
-	var issues []IssueRow
-	if err := json.Unmarshal(output, &issues); err != nil {
+	beads, err := reader.ListBeads(BeadFilter{
+		Status:           status,
+		IncludeEphemeral: true,
+		Limit:            20,
+	})
+	if err != nil {
 		return map[string]interface{}{
 			"error":  "Failed to parse issues",
 			"issues": []IssueRow{},
 		}
 	}
 
-	// Post-process issues: set Wisp field based on labels
-	for i := range issues {
-		// Check if any label indicates ephemeral/wisp status
-		for _, label := range issues[i].Labels {
-			if label == "ephemeral" || label == "wisp" {
-				issues[i].Wisp = true
-				break
+	issues := make([]IssueRow, 0, len(beads))
+	for _, bead := range beads {
+		issue := IssueRow{
+			ID:       bead.ID,
+			Title:    bead.Title,
+			Status:   bead.Status,
+			Priority: bead.Priority,
+			Type:     bead.Type,
+			Assignee: bead.Assignee,
+			Labels:   bead.Labels,
+			Wisp:     bead.Ephemeral,
+		}
+
+		if !issue.Wisp {
+			for _, label := range bead.Labels {
+				if label == "ephemeral" || label == "wisp" {
+					issue.Wisp = true
+					break
+				}
 			}
 		}
-	}
 
-	// Limit to first 20 issues for dashboard
-	if len(issues) > 20 {
-		issues = issues[:20]
+		issues = append(issues, issue)
 	}
 
 	return map[string]interface{}{
@@ -319,12 +346,7 @@ func (h *GUIHandler) handleAPIRoleBeads(w http.ResponseWriter, r *http.Request) 
 
 // fetchRoleBeads gets role beads (issue_type='agent') from beads.
 func (h *GUIHandler) fetchRoleBeads() map[string]interface{} {
-	// Query beads with issue_type='agent' and status='open'
-	args := []string{"list", "--type=agent", "--status=open", "--json"}
-
-	cmd, cancel := command("bd", args...)
-	defer cancel()
-	output, err := cmd.Output()
+	reader, err := NewBeadsReader("")
 	if err != nil {
 		return map[string]interface{}{
 			"error":      "Failed to fetch role beads",
@@ -332,15 +354,12 @@ func (h *GUIHandler) fetchRoleBeads() map[string]interface{} {
 		}
 	}
 
-	var beads []struct {
-		ID        string            `json:"id"`
-		Title     string            `json:"title"`
-		Status    string            `json:"status"`
-		Labels    []string          `json:"labels"`
-		CreatedAt string            `json:"created_at"`
-		Metadata  map[string]string `json:"metadata"`
-	}
-	if err := json.Unmarshal(output, &beads); err != nil {
+	beads, err := reader.ListBeads(BeadFilter{
+		Status:           "open",
+		Type:             "agent",
+		IncludeEphemeral: true,
+	})
+	if err != nil {
 		return map[string]interface{}{
 			"error":      "Failed to parse role beads",
 			"role_beads": []RoleBead{},
@@ -359,12 +378,17 @@ func (h *GUIHandler) fetchRoleBeads() map[string]interface{} {
 			}
 		}
 
+		createdAt := ""
+		if !b.CreatedAt.IsZero() {
+			createdAt = b.CreatedAt.Format(time.RFC3339)
+		}
+
 		roleBeads = append(roleBeads, RoleBead{
 			ID:        b.ID,
 			Title:     b.Title,
 			Status:    b.Status,
 			RoleType:  roleType,
-			CreatedAt: b.CreatedAt,
+			CreatedAt: createdAt,
 		})
 	}
 
