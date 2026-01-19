@@ -191,6 +191,9 @@ func (r *BeadsReader) ReadyBeads() ([]Bead, error) {
 			}
 			blocked := false
 			for _, dep := range b.Dependencies {
+				if !isBlockingDependency(dep.Type) {
+					continue
+				}
 				depID := dep.DependsOnID
 				if depID == "" {
 					continue
@@ -243,6 +246,15 @@ func (r *BeadsReader) ReadyBeads() ([]Bead, error) {
 	}
 
 	return beads, nil
+}
+
+func isBlockingDependency(depType string) bool {
+	switch depType {
+	case "", "blocks", "parent-child":
+		return true
+	default:
+		return false
+	}
 }
 
 // GetBead returns a single bead by ID using bd show --json.
