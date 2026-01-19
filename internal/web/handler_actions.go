@@ -190,8 +190,8 @@ func (h *GUIHandler) handleAPICreateBead(w http.ResponseWriter, r *http.Request)
 		priority = 2
 	}
 
-	// Build command: bd new -t <type> "<title>" -p <priority>
-	args := []string{"new", "-t", issueType, req.Title, "-p", string(rune('0' + priority))}
+	// Build command: bd create -t <type> "<title>" -p <priority>
+	args := []string{"create", "-t", issueType, req.Title, "-p", string(rune('0' + priority))}
 	if req.Body != "" {
 		args = append(args, "-b", req.Body)
 	}
