@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,27 +10,26 @@ import (
 	"time"
 )
 
-// BeadsReader provides direct access to beads SQLite database via sqlite3 CLI.
+// BeadsReader provides access to beads via bd CLI commands.
 type BeadsReader struct {
-	dbPath   string
 	townRoot string
 }
 
 // Bead represents a bead from the database.
 type Bead struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	Status      string    `json:"status"`
-	Priority    int       `json:"priority"`
-	Type        string    `json:"issue_type"`
-	Owner       string    `json:"owner,omitempty"`
-	Assignee    string    `json:"assignee,omitempty"`
-	Labels      []string  `json:"labels,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description,omitempty"`
+	Status      string     `json:"status"`
+	Priority    int        `json:"priority"`
+	Type        string     `json:"issue_type"`
+	Owner       string     `json:"owner,omitempty"`
+	Assignee    string     `json:"assignee,omitempty"`
+	Labels      []string   `json:"labels,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 	ClosedAt    *time.Time `json:"closed_at,omitempty"`
-	Ephemeral   bool      `json:"ephemeral,omitempty"`
+	Ephemeral   bool       `json:"ephemeral,omitempty"`
 }
 
 // BeadDependency represents a dependency between beads.
@@ -43,10 +41,10 @@ type BeadDependency struct {
 
 // AgentHook represents an agent's hook status.
 type AgentHook struct {
-	Agent     string `json:"agent"`      // e.g., "TerraNomadicCity/crew/Myrtle"
-	Role      string `json:"role"`       // e.g., "crew"
+	Agent     string `json:"agent"`     // e.g., "TerraNomadicCity/crew/Myrtle"
+	Role      string `json:"role"`      // e.g., "crew"
 	HasWork   bool   `json:"has_work"`
-	WorkType  string `json:"work_type"`  // "molecule", "mail", "none"
+	WorkType  string `json:"work_type"` // "molecule", "mail", "none"
 	WorkID    string `json:"work_id,omitempty"`
 	WorkTitle string `json:"work_title,omitempty"`
 }
@@ -54,7 +52,6 @@ type AgentHook struct {
 // NewBeadsReader creates a BeadsReader for the given town root.
 func NewBeadsReader(townRoot string) (*BeadsReader, error) {
 	if townRoot == "" {
-		// Try to find from environment or default
 		townRoot = os.Getenv("GT_ROOT")
 		if townRoot == "" {
 			home, _ := os.UserHomeDir()
@@ -62,72 +59,9 @@ func NewBeadsReader(townRoot string) (*BeadsReader, error) {
 		}
 	}
 
-	dbPath := filepath.Join(townRoot, ".beads", "beads.db")
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("beads database not found at %s", dbPath)
-	}
-
 	return &BeadsReader{
-		dbPath:   dbPath,
 		townRoot: townRoot,
 	}, nil
-}
-
-// query executes a SQL query and returns JSON results.
-func (r *BeadsReader) query(sql string) ([]byte, error) {
-	// #nosec G204 -- sqlite3 path is from trusted config
-	cmd := exec.Command("sqlite3", "-json", r.dbPath, sql)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("sqlite3 error: %s", stderr.String())
-	}
-	return stdout.Bytes(), nil
-}
-
-// ListBeads returns beads matching the given filters.
-func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
-	query := `SELECT id, title, COALESCE(description, ''), status, priority,
-	          COALESCE(issue_type, 'task'), COALESCE(owner, ''), COALESCE(assignee, ''),
-	          COALESCE(labels, '[]'), created_at, updated_at, closed_at, COALESCE(ephemeral, 0)
-	          FROM issues WHERE 1=1`
-
-	if filter.Status != "" {
-		query += fmt.Sprintf(" AND status = '%s'", escapeSQL(filter.Status))
-	}
-	if filter.Type != "" {
-		query += fmt.Sprintf(" AND issue_type = '%s'", escapeSQL(filter.Type))
-	}
-	if filter.Assignee != "" {
-		query += fmt.Sprintf(" AND assignee = '%s'", escapeSQL(filter.Assignee))
-	}
-	if len(filter.ExcludeTypes) > 0 {
-		types := make([]string, len(filter.ExcludeTypes))
-		for i, t := range filter.ExcludeTypes {
-			types[i] = "'" + escapeSQL(t) + "'"
-		}
-		query += fmt.Sprintf(" AND (issue_type IS NULL OR issue_type NOT IN (%s))", strings.Join(types, ","))
-	}
-	if !filter.IncludeEphemeral {
-		query += " AND (ephemeral IS NULL OR ephemeral = 0)"
-	}
-	if filter.Priority > 0 {
-		query += fmt.Sprintf(" AND priority >= %d", filter.Priority)
-	}
-
-	query += " ORDER BY priority DESC, updated_at DESC"
-
-	if filter.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
-	}
-
-	output, err := r.query(query)
-	if err != nil {
-		return nil, err
-	}
-
-	return r.parseBeadsJSON(output)
 }
 
 // BeadFilter specifies criteria for listing beads.
@@ -141,74 +75,73 @@ type BeadFilter struct {
 	Limit            int
 }
 
-// parseBeadsJSON parses sqlite3 JSON output into Bead structs.
-func (r *BeadsReader) parseBeadsJSON(data []byte) ([]Bead, error) {
-	if len(data) == 0 {
-		return []Bead{}, nil
+// ListBeads returns beads matching the given filters using bd list --json.
+func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
+	args := []string{"list", "--json"}
+
+	if filter.Status != "" {
+		args = append(args, "--status="+filter.Status)
+	}
+	if filter.Type != "" {
+		args = append(args, "--type="+filter.Type)
+	}
+	if filter.Assignee != "" {
+		args = append(args, "--assignee="+filter.Assignee)
+	}
+	if filter.Limit > 0 {
+		args = append(args, fmt.Sprintf("--limit=%d", filter.Limit))
+	} else {
+		args = append(args, "--limit=100")
 	}
 
-	var rows []struct {
-		ID          string `json:"id"`
-		Title       string `json:"title"`
-		Description string `json:"COALESCE(description, '')"`
-		Status      string `json:"status"`
-		Priority    int    `json:"priority"`
-		Type        string `json:"COALESCE(issue_type, 'task')"`
-		Owner       string `json:"COALESCE(owner, '')"`
-		Assignee    string `json:"COALESCE(assignee, '')"`
-		Labels      string `json:"COALESCE(labels, '[]')"`
-		CreatedAt   string `json:"created_at"`
-		UpdatedAt   string `json:"updated_at"`
-		ClosedAt    string `json:"closed_at"`
-		Ephemeral   int    `json:"COALESCE(ephemeral, 0)"`
+	cmd := exec.Command("bd", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("bd list failed: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &rows); err != nil {
-		return nil, err
+	var beads []Bead
+	if err := json.Unmarshal(output, &beads); err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
 	}
 
-	beads := make([]Bead, len(rows))
-	for i, row := range rows {
-		beads[i] = Bead{
-			ID:          row.ID,
-			Title:       row.Title,
-			Description: row.Description,
-			Status:      row.Status,
-			Priority:    row.Priority,
-			Type:        row.Type,
-			Owner:       row.Owner,
-			Assignee:    row.Assignee,
-			Ephemeral:   row.Ephemeral == 1,
+	// Filter out excluded types and ephemeral if needed
+	filtered := make([]Bead, 0, len(beads))
+	for _, b := range beads {
+		// Skip excluded types
+		if len(filter.ExcludeTypes) > 0 {
+			skip := false
+			for _, t := range filter.ExcludeTypes {
+				if b.Type == t {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				continue
+			}
 		}
-		beads[i].CreatedAt, _ = time.Parse(time.RFC3339, row.CreatedAt)
-		beads[i].UpdatedAt, _ = time.Parse(time.RFC3339, row.UpdatedAt)
-		if row.ClosedAt != "" {
-			t, _ := time.Parse(time.RFC3339, row.ClosedAt)
-			beads[i].ClosedAt = &t
+		// Skip ephemeral unless requested
+		if b.Ephemeral && !filter.IncludeEphemeral {
+			continue
 		}
-		if row.Labels != "" && row.Labels != "[]" {
-			json.Unmarshal([]byte(row.Labels), &beads[i].Labels)
-		}
+		filtered = append(filtered, b)
 	}
 
-	return beads, nil
+	return filtered, nil
 }
 
-// GetBead returns a single bead by ID.
+// GetBead returns a single bead by ID using bd show --json.
 func (r *BeadsReader) GetBead(id string) (*Bead, error) {
-	query := fmt.Sprintf(`SELECT id, title, COALESCE(description, ''), status, priority,
-	          COALESCE(issue_type, 'task'), COALESCE(owner, ''), COALESCE(assignee, ''),
-	          COALESCE(labels, '[]'), created_at, updated_at, closed_at, COALESCE(ephemeral, 0)
-	          FROM issues WHERE id = '%s'`, escapeSQL(id))
-
-	output, err := r.query(query)
+	cmd := exec.Command("bd", "show", id, "--json")
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bd show failed: %w", err)
 	}
 
-	beads, err := r.parseBeadsJSON(output)
-	if err != nil {
-		return nil, err
+	var beads []Bead
+	if err := json.Unmarshal(output, &beads); err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
 	}
 	if len(beads) == 0 {
 		return nil, fmt.Errorf("bead not found: %s", id)
@@ -218,53 +151,50 @@ func (r *BeadsReader) GetBead(id string) (*Bead, error) {
 }
 
 // GetConvoyTrackedIssues returns the issues tracked by a convoy.
+// Convoys use dependency type "tracks" to link to their issues.
 func (r *BeadsReader) GetConvoyTrackedIssues(convoyID string) ([]Bead, error) {
-	// Get tracked issue IDs from dependencies table
-	query := fmt.Sprintf(`SELECT depends_on_id FROM dependencies
-	                       WHERE issue_id = '%s' AND type = 'tracks'`, escapeSQL(convoyID))
-
-	output, err := r.query(query)
+	// Use bd show with --json to get the convoy and its dependents
+	cmd := exec.Command("bd", "show", convoyID, "--json")
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bd show failed: %w", err)
 	}
 
-	var deps []struct {
-		DependsOnID string `json:"depends_on_id"`
-	}
-	if len(output) > 0 {
-		json.Unmarshal(output, &deps)
+	var results []struct {
+		ID         string `json:"id"`
+		Dependents []struct {
+			ID             string `json:"id"`
+			Title          string `json:"title"`
+			Status         string `json:"status"`
+			Priority       int    `json:"priority"`
+			Type           string `json:"issue_type"`
+			DependencyType string `json:"dependency_type"`
+		} `json:"dependents"`
 	}
 
-	if len(deps) == 0 {
+	if err := json.Unmarshal(output, &results); err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
+
+	if len(results) == 0 {
 		return []Bead{}, nil
 	}
 
-	// Collect issue IDs
-	issueIDs := make([]string, 0, len(deps))
-	for _, dep := range deps {
-		id := dep.DependsOnID
-		// Handle external references
-		if strings.HasPrefix(id, "external:") {
-			parts := strings.SplitN(id, ":", 3)
-			if len(parts) == 3 {
-				id = parts[2]
-			}
+	// Extract tracked issues (dependency_type = "tracks")
+	var beads []Bead
+	for _, dep := range results[0].Dependents {
+		if dep.DependencyType == "tracks" {
+			beads = append(beads, Bead{
+				ID:       dep.ID,
+				Title:    dep.Title,
+				Status:   dep.Status,
+				Priority: dep.Priority,
+				Type:     dep.Type,
+			})
 		}
-		issueIDs = append(issueIDs, "'"+escapeSQL(id)+"'")
 	}
 
-	// Fetch the actual issues
-	query = fmt.Sprintf(`SELECT id, title, COALESCE(description, ''), status, priority,
-	          COALESCE(issue_type, 'task'), COALESCE(owner, ''), COALESCE(assignee, ''),
-	          COALESCE(labels, '[]'), created_at, updated_at, closed_at, COALESCE(ephemeral, 0)
-	          FROM issues WHERE id IN (%s)`, strings.Join(issueIDs, ","))
-
-	output, err = r.query(query)
-	if err != nil {
-		return nil, err
-	}
-
-	return r.parseBeadsJSON(output)
+	return beads, nil
 }
 
 // GetAllAgentHooks returns hook status for all active agents.
@@ -371,18 +301,36 @@ func (r *BeadsReader) getAgentHook(agent, role string) AgentHook {
 
 // GetBeadDependencies returns all dependencies for a bead.
 func (r *BeadsReader) GetBeadDependencies(beadID string) ([]BeadDependency, error) {
-	query := fmt.Sprintf(`SELECT issue_id, depends_on_id, type FROM dependencies
-	                       WHERE issue_id = '%s' OR depends_on_id = '%s'`,
-		escapeSQL(beadID), escapeSQL(beadID))
-
-	output, err := r.query(query)
+	// Use bd show --json to get dependencies
+	cmd := exec.Command("bd", "show", beadID, "--json")
+	output, err := cmd.Output()
 	if err != nil {
+		return nil, fmt.Errorf("bd show failed: %w", err)
+	}
+
+	var results []struct {
+		ID         string `json:"id"`
+		Dependents []struct {
+			ID             string `json:"id"`
+			DependencyType string `json:"dependency_type"`
+		} `json:"dependents"`
+	}
+
+	if err := json.Unmarshal(output, &results); err != nil {
 		return nil, err
 	}
 
+	if len(results) == 0 {
+		return []BeadDependency{}, nil
+	}
+
 	var deps []BeadDependency
-	if len(output) > 0 {
-		json.Unmarshal(output, &deps)
+	for _, dep := range results[0].Dependents {
+		deps = append(deps, BeadDependency{
+			IssueID:     beadID,
+			DependsOnID: dep.ID,
+			Type:        dep.DependencyType,
+		})
 	}
 
 	return deps, nil
@@ -392,41 +340,24 @@ func (r *BeadsReader) GetBeadDependencies(beadID string) ([]BeadDependency, erro
 func (r *BeadsReader) GetBeadStats() (map[string]int, error) {
 	stats := make(map[string]int)
 
-	// Count by status
-	output, err := r.query(`SELECT status, COUNT(*) as count FROM issues GROUP BY status`)
-	if err == nil && len(output) > 0 {
-		var rows []struct {
-			Status string `json:"status"`
-			Count  int    `json:"count"`
-		}
-		json.Unmarshal(output, &rows)
-		for _, row := range rows {
-			stats["status_"+row.Status] = row.Count
-		}
+	// Get all beads with JSON
+	cmd := exec.Command("bd", "list", "--json", "--limit=0")
+	output, err := cmd.Output()
+	if err != nil {
+		return stats, err
 	}
 
-	// Count by type
-	output, err = r.query(`SELECT COALESCE(issue_type, 'task') as type, COUNT(*) as count FROM issues GROUP BY issue_type`)
-	if err == nil && len(output) > 0 {
-		var rows []struct {
-			Type  string `json:"type"`
-			Count int    `json:"count"`
-		}
-		json.Unmarshal(output, &rows)
-		for _, row := range rows {
-			stats["type_"+row.Type] = row.Count
-		}
+	var beads []Bead
+	if err := json.Unmarshal(output, &beads); err != nil {
+		return stats, err
 	}
 
-	// Total count
-	output, _ = r.query(`SELECT COUNT(*) as count FROM issues`)
-	if len(output) > 0 {
-		var rows []struct {
-			Count int `json:"count"`
-		}
-		json.Unmarshal(output, &rows)
-		if len(rows) > 0 {
-			stats["total"] = rows[0].Count
+	// Count by status and type
+	for _, b := range beads {
+		if !b.Ephemeral {
+			stats["status_"+b.Status]++
+			stats["type_"+b.Type]++
+			stats["total"]++
 		}
 	}
 
@@ -435,26 +366,24 @@ func (r *BeadsReader) GetBeadStats() (map[string]int, error) {
 
 // SearchBeads searches beads by text in title and description.
 func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error) {
-	escapedQuery := escapeSQL(searchQuery)
-	query := fmt.Sprintf(`SELECT id, title, COALESCE(description, ''), status, priority,
-	          COALESCE(issue_type, 'task'), COALESCE(owner, ''), COALESCE(assignee, ''),
-	          COALESCE(labels, '[]'), created_at, updated_at, closed_at, COALESCE(ephemeral, 0)
-	          FROM issues
-	          WHERE (title LIKE '%%%s%%' OR description LIKE '%%%s%%' OR id LIKE '%%%s%%')
-	          AND (ephemeral IS NULL OR ephemeral = 0)
-	          ORDER BY updated_at DESC`,
-		escapedQuery, escapedQuery, escapedQuery)
-
+	args := []string{"search", searchQuery, "--json"}
 	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
+		args = append(args, fmt.Sprintf("--limit=%d", limit))
 	}
 
-	output, err := r.query(query)
+	cmd := exec.Command("bd", args...)
+	output, err := cmd.Output()
 	if err != nil {
+		// Search might return empty results
+		return []Bead{}, nil
+	}
+
+	var beads []Bead
+	if err := json.Unmarshal(output, &beads); err != nil {
 		return nil, err
 	}
 
-	return r.parseBeadsJSON(output)
+	return beads, nil
 }
 
 // ListAgents returns all available agents for assignment.
@@ -500,9 +429,4 @@ func (r *BeadsReader) ListAgents() ([]string, error) {
 	}
 
 	return agents, nil
-}
-
-// escapeSQL escapes single quotes in SQL strings.
-func escapeSQL(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
 }

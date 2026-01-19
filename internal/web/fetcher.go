@@ -197,53 +197,67 @@ type trackedIssueInfo struct {
 
 // getTrackedIssues fetches tracked issues for a convoy.
 func (f *LiveConvoyFetcher) getTrackedIssues(convoyID string) []trackedIssueInfo {
-	dbPath := filepath.Join(f.townBeads, "beads.db")
-
-	// Query tracked dependencies from SQLite
-	safeConvoyID := strings.ReplaceAll(convoyID, "'", "''")
-	// #nosec G204 -- sqlite3 path is from trusted config, convoyID is escaped
-	queryCmd := exec.Command("sqlite3", "-json", dbPath,
-		fmt.Sprintf(`SELECT depends_on_id, type FROM dependencies WHERE issue_id = '%s' AND type = 'tracks'`, safeConvoyID))
-
+	// Use bd show --json to get convoy with dependents instead of sqlite3
+	showCmd := exec.Command("bd", "show", convoyID, "--json", "--db="+filepath.Join(f.townBeads, "beads.db"))
 	var stdout bytes.Buffer
-	queryCmd.Stdout = &stdout
-	if err := queryCmd.Run(); err != nil {
+	showCmd.Stdout = &stdout
+	if err := showCmd.Run(); err != nil {
 		return nil
 	}
 
-	var deps []struct {
-		DependsOnID string `json:"depends_on_id"`
-		Type        string `json:"type"`
+	var results []struct {
+		ID         string `json:"id"`
+		Dependents []struct {
+			ID             string    `json:"id"`
+			Title          string    `json:"title"`
+			Status         string    `json:"status"`
+			Assignee       string    `json:"assignee"`
+			UpdatedAt      time.Time `json:"updated_at"`
+			DependencyType string    `json:"dependency_type"`
+		} `json:"dependents"`
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &deps); err != nil {
+	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil {
 		return nil
 	}
 
-	// Collect issue IDs (normalize external refs)
-	issueIDs := make([]string, 0, len(deps))
-	for _, dep := range deps {
-		issueID := dep.DependsOnID
-		if strings.HasPrefix(issueID, "external:") {
-			parts := strings.SplitN(issueID, ":", 3)
-			if len(parts) == 3 {
-				issueID = parts[2]
+	if len(results) == 0 {
+		return nil
+	}
+
+	// Collect tracked issues (dependency_type = "tracks")
+	issueIDs := make([]string, 0)
+	issueDetails := make(map[string]*issueDetail)
+	for _, dep := range results[0].Dependents {
+		if dep.DependencyType == "tracks" {
+			issueID := dep.ID
+			// Handle external references
+			if strings.HasPrefix(issueID, "external:") {
+				parts := strings.SplitN(issueID, ":", 3)
+				if len(parts) == 3 {
+					issueID = parts[2]
+				}
+			}
+			issueIDs = append(issueIDs, issueID)
+			issueDetails[issueID] = &issueDetail{
+				ID:        issueID,
+				Title:     dep.Title,
+				Status:    dep.Status,
+				Assignee:  dep.Assignee,
+				UpdatedAt: dep.UpdatedAt,
 			}
 		}
-		issueIDs = append(issueIDs, issueID)
 	}
 
-	// Batch fetch issue details
-	details := f.getIssueDetailsBatch(issueIDs)
-
+	// Use the details we already have from bd show, no need to batch fetch again
 	// Get worker activity from tmux sessions based on assignees
-	workers := f.getWorkersFromAssignees(details)
+	workers := f.getWorkersFromAssignees(issueDetails)
 
 	// Build result
 	result := make([]trackedIssueInfo, 0, len(issueIDs))
 	for _, id := range issueIDs {
 		info := trackedIssueInfo{ID: id}
 
-		if d, ok := details[id]; ok {
+		if d, ok := issueDetails[id]; ok {
 			info.Title = d.Title
 			info.Status = d.Status
 			info.Assignee = d.Assignee
