@@ -198,6 +198,7 @@
                 '<div style="margin-top: 8px; display: flex; gap: 8px;">' +
                 '<button onclick="markAsRead(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm ' + (isRead ? 'btn-secondary' : 'btn-primary') + '">Mark Read</button>' +
                 '<button onclick="markAsUnread(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm ' + (isRead ? 'btn-primary' : 'btn-secondary') + '">Mark Unread</button>' +
+                '<button onclick="archiveMessage(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm btn-danger" title="Archive (remove from inbox)">Archive</button>' +
                 '</div>' +
                 '</div>' +
                 '</div>' +
@@ -236,6 +237,28 @@
                     loadAgentMail(); // refresh inbox
                 } else {
                     alert('Failed to mark as unread: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function archiveMessage(id) {
+            const agent = document.getElementById('mail-agent-select').value;
+            if (!confirm('Archive this message? It will be removed from your inbox.')) {
+                return;
+            }
+            try {
+                const res = await fetch('/api/mail/archive', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, agent })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadAgentMail(); // refresh inbox
+                } else {
+                    alert('Failed to archive: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
                 alert('Error: ' + e.message);
