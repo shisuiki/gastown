@@ -84,7 +84,7 @@ func (f *LiveConvoyFetcher) fetchConvoysUncached() ([]ConvoyRow, error) {
 		Status:           "open",
 		Type:             "convoy",
 		IncludeEphemeral: true,
-		Limit:            200,
+		Limit:            -1,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing convoys: %w", err)

@@ -121,7 +121,9 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 	if filter.Assignee != "" {
 		args = append(args, "--assignee="+filter.Assignee)
 	}
-	if filter.Limit > 0 {
+	if filter.Limit < 0 {
+		args = append(args, "--limit=0")
+	} else if filter.Limit > 0 {
 		args = append(args, fmt.Sprintf("--limit=%d", filter.Limit))
 	} else {
 		args = append(args, "--limit=100")
