@@ -247,7 +247,10 @@ func (m *SessionManager) Start(polecat string, opts SessionStartOptions) error {
 	}))
 
 	// GUPP: Send propulsion nudge to trigger autonomous work execution
-	time.Sleep(5 * time.Second)
+	// Wait for Claude UI to be ready before sending propulsion nudge.
+	if err := m.tmux.WaitForClaudeUI(sessionID, 30*time.Second); err != nil {
+		return fmt.Errorf("waiting for Claude UI: %w", err)
+	}
 	debugSession("NudgeSession PropulsionNudge", m.tmux.NudgeSession(sessionID, session.PropulsionNudge()))
 
 	// Verify session survived startup - if the command crashed, the session may have died.
