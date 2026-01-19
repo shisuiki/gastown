@@ -127,9 +127,11 @@ func (m *Manager) Start(agentOverride string) error {
 
 	// GUPP: Gas Town Universal Propulsion Principle
 	// Send the propulsion nudge to trigger autonomous patrol execution.
-	// Wait for beacon to be fully processed (needs to be separate prompt)
-	if err := t.WaitForClaudeUI(sessionID, 30*time.Second); err != nil {
-		return fmt.Errorf("waiting for Claude UI: %w", err)
+	// Wait for Claude UI to be ready, but send nudge regardless (best-effort).
+	// Claude may still be initializing, but the nudge will queue in the input buffer.
+	if err := t.WaitForClaudeUI(sessionID, 60*time.Second); err != nil {
+		// Log warning but don't fail - the nudge may still work
+		fmt.Fprintf(os.Stderr, "warning: %v (sending nudge anyway)\n", err)
 	}
 	_ = t.NudgeSession(sessionID, session.PropulsionNudgeForRole("deacon", deaconDir)) // Non-fatal
 

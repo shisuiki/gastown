@@ -17,18 +17,14 @@ type DashboardPageData struct {
 	ActivePage string
 }
 
-// handleRootRedirect redirects "/" to "/dashboard" to avoid mobile auth issues.
-func (h *GUIHandler) handleRootRedirect(w http.ResponseWriter, r *http.Request) {
-	// Only redirect exact "/" path
+// handleDashboard serves the dashboard page.
+func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	// Only handle exact "/" path, not all paths
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/dashboard", http.StatusFound)
-}
 
-// handleDashboard serves the dashboard page.
-func (h *GUIHandler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	data := DashboardPageData{
 		Title:      "Dashboard",
 		ActivePage: "dashboard",
@@ -246,6 +242,15 @@ type IssueRow struct {
 	Type     string `json:"issue_type"`
 }
 
+// RoleBead represents an agent lifecycle bead.
+type RoleBead struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	RoleType  string `json:"role_type"`
+	CreatedAt string `json:"created_at"`
+}
+
 // handleAPIIssues returns issues from beads.
 func (h *GUIHandler) handleAPIIssues(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -286,22 +291,12 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		}
 	}
 
-	var allIssues []IssueRow
-	if err := json.Unmarshal(output, &allIssues); err != nil {
+	var issues []IssueRow
+	if err := json.Unmarshal(output, &issues); err != nil {
 		return map[string]interface{}{
 			"error":  "Failed to parse issues",
 			"issues": []IssueRow{},
 		}
-	}
-
-	// Filter out system-type issues (agent=Role Beads, molecule/gate=patrols, convoy=separate section)
-	issues := make([]IssueRow, 0, len(allIssues))
-	for _, issue := range allIssues {
-		switch issue.Type {
-		case "agent", "molecule", "gate", "convoy":
-			continue // skip system types
-		}
-		issues = append(issues, issue)
 	}
 
 	// Limit to first 20 issues for dashboard
@@ -314,15 +309,7 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 	}
 }
 
-// RoleBeadRow represents an agent role bead.
-type RoleBeadRow struct {
-	ID     string   `json:"id"`
-	Title  string   `json:"title"`
-	Status string   `json:"status"`
-	Labels []string `json:"labels"`
-}
-
-// handleAPIRoleBeads returns active agent role beads.
+// handleAPIRoleBeads returns role beads (agent lifecycle beads) from the database.
 func (h *GUIHandler) handleAPIRoleBeads(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -344,27 +331,57 @@ func (h *GUIHandler) handleAPIRoleBeads(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(result)
 }
 
-// fetchRoleBeads gets agent role beads from beads.
+// fetchRoleBeads gets role beads (issue_type='agent') from beads.
 func (h *GUIHandler) fetchRoleBeads() map[string]interface{} {
-	// Query beads with issue_type=agent and status=open
-	cmd := exec.Command("bd", "list", "--json", "--type=agent", "--status=open")
+	// Query beads with issue_type='agent' and status='open'
+	args := []string{"list", "--type=agent", "--status=open", "--json"}
+
+	cmd := exec.Command("bd", args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]interface{}{
-			"error":  "Failed to fetch role beads",
-			"agents": []RoleBeadRow{},
+			"error":      "Failed to fetch role beads",
+			"role_beads": []RoleBead{},
 		}
 	}
 
-	var beads []RoleBeadRow
+	var beads []struct {
+		ID        string            `json:"id"`
+		Title     string            `json:"title"`
+		Status    string            `json:"status"`
+		Labels    []string          `json:"labels"`
+		CreatedAt string            `json:"created_at"`
+		Metadata  map[string]string `json:"metadata"`
+	}
 	if err := json.Unmarshal(output, &beads); err != nil {
 		return map[string]interface{}{
-			"error":  "Failed to parse role beads",
-			"agents": []RoleBeadRow{},
+			"error":      "Failed to parse role beads",
+			"role_beads": []RoleBead{},
 		}
+	}
+
+	// Convert to RoleBead format
+	roleBeads := make([]RoleBead, 0, len(beads))
+	for _, b := range beads {
+		// Extract role_type from labels (format: role_type:xxx)
+		roleType := "agent"
+		for _, label := range b.Labels {
+			if strings.HasPrefix(label, "role_type:") {
+				roleType = strings.TrimPrefix(label, "role_type:")
+				break
+			}
+		}
+
+		roleBeads = append(roleBeads, RoleBead{
+			ID:        b.ID,
+			Title:     b.Title,
+			Status:    b.Status,
+			RoleType:  roleType,
+			CreatedAt: b.CreatedAt,
+		})
 	}
 
 	return map[string]interface{}{
-		"agents": beads,
+		"role_beads": roleBeads,
 	}
 }
