@@ -262,10 +262,50 @@ func (r *BeadsReader) getAgentHook(agent, role string) AgentHook {
 		WorkType: "none",
 	}
 
-	// Try to get hook info by running gt hook with actor context
-	cmd, cancel := command("gt", "hook", "show", agent)
+	type hookStatusJSON struct {
+		Target           string `json:"target"`
+		Role             string `json:"role"`
+		HasWork          bool   `json:"has_work"`
+		AttachedMolecule string `json:"attached_molecule,omitempty"`
+		PinnedBead       *Bead  `json:"pinned_bead,omitempty"`
+	}
+
+	cmd, cancel := command("gt", "hook", "status", agent, "--json")
 	defer cancel()
 	output, err := cmd.Output()
+	if err == nil {
+		var parsed hookStatusJSON
+		if json.Unmarshal(output, &parsed) == nil {
+			if parsed.Target != "" {
+				hook.Agent = parsed.Target
+			}
+			if parsed.Role != "" {
+				hook.Role = parsed.Role
+			}
+			hook.HasWork = parsed.HasWork
+
+			if parsed.PinnedBead != nil {
+				hook.WorkID = parsed.PinnedBead.ID
+				hook.WorkTitle = parsed.PinnedBead.Title
+				if parsed.PinnedBead.Type != "" {
+					hook.WorkType = parsed.PinnedBead.Type
+				}
+			}
+
+			if parsed.AttachedMolecule != "" {
+				hook.WorkType = "molecule"
+			} else if hook.WorkType == "none" && hook.HasWork {
+				hook.WorkType = "hooked"
+			}
+
+			return hook
+		}
+	}
+
+	// Try to get hook info by running gt hook with actor context
+	cmd, cancel = command("gt", "hook", "show", agent)
+	defer cancel()
+	output, err = cmd.Output()
 	if err != nil {
 		return hook
 	}

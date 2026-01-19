@@ -9,3 +9,4 @@
 - P1: Terminals page now uses status WebSocket with polling fallback for agent lists.
 - P1: Workflow hook status now prefers `gt hook --json` with fallback parsing.
 - P1: Added mail API pagination metadata + UI load-more, and default bead list limit.
+- P1: Cached agent hook API and switched hook parsing to `gt hook status --json` first.

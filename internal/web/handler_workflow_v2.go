@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // handleAPIBeads returns a comprehensive list of beads with filtering.
@@ -162,28 +163,41 @@ func (h *GUIHandler) handleAPIBeadStats(w http.ResponseWriter, r *http.Request) 
 func (h *GUIHandler) handleAPIAllAgentHooks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	cached := h.cache.GetStaleOrRefresh("agent_hooks", 10*time.Second, func() interface{} {
+		return h.fetchAgentHooks()
+	})
+
+	if cached != nil {
+		json.NewEncoder(w).Encode(cached)
+		return
+	}
+
+	result := h.fetchAgentHooks()
+	h.cache.Set("agent_hooks", result, 10*time.Second)
+	json.NewEncoder(w).Encode(result)
+}
+
+func (h *GUIHandler) fetchAgentHooks() map[string]interface{} {
 	reader, err := NewBeadsReader("")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"error": err.Error(),
 			"hooks": []AgentHook{},
-		})
-		return
+		}
 	}
 
 	hooks, err := reader.GetAllAgentHooks()
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		return map[string]interface{}{
 			"error": err.Error(),
 			"hooks": []AgentHook{},
-		})
-		return
+		}
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	return map[string]interface{}{
 		"hooks": hooks,
 		"count": len(hooks),
-	})
+	}
 }
 
 // handleAPIConvoyBeads returns the beads tracked by a convoy.
