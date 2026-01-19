@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"strings"
 )
 
@@ -69,7 +68,8 @@ func (h *GUIHandler) handleAPIActions(w http.ResponseWriter, r *http.Request) {
 		cmdArgs = append(cmdArgs, req.Args...)
 	}
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd, cancel := command(cmdArgs[0], cmdArgs[1:]...)
+	defer cancel()
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -125,7 +125,8 @@ func (h *GUIHandler) handleAPICreateConvoy(w http.ResponseWriter, r *http.Reques
 		args = append(args, req.Issues...)
 	}
 
-	cmd := exec.Command("gt", args...)
+	cmd, cancel := command("gt", args...)
+	defer cancel()
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -195,7 +196,8 @@ func (h *GUIHandler) handleAPICreateBead(w http.ResponseWriter, r *http.Request)
 		args = append(args, "-b", req.Body)
 	}
 
-	cmd := exec.Command("bd", args...)
+	cmd, cancel := command("bd", args...)
+	defer cancel()
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {

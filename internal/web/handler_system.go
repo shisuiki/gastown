@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -279,7 +278,8 @@ func (h *GUIHandler) fetchSystemInfo() SystemInfo {
 	}
 
 	// Disk info
-	cmd := exec.Command("df", "-B1", "/")
+	cmd, cancel := command("df", "-B1", "/")
+	defer cancel()
 	if output, err := cmd.Output(); err == nil {
 		lines := strings.Split(string(output), "\n")
 		if len(lines) >= 2 {
@@ -354,8 +354,9 @@ func (h *GUIHandler) handleAPIGitCommits(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get commits
-	cmd := exec.Command("git", "log", "-"+strconv.Itoa(count),
+	cmd, cancel := command("git", "log", "-"+strconv.Itoa(count),
 		"--format=%H|%h|%an|%ae|%ar|%s")
+	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
 	if err != nil {
@@ -385,7 +386,8 @@ func (h *GUIHandler) handleAPIGitCommits(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get current branch
-	branchCmd := exec.Command("git", "branch", "--show-current")
+	branchCmd, branchCancel := command("git", "branch", "--show-current")
+	defer branchCancel()
 	branchCmd.Dir = dir
 	if branchOut, err := branchCmd.Output(); err == nil {
 		branch := strings.TrimSpace(string(branchOut))
@@ -412,7 +414,8 @@ func (h *GUIHandler) handleAPIGitBranches(w http.ResponseWriter, r *http.Request
 	rig := r.URL.Query().Get("rig")
 	dir := getRigRepoDir(rig)
 
-	cmd := exec.Command("git", "branch", "-a", "--format=%(refname:short)|%(HEAD)|%(objectname:short)")
+	cmd, cancel := command("git", "branch", "-a", "--format=%(refname:short)|%(HEAD)|%(objectname:short)")
+	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
 	if err != nil {
@@ -461,8 +464,9 @@ func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get commits with parent info for graph
-	cmd := exec.Command("git", "log", "-"+strconv.Itoa(count), "--all",
+	cmd, cancel := command("git", "log", "-"+strconv.Itoa(count), "--all",
 		"--format=%H|%P|%h|%an|%ar|%s|%D")
+	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
 	if err != nil {
@@ -587,7 +591,8 @@ func (h *GUIHandler) fetchClaudeUsage() ClaudeUsage {
 	usage := ClaudeUsage{}
 
 	// Get daily usage from ccusage
-	dailyCmd := exec.Command("npx", "ccusage@latest", "daily", "--json")
+	dailyCmd, dailyCancel := longCommand("npx", "ccusage@latest", "daily", "--json")
+	defer dailyCancel()
 	dailyOutput, err := dailyCmd.Output()
 	if err == nil {
 		var dailyData struct {
@@ -655,7 +660,8 @@ func (h *GUIHandler) fetchClaudeUsage() ClaudeUsage {
 	}
 
 	// Get active billing block from ccusage blocks
-	blocksCmd := exec.Command("npx", "ccusage@latest", "blocks", "--json")
+	blocksCmd, blocksCancel := longCommand("npx", "ccusage@latest", "blocks", "--json")
+	defer blocksCancel()
 	blocksOutput, err := blocksCmd.Output()
 	if err == nil {
 		var blocksData struct {

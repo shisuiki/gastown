@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -274,7 +273,8 @@ func gitCommitAndPush(repoPath, role string) error {
 	// Determine which file(s) to add based on repo type
 	// For simplicity, add all changes in the repo
 	// We'll run git add . in the repo directory
-	cmd := exec.Command("git", "add", ".")
+	cmd, cancel := command("git", "add", ".")
+	defer cancel()
 	cmd.Dir = repoPath
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add failed: %v, output: %s", err, output)
@@ -282,7 +282,8 @@ func gitCommitAndPush(repoPath, role string) error {
 
 	// Commit
 	commitMsg := fmt.Sprintf("Update prompt for role %s via WebUI", role)
-	cmd = exec.Command("git", "commit", "-m", commitMsg)
+	cmd, cancel = command("git", "commit", "-m", commitMsg)
+	defer cancel()
 	cmd.Dir = repoPath
 	if output, err := cmd.CombinedOutput(); err != nil {
 		// If there are no changes, git commit returns error, that's okay
@@ -293,7 +294,8 @@ func gitCommitAndPush(repoPath, role string) error {
 	}
 
 	// Push
-	cmd = exec.Command("git", "push", "origin", "HEAD")
+	cmd, cancel = command("git", "push", "origin", "HEAD")
+	defer cancel()
 	cmd.Dir = repoPath
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git push failed: %v, output: %s", err, output)

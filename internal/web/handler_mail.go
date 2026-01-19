@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -48,7 +47,8 @@ func (h *GUIHandler) handleAPISendMail(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "-m", req.Body)
 	}
 
-	cmd := exec.Command("gt", args...)
+	cmd, cancel := command("gt", args...)
+	defer cancel()
 	// Clear GT_ROLE so mail is sent from "overseer" (human via web), not mayor
 	cmd.Env = filterEnv(os.Environ(), "GT_ROLE")
 	output, err := cmd.CombinedOutput()
@@ -90,7 +90,8 @@ func (h *GUIHandler) handleAPIMailInbox(w http.ResponseWriter, r *http.Request) 
 
 // fetchMailInbox gets mail inbox data.
 func (h *GUIHandler) fetchMailInbox() interface{} {
-	cmd := exec.Command("gt", "mail", "inbox", "--json")
+	cmd, cancel := command("gt", "mail", "inbox", "--json")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]interface{}{
@@ -151,11 +152,13 @@ func sanitizeAgentKey(agent string) string {
 
 // fetchMailForAgent gets mail for a specific agent.
 func (h *GUIHandler) fetchMailForAgent(agent string) map[string]interface{} {
-	cmd := exec.Command("gt", "mail", "inbox", agent, "--json")
+	cmd, cancel := command("gt", "mail", "inbox", agent, "--json")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		// Try without --json if it fails
-		cmd2 := exec.Command("gt", "mail", "inbox", agent)
+		cmd2, cmdCancel := command("gt", "mail", "inbox", agent)
+		defer cmdCancel()
 		output2, _ := cmd2.CombinedOutput()
 		return map[string]interface{}{
 			"agent": agent,
@@ -208,7 +211,8 @@ func (h *GUIHandler) fetchAgentsList() []map[string]string {
 	}
 
 	// Get crew from all rigs
-	cmd := exec.Command("gt", "crew", "list", "--all")
+	cmd, cancel := command("gt", "crew", "list", "--all")
+	defer cancel()
 	output, err := cmd.Output()
 	if err == nil {
 		lines := strings.Split(string(output), "\n")
@@ -230,7 +234,8 @@ func (h *GUIHandler) fetchAgentsList() []map[string]string {
 	}
 
 	// Get polecats
-	cmd = exec.Command("gt", "polecat", "list", "--all")
+	cmd, cancel = command("gt", "polecat", "list", "--all")
+	defer cancel()
 	output, err = cmd.Output()
 	if err == nil {
 		lines := strings.Split(string(output), "\n")
@@ -295,7 +300,8 @@ func (h *GUIHandler) handleAPIMailMarkRead(w http.ResponseWriter, r *http.Reques
 	// Add new GT_ROLE
 	env = append(env, "GT_ROLE="+agent)
 
-	cmd := exec.Command("gt", "mail", "mark-read", req.ID)
+	cmd, cancel := command("gt", "mail", "mark-read", req.ID)
+	defer cancel()
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
 
@@ -347,7 +353,8 @@ func (h *GUIHandler) handleAPIMailMarkUnread(w http.ResponseWriter, r *http.Requ
 	// Add new GT_ROLE
 	env = append(env, "GT_ROLE="+agent)
 
-	cmd := exec.Command("gt", "mail", "mark-unread", req.ID)
+	cmd, cancel := command("gt", "mail", "mark-unread", req.ID)
+	defer cancel()
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
 
@@ -399,7 +406,8 @@ func (h *GUIHandler) handleAPIMailArchive(w http.ResponseWriter, r *http.Request
 	// Add new GT_ROLE
 	env = append(env, "GT_ROLE="+agent)
 
-	cmd := exec.Command("gt", "mail", "archive", req.ID)
+	cmd, cancel := command("gt", "mail", "archive", req.ID)
+	defer cancel()
 	cmd.Env = env
 	output, err := cmd.CombinedOutput()
 

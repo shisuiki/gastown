@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"strings"
 )
 
@@ -59,7 +58,8 @@ func (h *GUIHandler) handleAPICommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	args := append([]string{req.Command}, req.Args...)
-	cmd := exec.Command("gt", args...)
+	cmd, cancel := command("gt", args...)
+	defer cancel()
 	output, err := cmd.CombinedOutput()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -72,7 +72,8 @@ func (h *GUIHandler) handleAPICommand(w http.ResponseWriter, r *http.Request) {
 
 // getRigs parses the gt rig list output.
 func (h *GUIHandler) getRigs() []RigStatus {
-	cmd := exec.Command("gt", "rig", "list")
+	cmd, cancel := command("gt", "rig", "list")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil

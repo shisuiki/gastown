@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -294,9 +293,13 @@ func (h *GUIHandler) handleAPIBeadAction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var cmd *exec.Cmd
 	var output []byte
 	var err error
+	run := func(name string, args ...string) ([]byte, error) {
+		cmd, cancel := command(name, args...)
+		defer cancel()
+		return cmd.CombinedOutput()
+	}
 
 	switch req.Action {
 	case "sling":
@@ -307,16 +310,13 @@ func (h *GUIHandler) handleAPIBeadAction(w http.ResponseWriter, r *http.Request)
 			})
 			return
 		}
-		cmd = exec.Command("gt", "sling", req.BeadID, req.Target)
-		output, err = cmd.CombinedOutput()
+		output, err = run("gt", "sling", req.BeadID, req.Target)
 
 	case "close":
-		cmd = exec.Command("bd", "close", req.BeadID)
-		output, err = cmd.CombinedOutput()
+		output, err = run("bd", "close", req.BeadID)
 
 	case "reopen":
-		cmd = exec.Command("bd", "reopen", req.BeadID)
-		output, err = cmd.CombinedOutput()
+		output, err = run("bd", "reopen", req.BeadID)
 
 	case "update":
 		args := []string{"update", req.BeadID}
@@ -329,12 +329,10 @@ func (h *GUIHandler) handleAPIBeadAction(w http.ResponseWriter, r *http.Request)
 		if req.Priority > 0 {
 			args = append(args, "--priority="+strconv.Itoa(req.Priority))
 		}
-		cmd = exec.Command("bd", args...)
-		output, err = cmd.CombinedOutput()
+		output, err = run("bd", args...)
 
 	case "unsling":
-		cmd = exec.Command("gt", "unsling")
-		output, err = cmd.CombinedOutput()
+		output, err = run("gt", "unsling")
 
 	default:
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -403,7 +401,8 @@ func (h *GUIHandler) handleAPICreateBeadV2(w http.ResponseWriter, r *http.Reques
 		args = append(args, "--label="+label)
 	}
 
-	cmd := exec.Command("bd", args...)
+	cmd, cancel := command("bd", args...)
+	defer cancel()
 	output, err := cmd.CombinedOutput()
 
 	// Try to extract the created bead ID from output

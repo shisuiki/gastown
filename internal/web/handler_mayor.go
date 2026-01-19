@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -102,15 +101,18 @@ func (h *GUIHandler) handleAPIMayorStatus(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 
 	// Check if mayor session exists
-	cmd := exec.Command("tmux", "has-session", "-t", "hq-mayor")
+	cmd, cancel := command("tmux", "has-session", "-t", "hq-mayor")
+	defer cancel()
 	sessionExists := cmd.Run() == nil
 
 	// Get hook status
-	hookCmd := exec.Command("gt", "hook")
+	hookCmd, hookCancel := command("gt", "hook")
+	defer hookCancel()
 	hookOutput, _ := hookCmd.Output()
 
 	// Get mail count
-	mailCmd := exec.Command("gt", "mail", "inbox", "mayor/", "--json")
+	mailCmd, mailCancel := command("gt", "mail", "inbox", "mayor/", "--json")
+	defer mailCancel()
 	mailOutput, _ := mailCmd.Output()
 
 	var mailCount int

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -111,7 +110,8 @@ func (h *GUIHandler) handleAPITerminalStream(w http.ResponseWriter, r *http.Requ
 
 // captureTmuxPane captures the content of a tmux pane.
 func captureTmuxPane(session string) (string, error) {
-	cmd := exec.Command("tmux", "capture-pane", "-t", session, "-p", "-J", "-S", "-2000")
+	cmd, cancel := command("tmux", "capture-pane", "-t", session, "-p", "-J", "-S", "-2000")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -196,7 +196,8 @@ func (h *GUIHandler) handleAPITerminalSend(w http.ResponseWriter, r *http.Reques
 
 // sendTmuxKey sends a special key to a tmux session.
 func sendTmuxKey(session, key string) error {
-	cmd := exec.Command("tmux", "send-keys", "-t", session, key)
+	cmd, cancel := command("tmux", "send-keys", "-t", session, key)
+	defer cancel()
 	return cmd.Run()
 }
 
@@ -204,7 +205,8 @@ func sendTmuxKey(session, key string) error {
 func sendTmuxText(session, text string, enter bool) error {
 	// Use send-keys with literal text
 	args := []string{"send-keys", "-t", session, "-l", text}
-	cmd := exec.Command("tmux", args...)
+	cmd, cancel := command("tmux", args...)
+	defer cancel()
 	if err := cmd.Run(); err != nil {
 		return err
 	}

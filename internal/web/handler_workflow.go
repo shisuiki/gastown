@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -64,7 +63,8 @@ func (h *GUIHandler) handleAPIWorkflowHook(w http.ResponseWriter, r *http.Reques
 
 // fetchHookStatus gets hook status from gt hook.
 func (h *GUIHandler) fetchHookStatus() HookStatus {
-	cmd := exec.Command("gt", "hook")
+	cmd, cancel := command("gt", "hook")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return HookStatus{
@@ -143,7 +143,8 @@ func (h *GUIHandler) handleAPIWorkflowReady(w http.ResponseWriter, r *http.Reque
 
 // fetchReadyIssues gets ready issues from bd ready.
 func (h *GUIHandler) fetchReadyIssues() map[string]interface{} {
-	cmd := exec.Command("bd", "ready")
+	cmd, cancel := command("bd", "ready")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]interface{}{
@@ -239,13 +240,15 @@ func (h *GUIHandler) fetchActivity() map[string]interface{} {
 	rigDir := "/home/shisui/gt"
 
 	// Check if GT_ROOT is set
-	if gtRoot := exec.Command("gt", "env", "GT_ROOT"); gtRoot != nil {
+	if gtRoot, cancel := command("gt", "env", "GT_ROOT"); gtRoot != nil {
+		defer cancel()
 		if out, err := gtRoot.Output(); err == nil {
 			rigDir = strings.TrimSpace(string(out))
 		}
 	}
 
-	cmd := exec.Command("git", "log", "--oneline", "-20", "--format=%h|%s|%cr|%an")
+	cmd, cancel := command("git", "log", "--oneline", "-20", "--format=%h|%s|%cr|%an")
+	defer cancel()
 	cmd.Dir = rigDir
 	output, err := cmd.Output()
 	if err != nil {

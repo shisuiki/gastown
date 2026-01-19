@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -94,7 +93,8 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 		args = append(args, "--limit=100")
 	}
 
-	cmd := exec.Command("bd", args...)
+	cmd, cancel := command("bd", args...)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("bd list failed: %w", err)
@@ -133,7 +133,8 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 
 // GetBead returns a single bead by ID using bd show --json.
 func (r *BeadsReader) GetBead(id string) (*Bead, error) {
-	cmd := exec.Command("bd", "show", id, "--json")
+	cmd, cancel := command("bd", "show", id, "--json")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("bd show failed: %w", err)
@@ -154,7 +155,8 @@ func (r *BeadsReader) GetBead(id string) (*Bead, error) {
 // Convoys use dependency type "tracks" to link to their issues.
 func (r *BeadsReader) GetConvoyTrackedIssues(convoyID string) ([]Bead, error) {
 	// Use bd show with --json to get the convoy and its dependents
-	cmd := exec.Command("bd", "show", convoyID, "--json")
+	cmd, cancel := command("bd", "show", convoyID, "--json")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("bd show failed: %w", err)
@@ -200,7 +202,8 @@ func (r *BeadsReader) GetConvoyTrackedIssues(convoyID string) ([]Bead, error) {
 // GetAllAgentHooks returns hook status for all active agents.
 func (r *BeadsReader) GetAllAgentHooks() ([]AgentHook, error) {
 	// List all tmux sessions to find active agents
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
+	cmd, cancel := command("tmux", "list-sessions", "-F", "#{session_name}")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -260,7 +263,8 @@ func (r *BeadsReader) getAgentHook(agent, role string) AgentHook {
 	}
 
 	// Try to get hook info by running gt hook with actor context
-	cmd := exec.Command("gt", "hook", "show", agent)
+	cmd, cancel := command("gt", "hook", "show", agent)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return hook
@@ -302,7 +306,8 @@ func (r *BeadsReader) getAgentHook(agent, role string) AgentHook {
 // GetBeadDependencies returns all dependencies for a bead.
 func (r *BeadsReader) GetBeadDependencies(beadID string) ([]BeadDependency, error) {
 	// Use bd show --json to get dependencies
-	cmd := exec.Command("bd", "show", beadID, "--json")
+	cmd, cancel := command("bd", "show", beadID, "--json")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("bd show failed: %w", err)
@@ -341,7 +346,8 @@ func (r *BeadsReader) GetBeadStats() (map[string]int, error) {
 	stats := make(map[string]int)
 
 	// Get all beads with JSON
-	cmd := exec.Command("bd", "list", "--json", "--limit=0")
+	cmd, cancel := command("bd", "list", "--json", "--limit=0")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return stats, err
@@ -371,7 +377,8 @@ func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error)
 		args = append(args, fmt.Sprintf("--limit=%d", limit))
 	}
 
-	cmd := exec.Command("bd", args...)
+	cmd, cancel := command("bd", args...)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		// Search might return empty results
@@ -389,7 +396,8 @@ func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error)
 // ListAgents returns all available agents for assignment.
 func (r *BeadsReader) ListAgents() ([]string, error) {
 	// List all tmux sessions
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}")
+	cmd, cancel := command("tmux", "list-sessions", "-F", "#{session_name}")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, err

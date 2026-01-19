@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"strings"
 )
 
@@ -69,7 +68,8 @@ func (h *GUIHandler) handleAPIConvoyDetail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	cmd := exec.Command("gt", "convoy", "status", id)
+	cmd, cancel := command("gt", "convoy", "status", id)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -158,7 +158,8 @@ func (h *GUIHandler) handleAPIBeadDetail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	cmd := exec.Command("bd", "show", id)
+	cmd, cancel := command("bd", "show", id)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{

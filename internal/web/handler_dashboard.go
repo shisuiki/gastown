@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -161,7 +160,8 @@ func (h *GUIHandler) buildStatusUncached() StatusResponse {
 }
 
 func (h *GUIHandler) getDaemonStatus() DaemonStatus {
-	cmd := exec.Command("gt", "daemon", "status")
+	cmd, cancel := command("gt", "daemon", "status")
+	defer cancel()
 	output, err := cmd.CombinedOutput()
 
 	return DaemonStatus{
@@ -170,7 +170,8 @@ func (h *GUIHandler) getDaemonStatus() DaemonStatus {
 }
 
 func (h *GUIHandler) getMailStatus() MailStatus {
-	cmd := exec.Command("gt", "mail", "inbox")
+	cmd, cancel := command("gt", "mail", "inbox")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return MailStatus{}
@@ -285,7 +286,8 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		args = append(args, "--status="+status)
 	}
 
-	cmd := exec.Command("bd", args...)
+	cmd, cancel := command("bd", args...)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]interface{}{
@@ -350,7 +352,8 @@ func (h *GUIHandler) fetchRoleBeads() map[string]interface{} {
 	// Query beads with issue_type='agent' and status='open'
 	args := []string{"list", "--type=agent", "--status=open", "--json"}
 
-	cmd := exec.Command("bd", args...)
+	cmd, cancel := command("bd", args...)
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return map[string]interface{}{

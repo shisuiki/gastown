@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -80,7 +79,8 @@ func (f *LiveConvoyFetcher) fetchConvoysUncached() ([]ConvoyRow, error) {
 	// List all open convoy-type issues
 	dbPath := filepath.Join(f.townBeads, "beads.db")
 	listArgs := []string{"--db=" + dbPath, "list", "--type=convoy", "--status=open", "--json"}
-	listCmd := exec.Command("bd", listArgs...)
+	listCmd, cancel := command("bd", listArgs...)
+	defer cancel()
 	listCmd.Dir = f.townBeads
 
 	var stdout bytes.Buffer
@@ -198,7 +198,8 @@ type trackedIssueInfo struct {
 // getTrackedIssues fetches tracked issues for a convoy.
 func (f *LiveConvoyFetcher) getTrackedIssues(convoyID string) []trackedIssueInfo {
 	// Use bd show --json to get convoy with dependents instead of sqlite3
-	showCmd := exec.Command("bd", "show", convoyID, "--json", "--db="+filepath.Join(f.townBeads, "beads.db"))
+	showCmd, cancel := command("bd", "show", convoyID, "--json", "--db="+filepath.Join(f.townBeads, "beads.db"))
+	defer cancel()
 	var stdout bytes.Buffer
 	showCmd.Stdout = &stdout
 	if err := showCmd.Run(); err != nil {
@@ -297,7 +298,8 @@ func (f *LiveConvoyFetcher) getIssueDetailsBatch(issueIDs []string) map[string]*
 	args = append(args, "--json")
 
 	// #nosec G204 -- bd is a trusted internal tool, args are issue IDs
-	showCmd := exec.Command("bd", args...)
+	showCmd, cancel := command("bd", args...)
+	defer cancel()
 	var stdout bytes.Buffer
 	showCmd.Stdout = &stdout
 
@@ -394,8 +396,9 @@ func (f *LiveConvoyFetcher) getSessionActivityForAssignee(assignee string) *time
 
 	// Query tmux for session activity
 	// Format: session_activity returns unix timestamp
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{session_activity}",
+	cmd, cancel := command("tmux", "list-sessions", "-F", "#{session_name}|#{session_activity}",
 		"-f", fmt.Sprintf("#{==:#{session_name},%s}", sessionName))
+	defer cancel()
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -428,7 +431,8 @@ func (f *LiveConvoyFetcher) getSessionActivityForAssignee(assignee string) *time
 func (f *LiveConvoyFetcher) getAllPolecatActivity() *time.Time {
 	// List all tmux sessions matching gt-*-* pattern (polecat sessions)
 	// Format: gt-{rig}-{polecat}
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{session_activity}")
+	cmd, cancel := command("tmux", "list-sessions", "-F", "#{session_name}|#{session_activity}")
+	defer cancel()
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -539,10 +543,11 @@ type prResponse struct {
 // fetchPRsForRepo fetches open PRs for a single repo.
 func (f *LiveConvoyFetcher) fetchPRsForRepo(repoFull, repoShort string) ([]MergeQueueRow, error) {
 	// #nosec G204 -- gh is a trusted CLI, repo is from hardcoded list
-	cmd := exec.Command("gh", "pr", "list",
+	cmd, cancel := longCommand("gh", "pr", "list",
 		"--repo", repoFull,
 		"--state", "open",
 		"--json", "number,title,url,mergeable,statusCheckRollup")
+	defer cancel()
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -661,7 +666,8 @@ func (f *LiveConvoyFetcher) FetchAgents() ([]AgentRow, error) {
 // fetchAgentsUncached does the actual agent fetching without caching.
 func (f *LiveConvoyFetcher) fetchAgentsUncached() ([]AgentRow, error) {
 	// Query all tmux sessions with window_activity for more accurate timing
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{window_activity}")
+	cmd, cancel := command("tmux", "list-sessions", "-F", "#{session_name}|#{window_activity}")
+	defer cancel()
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -781,7 +787,8 @@ func (f *LiveConvoyFetcher) fetchAgentsUncached() ([]AgentRow, error) {
 
 // getPolecatStatusHint captures the last non-empty line from a polecat's pane.
 func (f *LiveConvoyFetcher) getPolecatStatusHint(sessionName string) string {
-	cmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-p", "-J")
+	cmd, cancel := command("tmux", "capture-pane", "-t", sessionName, "-p", "-J")
+	defer cancel()
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
