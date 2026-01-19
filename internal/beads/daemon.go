@@ -88,8 +88,14 @@ func EnsureBdDaemonHealth(workDir string) string {
 		return ""
 	}
 
+	// Clean stale lock files for unhealthy daemons before restart
+	cleanStaleLocksForUnhealthyDaemons(health)
+
+	// Ensure repository fingerprint exists for unhealthy daemons
+	ensureFingerprintForUnhealthyDaemons(health)
+
 	// Attempt to restart daemons
-	if restartErr := restartBdDaemons(); restartErr != nil {
+	if restartErr := restartBdDaemons(health); restartErr != nil {
 		return fmt.Sprintf("bd daemons unhealthy (restart failed: %v)", restartErr)
 	}
 
@@ -107,13 +113,66 @@ func EnsureBdDaemonHealth(workDir string) string {
 	return "" // Successfully restarted
 }
 
+// cleanStaleLocksForUnhealthyDaemons cleans stale lock files for unhealthy bd daemons.
+func cleanStaleLocksForUnhealthyDaemons(health *BdDaemonHealth) {
+	for _, d := range health.Daemons {
+		if d.Status != "healthy" && d.Workspace != "" {
+			cleaned, err := CleanStaleBdLockFiles(d.Workspace)
+			if err != nil {
+				// Log error? No logger available; ignore for now.
+				continue
+			}
+			if cleaned > 0 {
+				// Could log but no logger
+			}
+		}
+	}
+}
+
+// ensureFingerprintForUnhealthyDaemons ensures repository fingerprint exists for unhealthy daemons.
+func ensureFingerprintForUnhealthyDaemons(health *BdDaemonHealth) {
+	for _, d := range health.Daemons {
+		if d.Status != "healthy" && d.Workspace != "" {
+			_ = ensureFingerprint(d.Workspace)
+		}
+	}
+}
+
+// ensureFingerprint ensures the repository fingerprint exists in the beads database.
+// This is idempotent - safe on both new and legacy (pre-0.17.5) databases.
+// Without fingerprint, the bd daemon fails to start silently.
+func ensureFingerprint(workspace string) error {
+	cmd := exec.Command("bd", "migrate", "--update-repo-id", "--yes")
+	cmd.Dir = workspace
+	// Ignore errors - fingerprint is optional for functionality
+	_ = cmd.Run()
+	return nil
+}
+
 // restartBdDaemons restarts all bd daemons.
-func restartBdDaemons() error { //nolint:unparam // error return kept for future use
-	// Stop all daemons first using pkill to avoid auto-start side effects
+func restartBdDaemons(health *BdDaemonHealth) error {
+	// Try graceful stop for each unhealthy daemon first
+	for _, d := range health.Daemons {
+		if d.Status != "healthy" && d.Workspace != "" {
+			// Attempt bd daemon stop for this workspace
+			cmd := exec.Command("bd", "daemon", "stop")
+			cmd.Dir = d.Workspace
+			_ = cmd.Run() // Ignore errors - fallback to pkill
+		}
+	}
+
+	// Stop all daemons using pkill to ensure cleanup
 	_ = exec.Command("pkill", "-TERM", "-f", "bd daemon").Run()
 
 	// Give time for cleanup
 	time.Sleep(200 * time.Millisecond)
+
+	// Clean stale lock files for all daemons (including healthy ones that were killed)
+	for _, d := range health.Daemons {
+		if d.Workspace != "" {
+			_, _ = CleanStaleBdLockFiles(d.Workspace) // Ignore errors
+		}
+	}
 
 	// Start daemons for known locations
 	// The daemon will auto-start when bd commands are run in those directories

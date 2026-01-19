@@ -276,6 +276,9 @@ func (d *Daemon) heartbeat(state *State) {
 	// This is a safety net - Deacon patrol also does this more frequently.
 	d.cleanupOrphanedProcesses()
 
+	// 13. Check bd daemon health and restart if needed
+	d.checkBdDaemonHealth()
+
 	// Update state
 	state.LastHeartbeat = time.Now()
 	state.HeartbeatCount++
@@ -1016,6 +1019,14 @@ func (d *Daemon) cleanupOrphanedProcesses() {
 				d.logger.Printf("  Sent %s to PID %d (%s)", r.Signal, r.Process.PID, r.Process.Cmd)
 			}
 		}
+	}
+}
+
+// checkBdDaemonHealth checks bd daemon health and attempts restart if needed.
+func (d *Daemon) checkBdDaemonHealth() {
+	warning := beads.EnsureBdDaemonHealth(d.config.TownRoot)
+	if warning != "" {
+		d.logger.Printf("bd daemon health warning: %s", warning)
 	}
 }
 
