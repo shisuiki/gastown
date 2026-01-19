@@ -24,6 +24,15 @@ type HookStatus struct {
 	RawOutput   string `json:"raw_output"`             // Full output for display
 }
 
+type hookStatusJSON struct {
+	Target           string `json:"target"`
+	Role             string `json:"role"`
+	HasWork          bool   `json:"has_work"`
+	AttachedMolecule string `json:"attached_molecule,omitempty"`
+	PinnedBead       *Bead  `json:"pinned_bead,omitempty"`
+	NextAction       string `json:"next_action,omitempty"`
+}
+
 // ReadyIssue represents an issue with no blockers.
 type ReadyIssue struct {
 	ID       string `json:"id"`
@@ -63,9 +72,45 @@ func (h *GUIHandler) handleAPIWorkflowHook(w http.ResponseWriter, r *http.Reques
 
 // fetchHookStatus gets hook status from gt hook.
 func (h *GUIHandler) fetchHookStatus() HookStatus {
-	cmd, cancel := command("gt", "hook")
+	cmd, cancel := command("gt", "hook", "--json")
 	defer cancel()
 	output, err := cmd.Output()
+	if err == nil {
+		var parsed hookStatusJSON
+		if json.Unmarshal(output, &parsed) == nil {
+			status := HookStatus{
+				Actor:     parsed.Target,
+				Role:      parsed.Role,
+				HasWork:   parsed.HasWork,
+				WorkType:  "none",
+				RawOutput: parsed.NextAction,
+			}
+
+			if parsed.PinnedBead != nil {
+				status.WorkID = parsed.PinnedBead.ID
+				status.WorkTitle = parsed.PinnedBead.Title
+				if parsed.PinnedBead.Type != "" {
+					status.WorkType = parsed.PinnedBead.Type
+				}
+			}
+
+			if parsed.AttachedMolecule != "" {
+				status.WorkType = "molecule"
+			} else if status.WorkType == "none" && status.HasWork {
+				status.WorkType = "hooked"
+			}
+
+			if status.RawOutput == "" {
+				status.RawOutput = string(output)
+			}
+
+			return status
+		}
+	}
+
+	cmd, cancel = command("gt", "hook")
+	defer cancel()
+	output, err = cmd.Output()
 	if err != nil {
 		return HookStatus{
 			HasWork:   false,

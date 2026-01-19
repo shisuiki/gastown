@@ -7,3 +7,4 @@
 - P1: Switched rig/mail status to structured JSON output.
 - P2: Removed unused Tailwind CDN config from base template.
 - P1: Terminals page now uses status WebSocket with polling fallback for agent lists.
+- P1: Workflow hook status now prefers `gt hook --json` with fallback parsing.
