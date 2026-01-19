@@ -108,6 +108,12 @@ type RoleModelConfig struct {
 	// If set, uses that profile's CLAUDE_CONFIG_DIR.
 	// If empty, uses the default account (if configured).
 	Auth string `json:"auth,omitempty"`
+
+	// APIKey is the API key for the model endpoint.
+	// For Claude, this sets the ANTHROPIC_API_KEY environment variable.
+	// For OpenAI, this sets the OPENAI_API_KEY environment variable.
+	// If empty, uses the default API key from environment or config.
+	APIKey string `json:"api_key,omitempty"`
 }
 
 // ValidRoleNames returns the list of valid role names for RoleAgents and RoleModels.

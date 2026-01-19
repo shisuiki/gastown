@@ -1179,6 +1179,12 @@ func ApplyRoleModelConfig(config *RoleModelConfig, townRoot string, envVars map[
 		}
 	}
 
+	// Apply API key
+	if config.APIKey != "" {
+		envVars["ANTHROPIC_API_KEY"] = config.APIKey
+		envVars["OPENAI_API_KEY"] = config.APIKey
+	}
+
 	return modelArgs
 }
 
