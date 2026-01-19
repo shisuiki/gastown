@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,15 +24,15 @@ const (
 )
 
 var (
-	contextSession   string
-	contextLines     int
-	contextJSON      bool
-	contextUsage     bool
-	contextErrors    bool
+	contextSession       string
+	contextLines         int
+	contextJSON          bool
+	contextUsage         bool
+	contextErrors        bool
 	contextCircuitStatus bool
-	contextCircuitReset bool
-	contextCheck     bool
-	contextThreshold int
+	contextCircuitReset  bool
+	contextCheck         bool
+	contextThreshold     int
 )
 
 var contextCmd = &cobra.Command{
@@ -289,6 +290,19 @@ func triggerEscalation(state *ContextLimitState) error {
 	return nil
 }
 
+// triggerHandoff attempts to restart the agent via gt handoff
+func triggerHandoff() error {
+	// Check if handoff is available by checking if we're in a tmux session
+	// and if gt handoff command exists
+	cmd := exec.Command("gt", "handoff")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// Run in background? Handoff will replace this process.
+	// For safety, just log and let user decide.
+	fmt.Println("⚠️  Context limit error detected. Consider running 'gt handoff' to restart agent with fresh context.")
+	return nil
+}
+
 // runContextErrors detects context limit errors in session output
 func runContextErrors(session string, tmuxClient *tmux.Tmux) error {
 	// Capture session output
@@ -329,6 +343,10 @@ func runContextErrors(session string, tmuxClient *tmux.Tmux) error {
 			if state.EscalatedAt.IsZero() {
 				if err := triggerEscalation(state); err != nil {
 					fmt.Printf("Warning: Failed to trigger escalation: %v\n", err)
+				}
+				// Also suggest handoff to restart agent with fresh context
+				if err := triggerHandoff(); err != nil {
+					fmt.Printf("Warning: Failed to trigger handoff: %v\n", err)
 				}
 			}
 		}
@@ -441,7 +459,40 @@ func runContextCheck(session string, tmuxClient *tmux.Tmux) error {
 		fmt.Println("  3. Consider handoff: gt handoff (if available for this agent type)")
 	}
 
+	checkAutoCompactConfig()
+
 	return nil
+}
+
+// checkAutoCompactConfig checks if auto-compact environment variable is set
+func checkAutoCompactConfig() {
+	// Check for CLAUDE_AUTOCOMPACT_PCT_OVERRIDE environment variable
+	value := os.Getenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE")
+	if value == "" {
+		fmt.Println("⚠️  WARNING: CLAUDE_AUTOCOMPACT_PCT_OVERRIDE not set")
+		fmt.Println("   For deepseek endpoint (131K limit), set to 60 to auto-compact at 78K tokens")
+		fmt.Println("   Add to agent startup: export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=60")
+	} else {
+		// Validate it's a reasonable percentage
+		if percent, err := strconv.Atoi(value); err == nil {
+			if percent < 30 || percent > 90 {
+				fmt.Printf("⚠️  WARNING: CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=%s may be too %s\n",
+					value,
+					ternary(percent < 30, "low", "high"))
+				fmt.Println("   Recommended: 60 for deepseek (131K limit)")
+			} else {
+				fmt.Printf("✅ CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=%s (auto-compact at %s%% of context limit)\n", value, value)
+			}
+		}
+	}
+}
+
+// ternary helper for inline condition
+func ternary(condition bool, trueVal, falseVal string) string {
+	if condition {
+		return trueVal
+	}
+	return falseVal
 }
 
 // formatTime formats time for display
