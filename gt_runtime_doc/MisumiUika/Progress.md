@@ -18,3 +18,4 @@
 - P2: Moved mail page layout styles into shared CSS classes.
 - P2: Dashboard terminology updated from issues to beads for consistency.
 - P3: Replaced rig list CLI usage with rig manager filesystem discovery.
+- P3: Mail agents list now uses rig manager discovery instead of crew/polecat CLI.

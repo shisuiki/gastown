@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/steveyegge/gastown/internal/config"
+	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/mail"
+	"github.com/steveyegge/gastown/internal/rig"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
 
@@ -267,58 +270,56 @@ func (h *GUIHandler) fetchAgentsList() []map[string]string {
 		{"address": "deacon/", "name": "Deacon", "type": "deacon"},
 	}
 
-	// Get crew from all rigs
-	cmd, cancel := command("gt", "crew", "list", "--all")
-	defer cancel()
-	output, err := cmd.Output()
-	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			// Parse lines like "  ● gastown/flux"
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "●") || strings.HasPrefix(line, "○") {
-				parts := strings.Fields(line)
-				if len(parts) >= 2 {
-					name := parts[1]
-					agents = append(agents, map[string]string{
-						"address": name + "/",
-						"name":    name,
-						"type":    "crew",
-					})
-				}
-			}
-		}
+	townRoot, err := workspace.FindFromCwdOrError()
+	if err != nil {
+		return agents
 	}
 
-	// Get polecats
-	cmd, cancel = command("gt", "polecat", "list", "--all")
-	defer cancel()
-	output, err = cmd.Output()
-	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if strings.Contains(line, "/") && !strings.HasPrefix(line, "No") {
-				parts := strings.Fields(line)
-				if len(parts) >= 1 {
-					name := parts[0]
-					agents = append(agents, map[string]string{
-						"address": name + "/",
-						"name":    name,
-						"type":    "polecat",
-					})
-				}
-			}
-		}
+	rigsConfigPath := filepath.Join(townRoot, "mayor", "rigs.json")
+	rigsConfig, err := config.LoadRigsConfig(rigsConfigPath)
+	if err != nil {
+		return agents
 	}
 
-	// Add witness and refinery for each rig
-	rigs := h.getRigs()
-	for _, rig := range rigs {
-		agents = append(agents,
-			map[string]string{"address": rig.Name + "/witness/", "name": rig.Name + " Witness", "type": "witness"},
-			map[string]string{"address": rig.Name + "/refinery/", "name": rig.Name + " Refinery", "type": "refinery"},
-		)
+	manager := rig.NewManager(townRoot, rigsConfig, git.NewGit(townRoot))
+	rigs, err := manager.DiscoverRigs()
+	if err != nil {
+		return agents
+	}
+
+	for _, rigEntry := range rigs {
+		for _, crew := range rigEntry.Crew {
+			name := rigEntry.Name + "/" + crew
+			agents = append(agents, map[string]string{
+				"address": name + "/",
+				"name":    name,
+				"type":    "crew",
+			})
+		}
+
+		for _, polecat := range rigEntry.Polecats {
+			name := rigEntry.Name + "/" + polecat
+			agents = append(agents, map[string]string{
+				"address": name + "/",
+				"name":    name,
+				"type":    "polecat",
+			})
+		}
+
+		if rigEntry.HasWitness {
+			agents = append(agents, map[string]string{
+				"address": rigEntry.Name + "/witness/",
+				"name":    rigEntry.Name + " Witness",
+				"type":    "witness",
+			})
+		}
+		if rigEntry.HasRefinery {
+			agents = append(agents, map[string]string{
+				"address": rigEntry.Name + "/refinery/",
+				"name":    rigEntry.Name + " Refinery",
+				"type":    "refinery",
+			})
+		}
 	}
 
 	return agents
