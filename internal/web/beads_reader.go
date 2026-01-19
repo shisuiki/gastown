@@ -36,6 +36,7 @@ type Bead struct {
 	CreatedAt    time.Time        `json:"created_at"`
 	UpdatedAt    time.Time        `json:"updated_at"`
 	ClosedAt     *time.Time       `json:"closed_at,omitempty"`
+	DeferUntil   *time.Time       `json:"defer_until,omitempty"`
 	Ephemeral    bool             `json:"ephemeral,omitempty"`
 	Dependencies []BeadDependency `json:"dependencies,omitempty"`
 }
@@ -191,10 +192,16 @@ func (r *BeadsReader) ReadyBeads() ([]Bead, error) {
 			statusByID[b.ID] = b.Status
 		}
 
+		now := time.Now()
 		ready := make([]Bead, 0, len(jsonl))
 		for _, b := range jsonl {
 			if b.Status != "open" || b.Ephemeral {
 				continue
+			}
+			if b.DeferUntil != nil {
+				if b.DeferUntil.IsZero() || b.DeferUntil.After(now) {
+					continue
+				}
 			}
 			blocked := false
 			for _, dep := range b.Dependencies {
@@ -222,12 +229,6 @@ func (r *BeadsReader) ReadyBeads() ([]Bead, error) {
 		sort.Slice(ready, func(i, j int) bool {
 			pi := ready[i].Priority
 			pj := ready[j].Priority
-			if pi == 0 {
-				pi = 99
-			}
-			if pj == 0 {
-				pj = 99
-			}
 			if pi != pj {
 				return pi < pj
 			}
@@ -262,6 +263,31 @@ func isBlockingDependency(depType string) bool {
 	default:
 		return false
 	}
+}
+
+func parseDeferredTime(primary, fallback *string) *time.Time {
+	raw := ""
+	if primary != nil && *primary != "" {
+		raw = *primary
+	} else if fallback != nil && *fallback != "" {
+		raw = *fallback
+	}
+	if raw == "" {
+		return nil
+	}
+
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return &t
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return &t
+	}
+	if t, err := time.Parse("2006-01-02", raw); err == nil {
+		return &t
+	}
+
+	zero := time.Time{}
+	return &zero
 }
 
 // GetBead returns a single bead by ID using bd show --json.
@@ -642,21 +668,23 @@ func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error)
 }
 
 type issueJSONL struct {
-	ID           string           `json:"id"`
-	Title        string           `json:"title"`
-	Description  string           `json:"description"`
-	Status       string           `json:"status"`
-	Priority     int              `json:"priority"`
-	Type         string           `json:"issue_type"`
-	Owner        string           `json:"owner"`
-	Assignee     string           `json:"assignee"`
-	Labels       []string         `json:"labels"`
-	CreatedAt    string           `json:"created_at"`
-	UpdatedAt    string           `json:"updated_at"`
-	ClosedAt     *string          `json:"closed_at"`
-	Ephemeral    bool             `json:"ephemeral"`
-	Wisp         bool             `json:"wisp"`
-	Dependencies []BeadDependency `json:"dependencies"`
+	ID            string           `json:"id"`
+	Title         string           `json:"title"`
+	Description   string           `json:"description"`
+	Status        string           `json:"status"`
+	Priority      int              `json:"priority"`
+	Type          string           `json:"issue_type"`
+	Owner         string           `json:"owner"`
+	Assignee      string           `json:"assignee"`
+	Labels        []string         `json:"labels"`
+	CreatedAt     string           `json:"created_at"`
+	UpdatedAt     string           `json:"updated_at"`
+	ClosedAt      *string          `json:"closed_at"`
+	DeferUntil    *string          `json:"defer_until"`
+	DeferredUntil *string          `json:"deferred_until"`
+	Ephemeral     bool             `json:"ephemeral"`
+	Wisp          bool             `json:"wisp"`
+	Dependencies  []BeadDependency `json:"dependencies"`
 }
 
 func (r *BeadsReader) readIssuesJSONL() ([]Bead, error) {
@@ -713,6 +741,9 @@ func (r *BeadsReader) readIssuesJSONL() ([]Bead, error) {
 			if t, err := time.Parse(time.RFC3339, *entry.ClosedAt); err == nil {
 				bead.ClosedAt = &t
 			}
+		}
+		if deferUntil := parseDeferredTime(entry.DeferUntil, entry.DeferredUntil); deferUntil != nil {
+			bead.DeferUntil = deferUntil
 		}
 
 		beadsOut = append(beadsOut, bead)
