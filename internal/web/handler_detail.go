@@ -2,8 +2,10 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // DetailPageData is the data passed to detail templates.
@@ -66,6 +68,41 @@ func (h *GUIHandler) handleAPIConvoyDetail(w http.ResponseWriter, r *http.Reques
 	if id == "" {
 		json.NewEncoder(w).Encode(map[string]string{"error": "missing convoy ID"})
 		return
+	}
+
+	reader, err := NewBeadsReader("")
+	if err == nil {
+		if bead, err := reader.GetBead(id); err == nil {
+			tracked, _ := reader.GetConvoyTrackedIssues(id)
+			completed := 0
+			issues := make([]string, 0, len(tracked))
+			for _, issue := range tracked {
+				issues = append(issues, issue.ID)
+				if issue.Status == "closed" {
+					completed++
+				}
+			}
+
+			progress := "0/0 completed"
+			if len(tracked) > 0 {
+				progress = fmt.Sprintf("%d/%d completed", completed, len(tracked))
+			}
+
+			created := ""
+			if !bead.CreatedAt.IsZero() {
+				created = bead.CreatedAt.Format("2006-01-02")
+			}
+
+			json.NewEncoder(w).Encode(ConvoyDetail{
+				ID:       bead.ID,
+				Title:    bead.Title,
+				Status:   bead.Status,
+				Progress: progress,
+				Created:  created,
+				Issues:   issues,
+			})
+			return
+		}
 	}
 
 	cmd, cancel := command("gt", "convoy", "status", id)
@@ -158,6 +195,14 @@ func (h *GUIHandler) handleAPIBeadDetail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	reader, err := NewBeadsReader("")
+	if err == nil {
+		if bead, err := reader.GetBead(id); err == nil {
+			json.NewEncoder(w).Encode(beadDetailFromBead(bead))
+			return
+		}
+	}
+
 	cmd, cancel := command("bd", "show", id)
 	defer cancel()
 	output, err := cmd.Output()
@@ -172,6 +217,29 @@ func (h *GUIHandler) handleAPIBeadDetail(w http.ResponseWriter, r *http.Request)
 
 	detail := parseBeadDetail(id, string(output))
 	json.NewEncoder(w).Encode(detail)
+}
+
+func beadDetailFromBead(bead *Bead) BeadDetail {
+	detail := BeadDetail{
+		ID:          bead.ID,
+		Title:       bead.Title,
+		Type:        bead.Type,
+		Priority:    bead.Priority,
+		Status:      bead.Status,
+		Owner:       bead.Owner,
+		Assignee:    bead.Assignee,
+		Description: bead.Description,
+		Labels:      bead.Labels,
+	}
+
+	if !bead.CreatedAt.IsZero() {
+		detail.Created = bead.CreatedAt.Format(time.RFC3339)
+	}
+	if !bead.UpdatedAt.IsZero() {
+		detail.Updated = bead.UpdatedAt.Format(time.RFC3339)
+	}
+
+	return detail
 }
 
 // parseBeadDetail parses bd show output.

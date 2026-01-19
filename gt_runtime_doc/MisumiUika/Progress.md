@@ -20,3 +20,4 @@
 - P3: Replaced rig list CLI usage with rig manager filesystem discovery.
 - P3: Mail agents list now uses rig manager discovery instead of crew/polecat CLI.
 - P3: Beads reader now prefers issues.jsonl for list/search/stats with CLI fallback.
+- P3: Convoy/bead detail APIs now use BeadsReader before CLI parsing.
