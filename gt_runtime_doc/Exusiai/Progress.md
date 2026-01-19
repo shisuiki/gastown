@@ -1,3 +1,3 @@
 # Progress
 
-- Added prioritized risk checklist at docs/gastown-risk-checklist.md.
+- (cleared for new WebUI investigation)

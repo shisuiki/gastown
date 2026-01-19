@@ -1,18 +1,16 @@
 # Roadmap
 
-## Phase 1: Source review and role/prompt analysis
-- Gather core docs (README, docs/overview, templates/system-prompts, templates/roles).
-- Identify role taxonomy, responsibilities, and prompt design patterns.
+## Phase 1: WebUI discovery and structure mapping
+- Locate WebUI source tree, entrypoints, routing, data flow, and build tooling.
+- Inventory key pages/components and state management patterns.
 
-## Phase 2: CLI inventory and risk analysis
-- Enumerate gt/bd commands and subcommands via `--help` and source references.
-- Classify commands by safety, complexity, and likelihood of misuse.
+## Phase 2: Issue and performance analysis
+- Identify architectural inconsistencies, duplicated patterns, and likely bug hotspots.
+- Flag performance risks (large bundles, unbounded renders, missing memoization).
 
 ## Phase 3: Report synthesis
-- Produce detailed report in docs/ with findings, risks, and recommendations.
-- Include command catalog, improvement proposals, and top-priority issues.
+- Produce WebUI report with prioritized issues and concrete recommendations.
 
 ## Acceptance criteria
-- Report covers structure, prompts, and design trade-offs.
-- gt/bd command lists include second-level subcommands at minimum.
-- Clear list of high-risk/problem areas and actionable fixes.
+- Report covers WebUI structure, UX consistency issues, performance risks.
+- Contains actionable issue list with suggested fixes.
