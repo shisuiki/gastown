@@ -55,51 +55,107 @@
             sessionSelectEl: '#terminal-session',
         });
 
-        // Load agents and populate session dropdown
+        let reconnectAttempts = 0;
+        const maxReconnectDelay = 30000;
+        let statusPoller = null;
+        let autoConnectSession = null;
+
+        function updateAgentsFromStatus(data) {
+            // Update agents list
+            document.getElementById('agents-list').innerHTML = renderAgentsTable(data.agents);
+
+            // Update session dropdown
+            const sessions = (data.agents || [])
+                .filter(p => p.SessionID)
+                .map(p => ({ id: p.SessionID, label: p.Rig + '/' + p.Name }));
+            terminal.updateSessionSelect(sessions);
+
+            maybeAutoConnect();
+        }
+
+        function startStatusPolling() {
+            if (statusPoller) {
+                return;
+            }
+            loadAgents();
+            statusPoller = setInterval(loadAgents, 15000);
+        }
+
+        function stopStatusPolling() {
+            if (!statusPoller) {
+                return;
+            }
+            clearInterval(statusPoller);
+            statusPoller = null;
+        }
+
+        // Load agents and populate session dropdown (fallback)
         async function loadAgents() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-
-                // Update agents list
-                document.getElementById('agents-list').innerHTML = renderAgentsTable(data.agents);
-
-                // Update session dropdown
-                const sessions = (data.agents || [])
-                    .filter(p => p.SessionID)
-                    .map(p => ({ id: p.SessionID, label: p.Rig + '/' + p.Name }));
-                terminal.updateSessionSelect(sessions);
+                updateAgentsFromStatus(data);
             } catch (e) {
                 console.error('Failed to load agents:', e);
             }
         }
 
-        // Check URL for session parameter and auto-connect
-        function checkUrlAndConnect() {
-            const params = new URLSearchParams(window.location.search);
-            const sessionId = params.get('session');
-            if (sessionId) {
-                // Wait a moment for sessions to load, then select and connect
-                setTimeout(() => {
-                    const select = document.getElementById('terminal-session');
-                    if (select) {
-                        // Check if the session exists in the dropdown
-                        const option = Array.from(select.options).find(o => o.value === sessionId);
-                        if (option) {
-                            select.value = sessionId;
-                            terminal.connect();
-                        } else {
-                            // Session not found yet, try again after next load
-                            console.log('Session not found in dropdown, will retry...');
-                        }
-                    }
-                }, 500);
+        // Check URL for session parameter and auto-connect once the session is present.
+        function maybeAutoConnect() {
+            if (autoConnectSession === null) {
+                const params = new URLSearchParams(window.location.search);
+                autoConnectSession = params.get('session');
             }
+            if (!autoConnectSession) {
+                return;
+            }
+            const select = document.getElementById('terminal-session');
+            if (!select) {
+                return;
+            }
+            const option = Array.from(select.options).find(o => o.value === autoConnectSession);
+            if (!option) {
+                return;
+            }
+            select.value = autoConnectSession;
+            autoConnectSession = null;
+            terminal.connect();
+        }
+
+        function connectStatusSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const socket = new WebSocket(protocol + window.location.host + '/ws/status');
+
+            socket.addEventListener('open', () => {
+                reconnectAttempts = 0;
+                stopStatusPolling();
+            });
+
+            socket.addEventListener('message', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateAgentsFromStatus(data);
+                } catch (e) {
+                    console.error('Failed to parse status update:', e);
+                }
+            });
+
+            socket.addEventListener('close', () => {
+                reconnectAttempts++;
+                startStatusPolling();
+                const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+                const jitter = Math.random() * 1000;
+                setTimeout(connectStatusSocket, baseDelay + jitter);
+            });
+
+            socket.addEventListener('error', (e) => {
+                console.error('WebSocket error:', e);
+            });
         }
 
         // Initialize
-        loadAgents().then(() => checkUrlAndConnect());
-        setInterval(loadAgents, 5000);
+        loadAgents();
+        connectStatusSocket();
     </script>
 </body>
 </html>

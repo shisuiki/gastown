@@ -6,3 +6,4 @@
 - P1: Fixed bead creation to use bd create command.
 - P1: Switched rig/mail status to structured JSON output.
 - P2: Removed unused Tailwind CDN config from base template.
+- P1: Terminals page now uses status WebSocket with polling fallback for agent lists.
