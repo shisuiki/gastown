@@ -4,3 +4,4 @@
 - P0: Added CSRF protection for state-changing requests with cookie + header enforcement.
 - P0: Wrapped WebUI command execution with context timeouts.
 - P1: Fixed bead creation to use bd create command.
+- P1: Switched rig/mail status to structured JSON output.

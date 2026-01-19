@@ -2,9 +2,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -263,6 +265,7 @@ var (
 	rigResetRole       string
 	rigResetConfirm    bool
 	rigRemoveConfirm   bool
+	rigListJSON        bool
 	rigShutdownForce   bool
 	rigShutdownNuclear bool
 	rigStopForce       bool
@@ -290,6 +293,7 @@ func init() {
 	rigAddCmd.Flags().StringVar(&rigAddBranch, "branch", "", "Default branch name (default: auto-detected from remote)")
 
 	rigRemoveCmd.Flags().BoolVar(&rigRemoveConfirm, "confirm", false, "Confirm rig removal from registry")
+	rigListCmd.Flags().BoolVar(&rigListJSON, "json", false, "Output rig list in JSON")
 
 	rigResetCmd.Flags().BoolVar(&rigResetHandoff, "handoff", false, "Clear handoff content")
 	rigResetCmd.Flags().BoolVar(&rigResetMail, "mail", false, "Clear stale mail messages")
@@ -448,11 +452,17 @@ func runRigList(cmd *cobra.Command, args []string) error {
 	rigsPath := filepath.Join(townRoot, "mayor", "rigs.json")
 	rigsConfig, err := config.LoadRigsConfig(rigsPath)
 	if err != nil {
+		if rigListJSON {
+			return json.NewEncoder(os.Stdout).Encode([]rig.RigSummary{})
+		}
 		fmt.Println("No rigs configured.")
 		return nil
 	}
 
 	if len(rigsConfig.Rigs) == 0 {
+		if rigListJSON {
+			return json.NewEncoder(os.Stdout).Encode([]rig.RigSummary{})
+		}
 		fmt.Println("No rigs configured.")
 		fmt.Printf("\nAdd one with: %s\n", style.Dim.Render("gt rig add <name> <git-url>"))
 		return nil
@@ -461,6 +471,42 @@ func runRigList(cmd *cobra.Command, args []string) error {
 	// Create rig manager to get details
 	g := git.NewGit(townRoot)
 	mgr := rig.NewManager(townRoot, rigsConfig, g)
+
+	if rigListJSON {
+		type rigListEntry struct {
+			Name        string `json:"name"`
+			Path        string `json:"path"`
+			Polecats    int    `json:"polecats"`
+			Crew        int    `json:"crew"`
+			HasWitness  bool   `json:"has_witness"`
+			HasRefinery bool   `json:"has_refinery"`
+		}
+
+		names := make([]string, 0, len(rigsConfig.Rigs))
+		for name := range rigsConfig.Rigs {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		entries := make([]rigListEntry, 0, len(names))
+		for _, name := range names {
+			r, err := mgr.GetRig(name)
+			if err != nil {
+				continue
+			}
+			summary := r.Summary()
+			entries = append(entries, rigListEntry{
+				Name:        summary.Name,
+				Path:        r.Path,
+				Polecats:    summary.PolecatCount,
+				Crew:        summary.CrewCount,
+				HasWitness:  summary.HasWitness,
+				HasRefinery: summary.HasRefinery,
+			})
+		}
+
+		return json.NewEncoder(os.Stdout).Encode(entries)
+	}
 
 	fmt.Printf("Rigs in %s:\n\n", townRoot)
 

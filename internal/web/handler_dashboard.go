@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -170,30 +169,25 @@ func (h *GUIHandler) getDaemonStatus() DaemonStatus {
 }
 
 func (h *GUIHandler) getMailStatus() MailStatus {
-	cmd, cancel := command("gt", "mail", "inbox")
+	cmd, cancel := command("gt", "mail", "inbox", "--json")
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return MailStatus{}
 	}
 
-	// Parse output for unread count
-	// Format: "📬 Inbox: mayor/ (N messages, M unread)"
-	outStr := string(output)
-	var unread, total int
+	var messages []struct {
+		Read bool `json:"read"`
+	}
+	if err := json.Unmarshal(output, &messages); err != nil {
+		return MailStatus{}
+	}
 
-	// Look for pattern like "12 messages" and "5 unread"
-	parts := strings.Fields(outStr)
-	for i, p := range parts {
-		if p == "messages," && i > 0 {
-			if n, err := parseInt(parts[i-1]); err == nil {
-				total = n
-			}
-		}
-		if p == "unread)" && i > 0 {
-			if n, err := parseInt(parts[i-1]); err == nil {
-				unread = n
-			}
+	total := len(messages)
+	unread := 0
+	for _, msg := range messages {
+		if !msg.Read {
+			unread++
 		}
 	}
 
@@ -201,23 +195,6 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 		Unread: unread,
 		Total:  total,
 	}
-}
-
-// parseInt extracts an integer from a string, stripping non-numeric prefix like "("
-func parseInt(s string) (int, error) {
-	s = strings.TrimLeft(s, "(")
-	var n int
-	for _, c := range s {
-		if c >= '0' && c <= '9' {
-			n = n*10 + int(c-'0')
-		} else {
-			break
-		}
-	}
-	if n == 0 && s != "0" {
-		return 0, fmt.Errorf("no number found")
-	}
-	return n, nil
 }
 
 // renderTemplate renders a template with the layout.

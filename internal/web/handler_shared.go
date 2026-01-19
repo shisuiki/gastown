@@ -2,9 +2,7 @@ package web
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strings"
 )
 
 // handleAPIRigs returns rigs status.
@@ -72,45 +70,34 @@ func (h *GUIHandler) handleAPICommand(w http.ResponseWriter, r *http.Request) {
 
 // getRigs parses the gt rig list output.
 func (h *GUIHandler) getRigs() []RigStatus {
-	cmd, cancel := command("gt", "rig", "list")
+	cmd, cancel := command("gt", "rig", "list", "--json")
 	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
 
-	// Parse text output (gt rig list doesn't have --json yet)
-	// Format:
-	//   Rigs in /path:
-	//
-	//     rigname
-	//       Polecats: N  Crew: M
-	//       Agents: [...]
-	var rigs []RigStatus
-	var currentRig *RigStatus
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Rigs in") || line == "" {
-			continue
-		}
-		// Rig name: 2 spaces then name
-		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "    ") {
-			name := strings.TrimSpace(line)
-			if name != "" {
-				rigs = append(rigs, RigStatus{Name: name})
-				currentRig = &rigs[len(rigs)-1]
-			}
-		}
-		// Rig details: 4 spaces then "Polecats: N  Crew: M"
-		if strings.HasPrefix(line, "    ") && currentRig != nil {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "Polecats:") {
-				var polecats, crew int
-				fmt.Sscanf(trimmed, "Polecats: %d  Crew: %d", &polecats, &crew)
-				currentRig.Polecats = polecats
-				currentRig.Crew = crew
-			}
-		}
+	var raw []struct {
+		Name       string `json:"name"`
+		Path       string `json:"path"`
+		Polecats   int    `json:"polecats"`
+		Crew       int    `json:"crew"`
+		HasWitness bool   `json:"has_witness"`
+	}
+
+	if err := json.Unmarshal(output, &raw); err != nil {
+		return nil
+	}
+
+	rigs := make([]RigStatus, 0, len(raw))
+	for _, item := range raw {
+		rigs = append(rigs, RigStatus{
+			Name:       item.Name,
+			Path:       item.Path,
+			Polecats:   item.Polecats,
+			Crew:       item.Crew,
+			HasWitness: item.HasWitness,
+		})
 	}
 	return rigs
 }
