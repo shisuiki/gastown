@@ -25,3 +25,4 @@
 - P3: Convoy fetcher now reads convoys and tracked issues from town issues.jsonl with BEADS_DIR-scoped CLI fallback.
 - P3: Workflow ready list now derives from JSONL dependencies, and mayor hook status avoids gt hook by reading hooked beads.
 - P4: Documented data layer modernization decision (JSONL-first, defer sqlite driver).
+- P5: Post-refactor review complete; follow-up beads filed (hq-fw9b, hq-1t5q, hq-jxfy).
