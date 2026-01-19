@@ -2,41 +2,55 @@
 
 ## 2026-01-20
 
+### Handoff Summary
+
+**WebUI Workflow Page Refactoring - Complete**
+
+完成了workflow页面的Jira-like重构，主要工作：
+
+1. **数据访问层重写** - 移除了所有sqlite3直接调用，改用`bd`CLI的`--json`输出
+   - `beads_reader.go` - 使用`bd list/show/search --json`
+   - `fetcher.go` - `getTrackedIssues()`改用`bd show --json`获取convoy dependents
+
+2. **新API端点** (`handler_workflow_v2.go`)
+   - `/api/beads` - 带过滤的beads列表
+   - `/api/beads/search` - 文本搜索
+   - `/api/bead/{id}` - 快速详情（直接DB访问）
+   - `/api/convoy/{id}` - 快速convoy详情
+   - `/api/bead/action` - 操作(sling/close/reopen/update)
+   - `/api/agents/hooks` - 所有agent的hook状态
+
+3. **前端改进** (`workflow.html`, `bead_detail.html`, `convoy_detail.html`)
+   - 修复CSS变量问题（改用直接颜色值）
+   - 移除UI闪烁（静默刷新）
+   - 只显示有work的agent hooks
+   - Bead卡片可点击跳转详情页
+   - 详情页有完整操作按钮
+
+4. **已解决的问题**
+   - ✅ sqlite3命令不可用 → 改用bd CLI
+   - ✅ Convoy显示0/0 → 修复getTrackedIssues使用bd show
+   - ✅ Bead详情页报错 → 快速API使用bd show --json
+   - ✅ UI闪烁 → 静默刷新
+   - ✅ CSS样式混乱 → 移除未定义变量
+
+### Commits
+- `57418de7` feat(web): Refactor workflow page with Jira-like UI and direct beads reader
+- `693115ef` fix(web): Fix workflow page CSS and eliminate UI flickering
+- `705701d4` fix(web): Improve workflow UI - hide idle agents, clickable beads, fast detail pages
+- `b4ffe2c7` fix(web): Replace sqlite3 with bd CLI for database access
+
+### Known Issues / Future Work
+- [ ] Convoy tracked issues可能需要进一步验证（依赖dependency_type="tracks"）
+- [ ] 考虑添加更多bead操作（添加依赖、标签管理等）
+- [ ] 性能优化：bd CLI调用比直接sqlite3慢，但更可靠
+
+---
+
+## Earlier Work (Before Handoff)
+
 ### Completed
 - [x] Full codebase research completed
 - [x] Understood beads data structure (9 types, SQLite + JSONL)
 - [x] Understood convoy system (special bead with `tracks` dependencies)
-- [x] Identified root causes of current issues:
-  - Hook always 0: `gt hook` needs actor context
-  - Convoy 0/0: getTrackedIssues() not finding dependencies
-- [x] Documentation created
-- [x] Created `internal/web/beads_reader.go` - Direct SQLite reader via sqlite3 CLI
-  - Types: Bead, BeadFilter, AgentHook, BeadDependency
-  - Methods: ListBeads, GetBead, SearchBeads, GetBeadStats, GetAllAgentHooks, GetConvoyTrackedIssues, ListAgents
-- [x] Created `internal/web/handler_workflow_v2.go` - New API endpoints
-  - `/api/beads` - List beads with filtering
-  - `/api/beads/search` - Search beads by text
-  - `/api/beads/stats` - Bead statistics
-  - `/api/beads/{id}` - Get single bead details
-  - `/api/agents/hooks` - All agents' hook status
-  - `/api/agents/available` - Available agents for assignment
-  - `/api/bead/action` - Bead operations (sling, close, reopen, update, unsling)
-  - `/api/bead/create-v2` - Create bead with full options
-  - `/api/convoy/beads/{id}` - Convoy tracked beads with progress
-- [x] Updated `internal/web/gui.go` - Registered new routes
-- [x] Rewrote `internal/web/templates/workflow.html` - Jira-like UI
-  - Quick stats bar (Open, In Progress, Ready, Active Hooks)
-  - Sidebar with Agent Hooks and Active Convoys
-  - Tabbed views (Board, List, Ready, Convoys)
-  - Board view with status columns
-  - Search and filter functionality
-  - Bead detail modal with actions
-  - Create bead modal
-  - Sling modal for assigning work
-- [x] Build succeeded (`go build ./...`)
-
-### Next Steps
-- [ ] Test workflow page in browser
-- [ ] Verify hooks display per-agent correctly
-- [ ] Verify convoy progress calculation
-- [ ] Additional UI refinements based on testing
+- [x] Documentation created in gt_runtime_doc/Myrtle/
