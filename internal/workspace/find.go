@@ -190,3 +190,29 @@ func MustGetTownName(townRoot string) string {
 	}
 	return name
 }
+
+// RigInfo contains basic information about a rig.
+type RigInfo struct {
+	Name string
+	Path string
+}
+
+// ListRigs returns all registered rigs from the workspace's rigs.json config.
+func ListRigs(townRoot string) ([]RigInfo, error) {
+	rigsConfigPath := filepath.Join(townRoot, "mayor", "rigs.json")
+	rigsConfig, err := config.LoadRigsConfig(rigsConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("loading rigs config: %w", err)
+	}
+
+	var rigs []RigInfo
+	for name, entry := range rigsConfig.Rigs {
+		path := entry.LocalRepo
+		if path == "" {
+			// Fallback to default rig path if LocalRepo not set
+			path = filepath.Join(townRoot, name, "rig")
+		}
+		rigs = append(rigs, RigInfo{Name: name, Path: path})
+	}
+	return rigs, nil
+}

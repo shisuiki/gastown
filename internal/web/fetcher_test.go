@@ -371,7 +371,7 @@ func TestIsWorkerSession(t *testing.T) {
 		{"polecat nux is worker", "nux", true},
 		{"refinery is worker", "refinery", true},
 		{"witness is not worker", "witness", false},
-		{"mayor is not worker", "mayor", false},
+		{"mayor is worker", "mayor", true}, // mayor now shown in terminals
 		{"deacon is not worker", "deacon", false},
 		{"boot is not worker", "boot", false},
 	}
