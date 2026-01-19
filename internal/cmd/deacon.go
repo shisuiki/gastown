@@ -24,6 +24,7 @@ import (
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/util"
 	"github.com/steveyegge/gastown/internal/workspace"
+	"github.com/steveyegge/gastown/internal/patrol"
 )
 
 // getDeaconSessionName returns the Deacon session name.
@@ -434,6 +435,13 @@ func startDeaconSession(t *tmux.Tmux, sessionName, agentOverride string) error {
 	time.Sleep(5 * time.Second)
 	if err := t.NudgeSession(sessionName, session.PropulsionNudgeForRole("deacon", deaconDir)); err != nil {
 		return fmt.Errorf("sending propulsion nudge: %w", err)
+	}
+
+	// Ensure patrol molecule is attached
+	if attached, err := patrol.EnsurePatrolMoleculeAttached(townRoot, "deacon"); err != nil {
+		style.PrintWarning("failed to ensure patrol molecule attached: %v", err)
+	} else if attached {
+		fmt.Printf("%s Attached patrol molecule to Deacon\n", style.Bold.Render("✓"))
 	}
 
 	return nil

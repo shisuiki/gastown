@@ -17,6 +17,8 @@ import (
 	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
+	"github.com/steveyegge/gastown/internal/patrol"
+	"github.com/steveyegge/gastown/internal/style"
 )
 
 // Common errors
@@ -238,6 +240,14 @@ func (m *Manager) Start(foreground bool, agentOverride string, envOverrides []st
 		return fmt.Errorf("waiting for Claude UI: %w", err)
 	}
 	_ = t.NudgeSession(sessionID, session.PropulsionNudgeForRole("witness", witnessDir)) // Non-fatal
+
+	// Ensure patrol molecule is attached
+	agentAddr := fmt.Sprintf("%s/witness", m.rig.Name)
+	if attached, err := patrol.EnsurePatrolMoleculeAttached(m.rig.Path, agentAddr); err != nil {
+		style.PrintWarning("failed to ensure patrol molecule attached: %v", err)
+	} else if attached {
+		fmt.Printf("%s Attached patrol molecule to %s\n", style.Bold.Render("✓"), agentAddr)
+	}
 
 	return nil
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/steveyegge/gastown/internal/rig"
 	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/tmux"
+	"github.com/steveyegge/gastown/internal/patrol"
 	"github.com/steveyegge/gastown/internal/util"
 	"github.com/steveyegge/gastown/internal/wisp"
 	"github.com/steveyegge/gastown/internal/witness"
@@ -473,17 +474,24 @@ func (d *Daemon) ensureWitnessRunning(rigName string) {
 	}
 	mgr := witness.NewManager(r)
 
-	if err := mgr.Start(false, "", nil); err != nil {
-		if err == witness.ErrAlreadyRunning {
-			// Already running - this is the expected case
-			d.logger.Printf("Witness for %s already running, skipping spawn", rigName)
-			return
-		}
+	err := mgr.Start(false, "", nil)
+	if err != nil && err != witness.ErrAlreadyRunning {
 		d.logger.Printf("Error starting witness for %s: %v", rigName, err)
 		return
 	}
+	if err == witness.ErrAlreadyRunning {
+		d.logger.Printf("Witness for %s already running", rigName)
+	} else {
+		d.logger.Printf("Witness session for %s started successfully", rigName)
+	}
 
-	d.logger.Printf("Witness session for %s started successfully", rigName)
+	// Ensure patrol molecule attached
+	agentAddr := fmt.Sprintf("%s/witness", rigName)
+	if attached, attachErr := patrol.EnsurePatrolMoleculeAttached(r.Path, agentAddr); attachErr != nil {
+		d.logger.Printf("Warning: failed to ensure patrol molecule attached to %s: %v", agentAddr, attachErr)
+	} else if attached {
+		d.logger.Printf("Attached patrol molecule to %s", agentAddr)
+	}
 }
 
 // ensureRefineriesRunning ensures refineries are running for all rigs.

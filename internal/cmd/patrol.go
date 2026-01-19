@@ -12,6 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/style"
+	"github.com/steveyegge/gastown/internal/patrol"
+	"github.com/steveyegge/gastown/internal/workspace"
 )
 
 var (
@@ -55,8 +57,18 @@ Examples:
 	RunE: runPatrolDigest,
 }
 
+var patrolEnsureCmd = &cobra.Command{
+	Use:   "ensure",
+	Short: "Ensure patrol molecule is attached to current agent",
+	Long: `Ensures that the current agent has a patrol molecule attached.
+If the hook is empty, attaches the appropriate patrol molecule (mol-deacon-patrol,
+mol-witness-patrol, or mol-refinery-patrol).`,
+	RunE: runPatrolEnsure,
+}
+
 func init() {
 	patrolCmd.AddCommand(patrolDigestCmd)
+	patrolCmd.AddCommand(patrolEnsureCmd)
 	rootCmd.AddCommand(patrolCmd)
 
 	// Patrol digest flags
@@ -378,4 +390,64 @@ func deletePatrolDigests(targetDate time.Time) (int, error) {
 	}
 
 	return len(idsToDelete), nil
+}
+
+func runPatrolEnsure(cmd *cobra.Command, args []string) error {
+	// Determine current agent address
+	agentAddr := detectSender()
+	if agentAddr == "" {
+		return fmt.Errorf("could not determine agent address")
+	}
+
+	// Determine root directory based on agent type
+	// For town-level agents (deacon, mayor) use town root
+	// For rig-level agents (witness, refinery, polecat, crew) use rig root
+	townRoot, err := workspace.FindFromCwdOrError()
+	if err != nil {
+		return fmt.Errorf("not in a Gas Town workspace: %w", err)
+	}
+
+	var rootDir string
+	if strings.HasSuffix(agentAddr, "/witness") || strings.HasSuffix(agentAddr, "/refinery") ||
+		strings.HasSuffix(agentAddr, "/polecat") || strings.HasSuffix(agentAddr, "/crew") {
+		// Rig-level agent - need rig root
+		// Find rig by parsing agent address or inferring from cwd
+		parts := strings.Split(agentAddr, "/")
+		if len(parts) >= 2 {
+			rigName := parts[0]
+			// Find rig path
+			rigs, err := workspace.ListRigs(townRoot)
+			if err != nil {
+				return fmt.Errorf("failed to list rigs: %w", err)
+			}
+			for _, rig := range rigs {
+				if rig.Name == rigName {
+					rootDir = rig.Path
+					break
+				}
+			}
+		}
+		if rootDir == "" {
+			// Fallback to current directory
+			rootDir, _ = os.Getwd()
+		}
+	} else if agentAddr == "deacon" || agentAddr == "mayor" {
+		// Town-level agent
+		rootDir = townRoot
+	} else {
+		// Unknown agent type, assume town root
+		rootDir = townRoot
+	}
+
+	// Ensure patrol molecule attached
+	attached, err := patrol.EnsurePatrolMoleculeAttached(rootDir, agentAddr)
+	if err != nil {
+		return fmt.Errorf("failed to ensure patrol molecule: %w", err)
+	}
+	if attached {
+		fmt.Printf("%s Attached patrol molecule to %s\n", style.Bold.Render("✓"), agentAddr)
+	} else {
+		fmt.Printf("%s Patrol molecule already attached to %s\n", style.Dim.Render("○"), agentAddr)
+	}
+	return nil
 }
