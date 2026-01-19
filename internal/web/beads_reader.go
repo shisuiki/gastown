@@ -1,17 +1,22 @@
 package web
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/steveyegge/gastown/internal/beads"
 )
 
 // BeadsReader provides access to beads via bd CLI commands.
 type BeadsReader struct {
 	townRoot string
+	workDir  string
+	beadsDir string
 }
 
 // Bead represents a bead from the database.
@@ -58,8 +63,15 @@ func NewBeadsReader(townRoot string) (*BeadsReader, error) {
 		}
 	}
 
+	workDir, err := os.Getwd()
+	if err != nil {
+		workDir = townRoot
+	}
+
 	return &BeadsReader{
 		townRoot: townRoot,
+		workDir:  workDir,
+		beadsDir: beads.ResolveBeadsDir(workDir),
 	}, nil
 }
 
@@ -93,21 +105,34 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 		args = append(args, "--limit=100")
 	}
 
-	cmd, cancel := command("bd", args...)
-	defer cancel()
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("bd list failed: %w", err)
-	}
-
 	var beads []Bead
-	if err := json.Unmarshal(output, &beads); err != nil {
-		return nil, fmt.Errorf("parse error: %w", err)
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		beads = jsonl
+	} else {
+		cmd, cancel := command("bd", args...)
+		defer cancel()
+		output, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("bd list failed: %w", err)
+		}
+
+		if err := json.Unmarshal(output, &beads); err != nil {
+			return nil, fmt.Errorf("parse error: %w", err)
+		}
 	}
 
 	// Filter out excluded types and ephemeral if needed
 	filtered := make([]Bead, 0, len(beads))
 	for _, b := range beads {
+		if filter.Status != "" && b.Status != filter.Status {
+			continue
+		}
+		if filter.Type != "" && b.Type != filter.Type {
+			continue
+		}
+		if filter.Assignee != "" && b.Assignee != filter.Assignee {
+			continue
+		}
 		// Skip excluded types
 		if len(filter.ExcludeTypes) > 0 {
 			skip := false
@@ -126,6 +151,9 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 			continue
 		}
 		filtered = append(filtered, b)
+		if filter.Limit > 0 && len(filtered) >= filter.Limit {
+			break
+		}
 	}
 
 	return filtered, nil
@@ -133,6 +161,15 @@ func (r *BeadsReader) ListBeads(filter BeadFilter) ([]Bead, error) {
 
 // GetBead returns a single bead by ID using bd show --json.
 func (r *BeadsReader) GetBead(id string) (*Bead, error) {
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		for _, b := range jsonl {
+			if b.ID == id {
+				bead := b
+				return &bead, nil
+			}
+		}
+	}
+
 	cmd, cancel := command("bd", "show", id, "--json")
 	defer cancel()
 	output, err := cmd.Output()
@@ -385,17 +422,21 @@ func (r *BeadsReader) GetBeadDependencies(beadID string) ([]BeadDependency, erro
 func (r *BeadsReader) GetBeadStats() (map[string]int, error) {
 	stats := make(map[string]int)
 
-	// Get all beads with JSON
-	cmd, cancel := command("bd", "list", "--json", "--limit=0")
-	defer cancel()
-	output, err := cmd.Output()
-	if err != nil {
-		return stats, err
-	}
-
 	var beads []Bead
-	if err := json.Unmarshal(output, &beads); err != nil {
-		return stats, err
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		beads = jsonl
+	} else {
+		// Get all beads with JSON
+		cmd, cancel := command("bd", "list", "--json", "--limit=0")
+		defer cancel()
+		output, err := cmd.Output()
+		if err != nil {
+			return stats, err
+		}
+
+		if err := json.Unmarshal(output, &beads); err != nil {
+			return stats, err
+		}
 	}
 
 	// Count by status and type
@@ -412,6 +453,25 @@ func (r *BeadsReader) GetBeadStats() (map[string]int, error) {
 
 // SearchBeads searches beads by text in title and description.
 func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error) {
+	if jsonl, err := r.readIssuesJSONL(); err == nil {
+		needle := strings.ToLower(searchQuery)
+		matches := make([]Bead, 0)
+		for _, b := range jsonl {
+			if needle == "" {
+				continue
+			}
+			if strings.Contains(strings.ToLower(b.ID), needle) ||
+				strings.Contains(strings.ToLower(b.Title), needle) ||
+				strings.Contains(strings.ToLower(b.Description), needle) {
+				matches = append(matches, b)
+				if limit > 0 && len(matches) >= limit {
+					break
+				}
+			}
+		}
+		return matches, nil
+	}
+
 	args := []string{"search", searchQuery, "--json"}
 	if limit > 0 {
 		args = append(args, fmt.Sprintf("--limit=%d", limit))
@@ -431,6 +491,89 @@ func (r *BeadsReader) SearchBeads(searchQuery string, limit int) ([]Bead, error)
 	}
 
 	return beads, nil
+}
+
+type issueJSONL struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Status      string   `json:"status"`
+	Priority    int      `json:"priority"`
+	Type        string   `json:"issue_type"`
+	Owner       string   `json:"owner"`
+	Assignee    string   `json:"assignee"`
+	Labels      []string `json:"labels"`
+	CreatedAt   string   `json:"created_at"`
+	UpdatedAt   string   `json:"updated_at"`
+	ClosedAt    *string  `json:"closed_at"`
+	Ephemeral   bool     `json:"ephemeral"`
+	Wisp        bool     `json:"wisp"`
+}
+
+func (r *BeadsReader) readIssuesJSONL() ([]Bead, error) {
+	issuesPath := filepath.Join(r.beadsDir, "issues.jsonl")
+	file, err := os.Open(issuesPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	beadsOut := make([]Bead, 0, 128)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry issueJSONL
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			return nil, err
+		}
+		if entry.ID == "" {
+			continue
+		}
+
+		bead := Bead{
+			ID:          entry.ID,
+			Title:       entry.Title,
+			Description: entry.Description,
+			Status:      entry.Status,
+			Priority:    entry.Priority,
+			Type:        entry.Type,
+			Owner:       entry.Owner,
+			Assignee:    entry.Assignee,
+			Labels:      entry.Labels,
+			Ephemeral:   entry.Ephemeral || entry.Wisp,
+		}
+
+		if entry.CreatedAt != "" {
+			if t, err := time.Parse(time.RFC3339, entry.CreatedAt); err == nil {
+				bead.CreatedAt = t
+			}
+		}
+		if entry.UpdatedAt != "" {
+			if t, err := time.Parse(time.RFC3339, entry.UpdatedAt); err == nil {
+				bead.UpdatedAt = t
+			}
+		}
+		if entry.ClosedAt != nil && *entry.ClosedAt != "" {
+			if t, err := time.Parse(time.RFC3339, *entry.ClosedAt); err == nil {
+				bead.ClosedAt = &t
+			}
+		}
+
+		beadsOut = append(beadsOut, bead)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(beadsOut) == 0 {
+		return nil, fmt.Errorf("no issues loaded from %s", issuesPath)
+	}
+	return beadsOut, nil
 }
 
 // ListAgents returns all available agents for assignment.
