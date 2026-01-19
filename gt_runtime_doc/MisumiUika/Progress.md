@@ -1,4 +1,5 @@
 # Progress
 
-- Initialized runtime docs structure.
-- Next: review role templates and add runtime docs workflow instructions.
+- Phase 0 done: initialized runtime docs structure.
+- Phase 1 done: reviewed role templates and identified insertion points.
+- Next: update role templates with runtime docs workflow instructions.
