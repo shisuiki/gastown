@@ -360,13 +360,76 @@ function renderIssuesTable(issues) {
     if (!issues || issues.length === 0) {
         return '<p class="text-muted">No open issues</p>';
     }
-    return '<table><tr><th>ID</th><th>Title</th><th>Priority</th><th>Type</th></tr>' +
-        issues.map(i =>
-            '<tr><td><a href="/bead/' + escapeHtml(i.id) + '"><code class="text-link">' + escapeHtml(i.id) + '</code></a></td>' +
-            '<td>' + escapeHtml(i.title) + '</td>' +
-            '<td>' + priorityBadge(i.priority) + '</td>' +
-            '<td>' + issueTypeIcon(i.issue_type) + '</td></tr>'
-        ).join('') + '</table>';
+
+    // Separate wisp issues from work issues
+    const wispIssues = issues.filter(i => i.wisp);
+    const workIssues = issues.filter(i => !i.wisp);
+
+    // Sort wisp issues: pinned first
+    wispIssues.sort((a, b) => (a.status === 'pinned' ? -1 : b.status === 'pinned' ? 1 : 0));
+
+    let html = '';
+
+    // Render wisp workflow issues section
+    if (wispIssues.length > 0) {
+        html += '<div style="margin-bottom: 20px;">';
+        html += '<h3 style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 8px;">📌 Wisp Workflow Issues</h3>';
+        html += '<table><tr><th>ID</th><th>Title</th><th>Assignee</th><th>Priority</th><th>Type</th><th>Status</th></tr>' +
+            wispIssues.map(i => {
+                let statusIndicator = '';
+                if (i.status === 'pinned') {
+                    statusIndicator = '📌 <span class="text-muted">pinned</span>';
+                } else if (i.status === 'open') {
+                    statusIndicator = '<span class="text-muted">open</span>';
+                } else if (i.status === 'in_progress') {
+                    statusIndicator = '⚙️ <span class="text-muted">in progress</span>';
+                } else {
+                    statusIndicator = '<span class="text-muted">' + escapeHtml(i.status) + '</span>';
+                }
+                return '<tr class="wisp-row">' +
+                    '<td><a href="/bead/' + escapeHtml(i.id) + '"><code class="text-link">' + escapeHtml(i.id) + '</code></a></td>' +
+                    '<td>' + escapeHtml(i.title) + '</td>' +
+                    '<td>' + (i.assignee ? escapeHtml(i.assignee) : '<span class="text-muted">—</span>') + '</td>' +
+                    '<td>' + priorityBadge(i.priority) + '</td>' +
+                    '<td>' + issueTypeIcon(i.issue_type) + ' <span class="wisp-indicator" title="Wisp">✨</span></td>' +
+                    '<td>' + statusIndicator + '</td></tr>';
+            }).join('') + '</table>';
+        html += '</div>';
+    }
+
+    // Render active work assignments section
+    if (workIssues.length > 0) {
+        html += '<div>';
+        html += '<h3 style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 8px;">📋 Active Work Assignments</h3>';
+        html += '<table><tr><th>ID</th><th>Title</th><th>Assignee</th><th>Priority</th><th>Type</th><th>Status</th></tr>' +
+            workIssues.map(i => {
+                let statusIndicator = '';
+                if (i.status === 'pinned') {
+                    statusIndicator = '📌 <span class="text-muted">pinned</span>';
+                } else if (i.status === 'open') {
+                    statusIndicator = '<span class="text-muted">open</span>';
+                } else if (i.status === 'in_progress') {
+                    statusIndicator = '⚙️ <span class="text-muted">in progress</span>';
+                } else {
+                    statusIndicator = '<span class="text-muted">' + escapeHtml(i.status) + '</span>';
+                }
+                return '<tr>' +
+                    '<td><a href="/bead/' + escapeHtml(i.id) + '"><code class="text-link">' + escapeHtml(i.id) + '</code></a></td>' +
+                    '<td>' + escapeHtml(i.title) + '</td>' +
+                    '<td>' + (i.assignee ? escapeHtml(i.assignee) : '<span class="text-muted">—</span>') + '</td>' +
+                    '<td>' + priorityBadge(i.priority) + '</td>' +
+                    '<td>' + issueTypeIcon(i.issue_type) + '</td>' +
+                    '<td>' + statusIndicator + '</td></tr>';
+            }).join('') + '</table>';
+        html += '</div>';
+    }
+
+    // If all issues are filtered out (shouldn't happen)
+    if (html === '') {
+        return '<p class="text-muted">No open issues</p>';
+    }
+
+    return html;
 }
 
 /**

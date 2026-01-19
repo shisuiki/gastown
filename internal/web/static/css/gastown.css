@@ -291,3 +291,13 @@ code { font-family: "Menlo", "Monaco", "Consolas", monospace; }
 .progress-fill.danger {
     background: linear-gradient(90deg, #ef4444, #f87171);
 }
+
+/* Wisp issue styles */
+.wisp-row {
+    background-color: rgba(139, 92, 246, 0.05);
+}
+.wisp-indicator {
+    color: #a78bfa;
+    font-size: 0.8rem;
+    margin-left: 4px;
+}

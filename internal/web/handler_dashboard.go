@@ -235,11 +235,14 @@ func (h *GUIHandler) renderTemplate(w http.ResponseWriter, name string, data int
 
 // IssueRow represents an issue in the dashboard.
 type IssueRow struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Status   string `json:"status"`
-	Priority int    `json:"priority"`
-	Type     string `json:"issue_type"`
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	Status   string   `json:"status"`
+	Priority int      `json:"priority"`
+	Type     string   `json:"issue_type"`
+	Assignee string   `json:"assignee,omitempty"`
+	Labels   []string `json:"labels,omitempty"`
+	Wisp     bool     `json:"wisp,omitempty"`
 }
 
 // RoleBead represents an agent lifecycle bead.
@@ -296,6 +299,17 @@ func (h *GUIHandler) fetchIssues(status string) map[string]interface{} {
 		return map[string]interface{}{
 			"error":  "Failed to parse issues",
 			"issues": []IssueRow{},
+		}
+	}
+
+	// Post-process issues: set Wisp field based on labels
+	for i := range issues {
+		// Check if any label indicates ephemeral/wisp status
+		for _, label := range issues[i].Labels {
+			if label == "ephemeral" || label == "wisp" {
+				issues[i].Wisp = true
+				break
+			}
 		}
 	}
 
