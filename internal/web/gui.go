@@ -277,6 +277,28 @@ func (h *GUIHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == http.MethodGet {
+		token := r.URL.Query().Get("token")
+		if token != "" {
+			if token == authConfig.token {
+				http.SetCookie(w, &http.Cookie{
+					Name:     sessionCookieName,
+					Value:    generateSessionToken(token),
+					Path:     "/",
+					HttpOnly: true,
+					Secure:   r.TLS != nil,
+					SameSite: http.SameSiteLaxMode,
+					MaxAge:   86400 * 30, // 30 days
+				})
+				ensureCSRFCookie(w, r)
+				http.Redirect(w, r, "/", http.StatusFound)
+				return
+			}
+			h.serveLoginPage(w, "Invalid token")
+			return
+		}
+	}
+
 	// GET request - show login page
 	h.serveLoginPage(w, "")
 }
@@ -403,6 +425,53 @@ func (h *GUIHandler) serveLoginPage(w http.ResponseWriter, errorMsg string) {
             text-align: center;
             margin-top: 20px;
         }
+        .divider {
+            margin: 24px 0 16px;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.12);
+        }
+        .link-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            padding: 14px;
+        }
+        .link-title {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
+        }
+        .link-input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font-size: 12px;
+        }
+        .link-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .link-actions button {
+            width: auto;
+            flex: 1;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .link-actions button.secondary {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .link-note {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -417,8 +486,70 @@ func (h *GUIHandler) serveLoginPage(w http.ResponseWriter, errorMsg string) {
             </div>
             <button type="submit">Sign In</button>
         </form>
+        <div class="divider"></div>
+        <div class="link-card">
+            <div class="link-title">Mobile Login Link</div>
+            <input type="text" id="login-link" class="link-input" readonly placeholder="Enter token to generate link">
+            <div class="link-actions">
+                <button type="button" class="secondary" id="copy-link" disabled>Copy Link</button>
+                <button type="button" id="share-link" disabled>Share Link</button>
+            </div>
+            <div class="link-note">This link contains your token. Share only with trusted devices.</div>
+        </div>
         <p class="hint">Token is set via GT_WEB_AUTH_TOKEN environment variable</p>
     </div>
+    <script>
+        (function() {
+            const tokenInput = document.getElementById('token');
+            const linkInput = document.getElementById('login-link');
+            const copyBtn = document.getElementById('copy-link');
+            const shareBtn = document.getElementById('share-link');
+
+            function updateLink() {
+                const token = tokenInput.value.trim();
+                if (!token) {
+                    linkInput.value = '';
+                    copyBtn.disabled = true;
+                    shareBtn.disabled = true;
+                    return;
+                }
+                const url = new URL(window.location.href);
+                url.searchParams.set('token', token);
+                linkInput.value = url.toString();
+                copyBtn.disabled = false;
+                shareBtn.disabled = !navigator.share;
+            }
+
+            async function copyLink() {
+                const value = linkInput.value.trim();
+                if (!value) return;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(value);
+                    copyBtn.textContent = 'Copied';
+                } else {
+                    linkInput.select();
+                    document.execCommand('copy');
+                    copyBtn.textContent = 'Copied';
+                }
+                setTimeout(() => { copyBtn.textContent = 'Copy Link'; }, 1200);
+            }
+
+            async function shareLink() {
+                const value = linkInput.value.trim();
+                if (!value || !navigator.share) return;
+                await navigator.share({
+                    title: 'Gas Town Login',
+                    text: 'Login link for Gas Town WebUI',
+                    url: value
+                });
+            }
+
+            tokenInput.addEventListener('input', updateLink);
+            copyBtn.addEventListener('click', copyLink);
+            shareBtn.addEventListener('click', shareLink);
+            updateLink();
+        })();
+    </script>
 </body>
 </html>`
 	w.Write([]byte(html))
