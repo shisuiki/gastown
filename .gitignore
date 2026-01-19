@@ -49,5 +49,8 @@ state.json
 # Clone-specific CLAUDE.md (regenerated locally per clone)
 CLAUDE.md
 
+# Local scratch space
+.tmp/
+
 # Embedded formulas are committed so `go install @latest` works
 # Run `go generate ./...` after modifying .beads/formulas/

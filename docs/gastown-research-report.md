@@ -1,0 +1,599 @@
+# Gastown Research Report (Crew: Exusiai)
+
+## Scope and Method
+- Reviewed `README.md`, `docs/overview.md`, `docs/reference.md`, and role/prompt templates under `internal/templates/`.
+- Enumerated `gt` and `bd` commands via `--help` (top-level + subcommands, depth <= 3).
+- Read Beads README from `.tmp/beads/` for CLI intent and feature framing.
+
+## Executive Summary
+- Gastown’s role taxonomy and two-level Beads routing are coherent, but the prompt stack is verbose and repetitive, inflating context while still leaving some boundary gaps.
+- The CLI surface area for `gt` and `bd` is very large, with overlapping namespaces and ambiguous command names that increase the chance of misuse.
+- The system relies heavily on agent compliance (e.g., propulsion principle) and lacks strong CLI guardrails for destructive actions.
+- The design is powerful, but should be tightened with clearer command taxonomy, safer defaults, and prompt modularization.
+
+## Structure and Architecture Assessment
+### Strengths
+- Clear separation of responsibilities: Mayor/Deacon/Witness/Refinery (infra) vs Crew/Polecat (work).
+- Two-level Beads routing is a good abstraction: ID-prefix routing removes the need for manual database selection.
+- Convoys provide a good workflow unit for multi-issue tracking.
+
+### Weaknesses / Risks
+- The architecture depends on correct manual behavior (no guardrails if an agent skips steps).
+- Several overlapping concepts (gate/park/defer; mol vs formula vs wisp) require high cognitive load.
+- Tooling boundaries (gt vs bd) are conceptually clear in docs, but not consistently reinforced in CLI naming.
+
+### High-Impact Design Issues
+1. **Command surface area is too large**: Many commands overlap or mirror each other across `gt`/`bd`, making errors likely.
+2. **Safety controls are weak**: Destructive actions exist without strong confirmation patterns or explicit “danger” names.
+3. **Prompt bloat**: Role prompts include repeated “Propulsion Principle” and long narratives, consuming context without adding new constraints.
+
+## Prompt and Role Evaluation
+### System Prompts (short prompts)
+- Strength: Each role has a concise responsibility section and communication tone guidance.
+- Weakness: System prompts do not always match the stricter constraints in role templates (e.g., Mayor short prompt doesn’t warn against coding; role template does).
+- Suggestion: Align system prompts with role templates to avoid instruction drift.
+
+### Role Templates (long prompts)
+- Strength: Very detailed, enforces correct operational workflows.
+- Weaknesses:
+  - Heavy duplication across roles (Propulsion Principle, Capability Ledger, etc.), which bloats context.
+  - Naming inconsistencies (e.g., crew template uses `{{ .Polecat }}` variable for crew identity, confusing role semantics).
+  - Some role behaviors should be refactored into reusable “include blocks” to avoid divergence.
+
+### High-Risk Prompt Issues
+- **Instruction overload**: The most critical steps are buried inside very long templates, increasing risk that an agent misses them.
+- **Inconsistent boundaries**: Some roles explicitly forbid coding (Mayor/Deacon/Witness), but system prompts are softer.
+
+### Prompt Improvement Suggestions
+- Create shared include files for repeated sections (Propulsion, Capability Ledger, Hook behavior).
+- Move operational “must-do” steps to the top of each role prompt.
+- Normalize variable naming: replace `{{ .Polecat }}` with `{{ .AgentName }}` or role-specific variable names.
+- Add a “Do Not Do” section per role (explicit prohibited behaviors).
+
+## CLI Analysis (gt)
+### General Observations
+- Very broad command surface: >70 top-level commands plus deep subcommands.
+- Overlapping verbs (`status`, `show`, `list`, `check`, `info`) make discovery and correctness harder.
+- Multiple lifecycle commands (`up`, `start`, `daemon start`, `rig start`, `crew start`) lack a consistent hierarchy.
+
+### Commands with High Misuse Risk
+- `gt down`, `gt shutdown`, `gt uninstall`, `gt disable` (global system impact)
+- `gt rig reset`, `gt rig remove` (data loss risk)
+- `gt polecat nuke`, `gt orphans kill` (destructive cleanup)
+- `gt unsling`, `gt release` (workflow state changes)
+
+### Improvement Suggestions
+- Rename or namespace destructive commands (e.g., `gt danger shutdown`).
+- Add mandatory `--confirm` or interactive prompts for high-impact commands.
+- Consolidate lifecycle commands into a single tree: `gt system start/stop/status`.
+- Clarify differences between `gt park/resume` and `bd defer/undefer`.
+- Provide `gt help` mode that outputs a “safe subset” for normal use.
+
+## CLI Analysis (bd)
+### General Observations
+- Large, capable CLI with both user-facing and admin-level commands mixed together.
+- Overlap in naming: `state`, `status`, `set-state`, `list`, `show`, `info`.
+- Many advanced commands (`migrate`, `admin reset`, `repair`) are high-risk yet adjacent to common commands.
+
+### Commands with High Misuse Risk
+- `bd delete`, `bd admin reset`, `bd repair`, `bd migrate *`, `bd rename-prefix`.
+- `bd resolve-conflicts` (can alter history if misused).
+- `bd merge` (can easily be misunderstood vs git merge).
+
+### Improvement Suggestions
+- Split CLI into “safe” and “admin” modes, or require `BD_ADMIN=1` for dangerous actions.
+- Prefix destructive actions with `danger-` or gate behind confirmation.
+- Rename ambiguous commands (`bd q` -> `bd quick`, `bd state` -> `bd state show`).
+- Expand `bd human` to show beginner-safe commands only.
+
+## Overall Design Recommendations (High Priority)
+1. **Command Taxonomy**: Introduce a consistent verb hierarchy (e.g., `get/list/show/status` -> one verb).
+2. **Safety Defaults**: Require explicit confirmation for destructive actions. Add `--dry-run` where possible.
+3. **Prompt Modularization**: Extract shared prompt text into reusable includes; reduce redundancy.
+4. **Role Boundary Clarity**: Ensure short system prompts and long role templates agree on strict constraints.
+5. **Documentation Index**: Add a single “Operator Handbook” that cross-links gt/bd, mol/formula, and role behaviors.
+
+---
+
+## Appendix A: gt Command Catalog (from --help, depth <= 3)
+
+- `gt account`: Manage Claude Code accounts
+  - `gt account add`: Add a new account
+  - `gt account default`: Set the default account
+  - `gt account list`: List registered accounts
+  - `gt account status`: Show current account info
+  - `gt account switch`: Switch to a different account
+- `gt activity`: Emit and view activity events
+  - `gt activity emit`: Emit an activity event
+- `gt agents`: Switch between Gas Town agent sessions
+  - `gt agents check`: Check for identity collisions and stale locks
+  - `gt agents fix`: Fix identity collisions and clean up stale locks
+  - `gt agents list`: List agent sessions (no popup)
+  - `gt agents state`: Get or set operational state on agent beads
+- `gt audit`: Query work history by actor
+- `gt bead`: Bead management utilities
+  - `gt bead move`: Move a bead to a different repository
+  - `gt bead show`: Show details of a bead
+- `gt boot`: Manage Boot (Deacon watchdog)
+  - `gt boot spawn`: Spawn Boot for triage
+  - `gt boot status`: Show Boot status
+  - `gt boot triage`: Run triage directly (degraded mode)
+- `gt broadcast`: Send a nudge message to all workers
+- `gt callbacks`: Handle agent callbacks
+  - `gt callbacks process`: Process pending callbacks
+- `gt cat`: Display bead content
+- `gt checkpoint`: Manage session checkpoints for crash recovery
+  - `gt checkpoint clear`: Clear the checkpoint file
+  - `gt checkpoint read`: Read and display the current checkpoint
+  - `gt checkpoint write`: Write a checkpoint of current session state
+- `gt close`: Close one or more beads
+- `gt commit`: Git commit with automatic agent identity
+- `gt completion`: Generate the autocompletion script for the specified shell
+  - `gt completion bash`: Generate the autocompletion script for bash
+  - `gt completion fish`: Generate the autocompletion script for fish
+  - `gt completion powershell`: Generate the autocompletion script for powershell
+  - `gt completion zsh`: Generate the autocompletion script for zsh
+- `gt config`: Manage Gas Town configuration
+  - `gt config agent`: Manage agent configuration
+    - `gt config agent get`: Show agent configuration
+    - `gt config agent list`: List all agents
+    - `gt config agent remove`: Remove custom agent
+    - `gt config agent set`: Set custom agent command
+  - `gt config default-agent`: Get or set default agent
+- `gt context`: Monitor Claude session context usage
+- `gt convoy`: Track batches of work across rigs
+  - `gt convoy add`: Add issues to an existing convoy
+  - `gt convoy check`: Check and auto-close completed convoys
+  - `gt convoy close`: Close a convoy
+  - `gt convoy create`: Create a new convoy
+  - `gt convoy list`: List convoys
+  - `gt convoy status`: Show convoy status
+  - `gt convoy stranded`: Find stranded convoys with ready work but no workers
+- `gt costs`: Show costs for running Claude sessions [DISABLED]
+  - `gt costs digest`: Aggregate session cost wisps into a daily digest bead
+  - `gt costs migrate`: Migrate legacy session.ended beads to the new wisp architecture
+  - `gt costs record`: Record session cost as an ephemeral wisp (called by Stop hook)
+- `gt crew`: Manage crew workers (persistent workspaces for humans)
+  - `gt crew add`: Create a new crew workspace
+  - `gt crew at`: Attach to crew workspace session
+  - `gt crew list`: List crew workspaces with status
+  - `gt crew pristine`: Sync crew workspaces with remote
+  - `gt crew refresh`: Context cycling with mail-to-self handoff
+  - `gt crew remove`: Remove crew workspace(s)
+  - `gt crew rename`: Rename a crew workspace
+  - `gt crew restart`: Kill and restart crew workspace session(s)
+  - `gt crew start`: Start crew worker(s) in a rig
+  - `gt crew status`: Show detailed workspace status
+  - `gt crew stop`: Stop crew workspace session(s)
+- `gt cycle`: Cycle between sessions in the same group
+  - `gt cycle next`: Switch to next session in group
+  - `gt cycle prev`: Switch to previous session in group
+- `gt daemon`: Manage the Gas Town daemon
+  - `gt daemon logs`: View daemon logs
+  - `gt daemon start`: Start the daemon
+  - `gt daemon status`: Show daemon status
+  - `gt daemon stop`: Stop the daemon
+- `gt dashboard`: Start the convoy tracking web dashboard
+- `gt deacon`: Manage the Deacon (town-level watchdog)
+  - `gt deacon attach`: Attach to the Deacon session
+  - `gt deacon force-kill`: Force-kill an unresponsive agent session
+  - `gt deacon health-check`: Send a health check ping to an agent and track response
+  - `gt deacon health-state`: Show health check state for all monitored agents
+  - `gt deacon heartbeat`: Update the Deacon heartbeat
+  - `gt deacon pause`: Pause the Deacon to prevent patrol actions
+  - `gt deacon restart`: Restart the Deacon session
+  - `gt deacon resume`: Resume the Deacon to allow patrol actions
+  - `gt deacon stale-hooks`: Find and unhook stale hooked beads
+  - `gt deacon start`: Start the Deacon session
+  - `gt deacon status`: Check Deacon session status
+  - `gt deacon stop`: Stop the Deacon session
+- `gt disable`: Disable Gas Town system-wide
+- `gt dnd`: Toggle Do Not Disturb mode for notifications
+- `gt doctor`: Run health checks on the workspace
+- `gt dog`: Manage dogs (cross-rig infrastructure workers)
+  - `gt dog add`: Create a new dog in the kennel
+  - `gt dog call`: Wake idle dog(s) for work
+  - `gt dog dispatch`: Dispatch plugin execution to a dog
+  - `gt dog list`: List all dogs in the kennel
+  - `gt dog remove`: Remove dogs from the kennel
+  - `gt dog status`: Show detailed dog status
+- `gt done`: Signal work ready for merge queue
+- `gt down`: Stop all Gas Town services
+- `gt enable`: Enable Gas Town system-wide
+- `gt escalate`: Escalation system for critical issues
+  - `gt escalate ack`: Acknowledge an escalation
+  - `gt escalate close`: Close a resolved escalation
+  - `gt escalate list`: List open escalations
+  - `gt escalate show`: Show details of an escalation
+  - `gt escalate stale`: Re-escalate stale unacknowledged escalations
+- `gt feed`: Show real-time activity feed from beads and gt events
+- `gt formula`: Manage workflow formulas
+  - `gt formula create`: Create a new formula template
+  - `gt formula list`: List available formulas
+  - `gt formula run`: Execute a formula
+  - `gt formula show`: Display formula details
+- `gt gate`: Gate coordination commands
+  - `gt gate wake`: Send wake mail to gate waiters
+- `gt git-init`: Initialize git repository for a Gas Town HQ
+- `gt gui`: Start the Gas Town web GUI
+- `gt handoff`: Hand off to a fresh session, work continues from hook
+- `gt help`: Help about any command
+- `gt hook`: Show or attach work on your hook
+  - `gt hook show`: Show what's on an agent's hook (compact)
+  - `gt hook status`: Show what's on your hook
+- `gt hooks`: List all Claude Code hooks in the workspace
+- `gt info`: Show Gas Town information and what's new
+- `gt init`: Initialize current directory as a Gas Town rig
+- `gt install`: Create a new Gas Town HQ (workspace)
+- `gt issue`: Manage current issue for status line display
+  - `gt issue clear`: Clear the current issue from status line
+  - `gt issue set`: Set the current issue (shown in tmux status line)
+  - `gt issue show`: Show the current issue
+- `gt log`: View town activity log
+  - `gt log crash`: Record a crash event (called by tmux pane-died hook)
+- `gt mail`: Agent messaging system
+  - `gt mail announces`: List or read announce channels
+  - `gt mail archive`: Archive messages
+  - `gt mail channel`: Manage and view beads-native channels
+    - `gt mail channel create`: Create a new channel
+    - `gt mail channel delete`: Delete a channel
+    - `gt mail channel list`: List all channels
+    - `gt mail channel show`: Show channel messages
+    - `gt mail channel subscribe`: Subscribe to a channel
+  - `gt mail check`: Check for new mail (for hooks)
+  - `gt mail claim`: Claim a message from a queue
+  - `gt mail clear`: Clear all messages from an inbox
+  - `gt mail delete`: Delete a message
+  - `gt mail group`: Manage mail groups
+    - `gt mail group add`: Add member to group
+    - `gt mail group create`: Create a new group
+    - `gt mail group delete`: Delete a group
+    - `gt mail group list`: List all groups
+    - `gt mail group remove`: Remove member from group
+    - `gt mail group show`: Show group details
+  - `gt mail inbox`: Check inbox
+  - `gt mail mark-read`: Mark messages as read without archiving
+  - `gt mail peek`: Show preview of first unread message
+  - `gt mail queue`: Manage mail queues
+    - `gt mail queue create`: Create a new queue
+    - `gt mail queue delete`: Delete a queue
+    - `gt mail queue list`: List all queues
+    - `gt mail queue show`: Show queue details
+  - `gt mail read`: Read a message
+  - `gt mail release`: Release a claimed queue message
+  - `gt mail reply`: Reply to a message
+  - `gt mail search`: Search messages by content
+  - `gt mail send`: Send a message
+  - `gt mail thread`: View a message thread
+- `gt mayor`: Manage the Mayor (Chief of Staff for cross-rig coordination)
+  - `gt mayor attach`: Attach to the Mayor session
+  - `gt mayor restart`: Restart the Mayor session
+  - `gt mayor start`: Start the Mayor session
+  - `gt mayor status`: Check Mayor session status
+  - `gt mayor stop`: Stop the Mayor session
+- `gt mol`: Agent molecule workflow commands
+  - `gt mol attach`: Attach a molecule to a pinned bead
+  - `gt mol attachment`: Show attachment status of a pinned bead
+  - `gt mol burn`: Burn current molecule without creating a digest
+  - `gt mol current`: Show what agent should be working on
+  - `gt mol detach`: Detach molecule from a pinned bead
+  - `gt mol progress`: Show progress through a molecule's steps
+  - `gt mol squash`: Compress molecule into a digest
+  - `gt mol status`: Show what's on an agent's hook
+  - `gt mol step`: Molecule step operations
+    - `gt mol step done`: Complete step and auto-continue to next
+- `gt mq`: Merge queue operations
+  - `gt mq list`: Show the merge queue
+  - `gt mq next`: Show the highest-priority merge request
+  - `gt mq reject`: Reject a merge request
+  - `gt mq retry`: Retry a failed merge request
+  - `gt mq status`: Show detailed merge request status
+  - `gt mq submit`: Submit current branch to the merge queue
+- `gt namepool`: Manage polecat name pools
+  - `gt namepool add`: Add a custom name to the pool
+  - `gt namepool reset`: Reset the pool state (release all names)
+  - `gt namepool set`: Set the namepool theme for this rig
+  - `gt namepool themes`: List available themes and their names
+- `gt notify`: Set notification level
+- `gt nudge`: Send a synchronous message to any Gas Town worker
+- `gt orphans`: Find lost polecat work
+  - `gt orphans kill`: Remove all orphans (commits and processes)
+  - `gt orphans procs`: Manage orphaned Claude processes
+    - `gt orphans procs kill`: Kill orphaned Claude processes
+    - `gt orphans procs list`: List orphaned Claude processes
+- `gt park`: Park work on a gate for async resumption
+- `gt patrol`: Patrol digest management
+  - `gt patrol digest`: Aggregate patrol cycle digests into a daily summary bead
+  - `gt patrol ensure`: Ensure patrol molecule is attached to current agent
+- `gt peek`: View recent output from a polecat or crew session
+- `gt plugin`: Plugin management
+  - `gt plugin history`: Show plugin execution history
+  - `gt plugin list`: List all discovered plugins
+  - `gt plugin run`: Manually trigger plugin execution
+  - `gt plugin show`: Show plugin details
+- `gt polecat`: Manage polecats (ephemeral workers, one task then nuked)
+  - `gt polecat gc`: Garbage collect stale polecat branches
+  - `gt polecat git-state`: Show git state for pre-kill verification
+  - `gt polecat identity`: Manage polecat identities
+    - `gt polecat identity add`: Create an identity bead for a polecat
+    - `gt polecat identity list`: List polecat identity beads in a rig
+    - `gt polecat identity remove`: Remove a polecat identity
+    - `gt polecat identity rename`: Rename a polecat identity (preserves CV)
+    - `gt polecat identity show`: Show polecat identity with CV summary
+  - `gt polecat list`: List polecats in a rig
+  - `gt polecat nuke`: Completely destroy a polecat (session, worktree, branch, agent bead)
+  - `gt polecat remove`: Remove polecats from a rig
+  - `gt polecat stale`: Detect stale polecats that may need cleanup
+  - `gt polecat status`: Show detailed status for a polecat
+  - `gt polecat sync`: Sync beads for a polecat
+- `gt prime`: Output role context for current directory
+- `gt ready`: Show work ready across town
+- `gt refinery`: Manage the Refinery (merge queue processor)
+  - `gt refinery attach`: Attach to refinery session
+  - `gt refinery blocked`: List MRs blocked by open tasks
+  - `gt refinery claim`: Claim an MR for processing
+  - `gt refinery queue`: Show merge queue
+  - `gt refinery ready`: List MRs ready for processing (unclaimed and unblocked)
+  - `gt refinery release`: Release a claimed MR back to the queue
+  - `gt refinery restart`: Restart the refinery
+  - `gt refinery start`: Start the refinery
+  - `gt refinery status`: Show refinery status
+  - `gt refinery stop`: Stop the refinery
+  - `gt refinery unclaimed`: List unclaimed MRs available for processing
+- `gt release`: Release stuck in_progress issues back to pending
+- `gt resume`: Resume from parked work or check for handoff messages
+- `gt rig`: Manage rigs in the workspace
+  - `gt rig add`: Add a new rig to the workspace
+  - `gt rig boot`: Start witness and refinery for a rig
+  - `gt rig config`: View and manage rig configuration
+    - `gt rig config set`: Set a configuration value
+    - `gt rig config show`: Show effective configuration for a rig
+    - `gt rig config unset`: Remove a configuration value from the wisp layer
+  - `gt rig dock`: Dock a rig (global, persistent shutdown)
+  - `gt rig list`: List all rigs in the workspace
+  - `gt rig park`: Park one or more rigs (stops agents, daemon won't auto-restart)
+  - `gt rig reboot`: Restart witness and refinery for a rig
+  - `gt rig remove`: Remove a rig from the registry (does not delete files)
+  - `gt rig reset`: Reset rig state (handoff content, mail, stale issues)
+  - `gt rig restart`: Restart one or more rigs (stop then start)
+  - `gt rig shutdown`: Gracefully stop all rig agents
+  - `gt rig start`: Start witness and refinery on patrol for one or more rigs
+  - `gt rig status`: Show detailed status for a specific rig
+  - `gt rig stop`: Stop one or more rigs (shutdown semantics)
+  - `gt rig undock`: Undock a rig (remove global docked status)
+  - `gt rig unpark`: Unpark one or more rigs (allow daemon to auto-restart agents)
+- `gt role`: Show or manage agent role
+  - `gt role detect`: Force cwd-based role detection (debugging)
+  - `gt role env`: Print export statements for current role
+  - `gt role home`: Show home directory for a role
+  - `gt role list`: List all known roles
+  - `gt role show`: Show current role
+- `gt seance`: Talk to your predecessor sessions
+- `gt session`: Manage polecat sessions
+  - `gt session at`: Attach to a running session
+  - `gt session capture`: Capture recent session output
+  - `gt session check`: Check session health for polecats
+  - `gt session inject`: Send message to session (prefer 'gt nudge')
+  - `gt session list`: List all sessions
+  - `gt session restart`: Restart a polecat session
+  - `gt session start`: Start a polecat session
+  - `gt session status`: Show session status details
+  - `gt session stop`: Stop a polecat session
+- `gt shell`: Manage shell integration
+  - `gt shell install`: Install or update shell integration
+  - `gt shell remove`: Remove shell integration
+  - `gt shell status`: Show shell integration status
+- `gt show`: Show details of a bead
+- `gt shutdown`: Shutdown Gas Town with cleanup
+- `gt sling`: Assign work to an agent (THE unified work dispatch command)
+- `gt ssh`: SSH server commands for agent endpoints
+  - `gt ssh start`: Start SSH server for this agent
+  - `gt ssh status`: Show SSH server status
+  - `gt ssh stop`: Stop SSH server
+- `gt stale`: Check if the gt binary is stale
+- `gt start`: Start Gas Town or a crew workspace
+  - `gt start crew`: Start a crew workspace (creates if needed)
+- `gt status`: Show overall town status
+- `gt synthesis`: Manage convoy synthesis steps
+  - `gt synthesis close`: Close convoy after synthesis
+  - `gt synthesis start`: Start synthesis for a convoy
+  - `gt synthesis status`: Show synthesis readiness
+- `gt thanks`: Thank the human contributors to Gas Town
+- `gt theme`: View or set tmux theme for the current rig
+  - `gt theme apply`: Apply theme to running sessions
+- `gt town`: Town-level operations
+  - `gt town next`: Switch to next town session (mayor/deacon)
+  - `gt town prev`: Switch to previous town session (mayor/deacon)
+- `gt trail`: Show recent agent activity
+  - `gt trail beads`: Show recent beads
+  - `gt trail commits`: Show recent commits from agents
+  - `gt trail hooks`: Show recent hook activity
+- `gt uninstall`: Remove Gas Town from the system
+- `gt unsling`: Remove work from an agent's hook
+- `gt up`: Bring up all Gas Town services
+- `gt version`: Print version information
+- `gt whoami`: Show current identity for mail commands
+- `gt witness`: Manage the Witness (per-rig polecat health monitor)
+  - `gt witness attach`: Attach to witness session
+  - `gt witness restart`: Restart the witness
+  - `gt witness start`: Start the witness
+  - `gt witness status`: Show witness status
+  - `gt witness stop`: Stop the witness
+- `gt worktree`: Create worktree in another rig for cross-rig work
+  - `gt worktree list`: List all cross-rig worktrees owned by current crew member
+  - `gt worktree remove`: Remove a cross-rig worktree
+---
+
+## Appendix B: bd Command Catalog (from --help, depth <= 3)
+
+- `bd activity`: Show real-time molecule state feed
+- `bd admin`: Administrative commands for database maintenance
+  - `bd admin cleanup`: Delete closed issues and prune expired tombstones
+  - `bd admin compact`: Compact old closed issues to save space
+  - `bd admin reset`: Remove all beads data and configuration
+- `bd agent`: Manage agent bead state
+  - `bd agent heartbeat`: Update agent last_activity timestamp
+  - `bd agent show`: Show agent bead details
+  - `bd agent state`: Set agent state
+- `bd audit`: Record and label agent interactions (append-only JSONL)
+  - `bd audit label`: Append a label entry referencing an existing interaction
+  - `bd audit record`: Append an audit interaction entry
+- `bd blocked`: Show blocked issues
+- `bd close`: Close one or more issues
+- `bd comments`: View or manage comments on an issue
+  - `bd comments add`: Add a comment to an issue
+- `bd completion`: Generate the autocompletion script for the specified shell
+  - `bd completion bash`: Generate the autocompletion script for bash
+  - `bd completion fish`: Generate the autocompletion script for fish
+  - `bd completion powershell`: Generate the autocompletion script for powershell
+  - `bd completion zsh`: Generate the autocompletion script for zsh
+- `bd config`: Manage configuration settings
+  - `bd config get`: Get a configuration value
+  - `bd config list`: List all configuration
+  - `bd config set`: Set a configuration value
+  - `bd config unset`: Delete a configuration value
+- `bd cook`: Compile a formula into a proto (ephemeral by default)
+- `bd count`: Count issues matching filters
+- `bd create`: Create a new issue (or multiple issues from markdown file)
+- `bd create-form`: Create a new issue using an interactive form
+- `bd daemon`: Manage background sync daemon
+  - `bd daemon health`: Check health of all bd daemons
+  - `bd daemon killall`: Stop all running bd daemons
+  - `bd daemon list`: List all running bd daemons
+  - `bd daemon logs`: View logs for a specific bd daemon
+  - `bd daemon restart`: Restart a specific bd daemon
+  - `bd daemon start`: Start the background daemon
+  - `bd daemon status`: Show daemon status
+  - `bd daemon stop`: Stop a specific bd daemon
+- `bd defer`: Defer one or more issues for later
+- `bd delete`: Delete one or more issues and clean up references
+- `bd dep`: Manage dependencies
+  - `bd dep add`: Add a dependency
+  - `bd dep cycles`: Detect dependency cycles
+  - `bd dep list`: List dependencies or dependents of an issue
+  - `bd dep relate`: Create a bidirectional relates_to link between issues
+  - `bd dep remove`: Remove a dependency
+  - `bd dep tree`: Show dependency tree
+  - `bd dep unrelate`: Remove a relates_to link between issues
+- `bd doctor`: Check and fix beads installation health (start here)
+- `bd duplicate`: Mark an issue as a duplicate of another
+- `bd duplicates`: Find and optionally merge duplicate issues
+- `bd edit`: Edit an issue field in $EDITOR
+- `bd epic`: Epic management commands
+  - `bd epic status`: Show epic completion status
+- `bd export`: Export issues to JSONL or Obsidian format
+- `bd formula`: Manage workflow formulas
+  - `bd formula convert`: Convert formula from JSON to TOML
+  - `bd formula list`: List available formulas
+  - `bd formula show`: Show formula details
+- `bd gate`: Manage async coordination gates
+  - `bd gate add-waiter`: Add a waiter to a gate
+  - `bd gate check`: Evaluate gates and close resolved ones
+  - `bd gate discover`: Discover await_id for gh:run gates
+  - `bd gate list`: List gate issues
+  - `bd gate resolve`: Manually resolve (close) a gate
+  - `bd gate show`: Show a gate issue
+- `bd graph`: Display issue dependency graph
+- `bd help`: Help about any command
+- `bd hooks`: Manage git hooks for bd auto-sync
+  - `bd hooks install`: Install bd git hooks
+  - `bd hooks list`: List installed git hooks status
+  - `bd hooks run`: Execute a git hook (called by thin shims)
+  - `bd hooks uninstall`: Uninstall bd git hooks
+- `bd human`: Show essential commands for human users
+- `bd import`: Import issues from JSONL format
+- `bd info`: Show database and daemon information
+- `bd init`: Initialize bd in the current directory
+- `bd jira`: Jira integration commands
+  - `bd jira status`: Show Jira sync status
+  - `bd jira sync`: Synchronize issues with Jira
+- `bd label`: Manage issue labels
+  - `bd label add`: Add a label to one or more issues
+  - `bd label list`: List labels for an issue
+  - `bd label list-all`: List all unique labels in the database
+  - `bd label remove`: Remove a label from one or more issues
+- `bd linear`: Linear integration commands
+  - `bd linear status`: Show Linear sync status
+  - `bd linear sync`: Synchronize issues with Linear
+  - `bd linear teams`: List available Linear teams
+- `bd lint`: Check issues for missing template sections
+- `bd list`: List issues
+- `bd mail`: Delegate to mail provider (e.g., gt mail)
+- `bd merge`: Git merge driver for beads JSONL files
+- `bd merge-slot`: Manage merge-slot gates for serialized conflict resolution
+  - `bd merge-slot acquire`: Acquire the merge slot
+  - `bd merge-slot check`: Check merge slot availability
+  - `bd merge-slot create`: Create a merge slot bead for the current rig
+  - `bd merge-slot release`: Release the merge slot
+- `bd migrate`: Database migration commands
+  - `bd migrate hash-ids`: Migrate sequential IDs to hash-based IDs (legacy)
+  - `bd migrate issues`: Move issues between repositories
+  - `bd migrate sync`: Migrate to sync.branch workflow for multi-clone setups
+  - `bd migrate tombstones`: Convert deletions.jsonl entries to inline tombstones
+- `bd mol`: Molecule commands (work templates)
+  - `bd mol bond`: Bond two protos or molecules together
+  - `bd mol burn`: Delete a molecule without creating a digest
+  - `bd mol current`: Show current position in molecule workflow
+  - `bd mol distill`: Extract a formula from an existing epic
+  - `bd mol pour`: Instantiate a proto as a persistent mol (solid -> liquid)
+  - `bd mol progress`: Show molecule progress summary
+  - `bd mol ready`: Find molecules ready for gate-resume dispatch
+  - `bd mol show`: Show molecule details
+  - `bd mol squash`: Compress molecule execution into a digest
+  - `bd mol stale`: Detect complete-but-unclosed molecules
+  - `bd mol wisp`: Create or manage wisps (ephemeral molecules)
+    - `bd mol wisp create`: Instantiate a proto as a wisp (solid -> vapor)
+    - `bd mol wisp gc`: Garbage collect old/abandoned wisps
+    - `bd mol wisp list`: List all wisps in current context
+- `bd move`: Move an issue to a different rig with dependency remapping
+- `bd onboard`: Display minimal snippet for AGENTS.md
+- `bd orphans`: Identify orphaned issues (referenced in commits but still open)
+- `bd preflight`: Show PR readiness checklist
+- `bd prime`: Output AI-optimized workflow context
+- `bd q`: Quick capture: create issue and output only ID
+- `bd quickstart`: Quick start guide for bd
+- `bd ready`: Show ready work (no blockers, open or in_progress)
+- `bd refile`: Move an issue to a different rig
+- `bd rename-prefix`: Rename the issue prefix for all issues in the database
+- `bd reopen`: Reopen one or more closed issues
+- `bd repair`: Repair corrupted database by cleaning orphaned references
+- `bd repo`: Manage multiple repository configuration
+  - `bd repo add`: Add an additional repository to sync
+  - `bd repo list`: List all configured repositories
+  - `bd repo remove`: Remove a repository from sync configuration
+  - `bd repo sync`: Manually trigger multi-repo sync
+- `bd resolve-conflicts`: Resolve git merge conflicts in JSONL files
+- `bd restore`: Restore full history of a compacted issue from git
+- `bd search`: Search issues by text query
+- `bd set-state`: Set operational state (creates event + updates label)
+- `bd setup`: Setup integration with AI editors
+- `bd ship`: Publish a capability for cross-project dependencies
+- `bd show`: Show issue details
+- `bd slot`: Manage agent bead slots
+  - `bd slot clear`: Clear a slot on an agent bead
+  - `bd slot set`: Set a slot on an agent bead
+  - `bd slot show`: Show all slots on an agent bead
+- `bd stale`: Show stale issues (not updated recently)
+- `bd state`: Query the current value of a state dimension
+  - `bd state list`: List all state dimensions on an issue
+- `bd status`: Show issue database overview and statistics
+- `bd supersede`: Mark an issue as superseded by a newer one
+- `bd swarm`: Swarm management for structured epics
+  - `bd swarm create`: Create a swarm molecule from an epic
+  - `bd swarm list`: List all swarm molecules
+  - `bd swarm status`: Show current swarm status
+  - `bd swarm validate`: Validate epic structure for swarming
+- `bd sync`: Synchronize issues with git remote
+- `bd undefer`: Undefer one or more issues (restore to open)
+- `bd update`: Update one or more issues
+- `bd upgrade`: Check and manage bd version upgrades
+  - `bd upgrade ack`: Acknowledge the current bd version
+  - `bd upgrade review`: Review changes since last bd version
+  - `bd upgrade status`: Check if bd version has changed
+- `bd version`: Print version information
+- `bd where`: Show active beads location
+- `bd worktree`: Manage git worktrees for parallel development
+  - `bd worktree create`: Create a worktree with beads redirect
+  - `bd worktree info`: Show worktree info for current directory
+  - `bd worktree list`: List all git worktrees
+  - `bd worktree remove`: Remove a worktree with safety checks
