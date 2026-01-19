@@ -936,18 +936,30 @@ func (t *Tmux) WaitForShellReady(session string, timeout time.Duration) error {
 	}
 	return fmt.Errorf("timeout waiting for shell")
 }
-// WaitForClaudeUI polls until Claude Code's chat interface is ready.
-// Claude UI is ready when the pane contains "Recent activity" (or "No recent activity").
+// WaitForClaudeUI polls until Claude Code's chat interface is ready for input.
+// Checks for multiple ready indicators:
+// 1. "Recent activity" or "No recent activity" in Claude's welcome message
+// 2. The prompt indicator "> " at the start of a line (most reliable)
+//
+// Use this before sending propulsion nudges to ensure they are received.
 func (t *Tmux) WaitForClaudeUI(session string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		content, err := t.CapturePane(session, 20) // last 20 lines
+		lines, err := t.CapturePaneLines(session, 20) // last 20 lines
 		if err != nil {
 			time.Sleep(constants.PollInterval)
 			continue
 		}
-		if strings.Contains(content, "Recent activity") {
-			return nil
+		for _, line := range lines {
+			// Check for "Recent activity" indicator (appears in welcome message)
+			if strings.Contains(line, "Recent activity") {
+				return nil
+			}
+			// Check for prompt indicator "> " at start of line (most reliable)
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "> ") || trimmed == ">" {
+				return nil
+			}
 		}
 		time.Sleep(constants.PollInterval)
 	}

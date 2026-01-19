@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func hasTmux() bool {
@@ -603,5 +604,97 @@ func TestSessionSet(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("SessionSet.Names() doesn't contain %q", sessionName)
+	}
+}
+
+func TestWaitForClaudeUI_Timeout(t *testing.T) {
+	if !hasTmux() {
+		t.Skip("tmux not installed")
+	}
+
+	tm := NewTmux()
+	sessionName := "gt-test-waitclaudeui-" + t.Name()
+
+	// Clean up any existing session
+	_ = tm.KillSession(sessionName)
+
+	// Create a test session with a simple shell
+	if err := tm.NewSession(sessionName, ""); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	defer func() { _ = tm.KillSession(sessionName) }()
+
+	// WaitForClaudeUI should timeout because a shell prompt won't have "> " or "Recent activity"
+	err := tm.WaitForClaudeUI(sessionName, 500*time.Millisecond) // 500ms timeout
+	if err == nil {
+		t.Error("WaitForClaudeUI should timeout for a plain shell session")
+	}
+}
+
+func TestWaitForClaudeUI_DetectsPrompt(t *testing.T) {
+	if !hasTmux() {
+		t.Skip("tmux not installed")
+	}
+
+	tm := NewTmux()
+	sessionName := "gt-test-waitclaudeui-prompt-" + t.Name()
+
+	// Clean up any existing session
+	_ = tm.KillSession(sessionName)
+
+	// Create a test session
+	if err := tm.NewSession(sessionName, ""); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	defer func() { _ = tm.KillSession(sessionName) }()
+
+	// Send "> " to simulate Claude prompt
+	time.Sleep(100 * time.Millisecond) // Let session initialize
+	if _, err := tm.run("send-keys", "-t", sessionName, "-l", "echo '> '"); err != nil {
+		t.Fatalf("send-keys: %v", err)
+	}
+	if _, err := tm.run("send-keys", "-t", sessionName, "Enter"); err != nil {
+		t.Fatalf("send-keys: %v", err)
+	}
+	time.Sleep(200 * time.Millisecond) // Let echo complete
+
+	// WaitForClaudeUI should detect the "> " in the output
+	err := tm.WaitForClaudeUI(sessionName, 2*time.Second)
+	if err != nil {
+		t.Errorf("WaitForClaudeUI should detect '> ' in pane output: %v", err)
+	}
+}
+
+func TestWaitForClaudeUI_DetectsRecentActivity(t *testing.T) {
+	if !hasTmux() {
+		t.Skip("tmux not installed")
+	}
+
+	tm := NewTmux()
+	sessionName := "gt-test-waitclaudeui-activity-" + t.Name()
+
+	// Clean up any existing session
+	_ = tm.KillSession(sessionName)
+
+	// Create a test session
+	if err := tm.NewSession(sessionName, ""); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	defer func() { _ = tm.KillSession(sessionName) }()
+
+	// Send "Recent activity" to simulate Claude welcome screen
+	time.Sleep(100 * time.Millisecond) // Let session initialize
+	if _, err := tm.run("send-keys", "-t", sessionName, "-l", "echo 'Recent activity'"); err != nil {
+		t.Fatalf("send-keys: %v", err)
+	}
+	if _, err := tm.run("send-keys", "-t", sessionName, "Enter"); err != nil {
+		t.Fatalf("send-keys: %v", err)
+	}
+	time.Sleep(200 * time.Millisecond) // Let echo complete
+
+	// WaitForClaudeUI should detect "Recent activity"
+	err := tm.WaitForClaudeUI(sessionName, 2*time.Second)
+	if err != nil {
+		t.Errorf("WaitForClaudeUI should detect 'Recent activity' in pane output: %v", err)
 	}
 }
