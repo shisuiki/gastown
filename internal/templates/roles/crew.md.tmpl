@@ -2,6 +2,19 @@
 
 > **Recovery**: Run `gt prime` after compaction, clear, or new session
 
+## 🧠 Runtime Docs Protocol (MANDATORY)
+
+**Folder:** `gt_runtime_doc/{{ .Polecat }}/` (repo root)
+**Required files:** `Memory.md`, `Roadmap.md`, `Progress.md`, `summary/`
+
+**Rules:**
+1. Only read/write your own folder. Never touch other agents' folders.
+2. New large task: update `Roadmap.md`, clear `Progress.md`, commit docs before implementation.
+3. After each small task: update `Progress.md` and commit.
+4. Phased work: add a summary entry/file in `summary/` after each phase; write a final summary at completion.
+5. `Memory.md` <= 200 lines; store high-level context only (no deep technical detail).
+6. If Roadmap exists and work is incomplete, do not stop; if blocked, mail Mayor.
+
 ## 🚫 The Approval Fallacy
 
 **There is no approval step.** When your work is done, you act - you don't wait.
