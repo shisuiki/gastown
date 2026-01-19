@@ -27,20 +27,22 @@ func (h *GUIHandler) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 // ConfigResponse is the API response for town settings.
 type ConfigResponse struct {
-	DefaultAgent     string                        `json:"default_agent"`
-	RoleAgents       map[string]string             `json:"role_agents"`
+	DefaultAgent     string                             `json:"default_agent"`
+	RoleAgents       map[string]string                  `json:"role_agents"`
 	RoleModels       map[string]*config.RoleModelConfig `json:"role_models,omitempty"`
-	Agents           map[string]*config.RuntimeConfig `json:"agents"`
-	AgentEmailDomain string                        `json:"agent_email_domain"`
+	Agents           map[string]*config.RuntimeConfig   `json:"agents"`
+	SystemPrompts    map[string]string                  `json:"system_prompts,omitempty"`
+	AgentEmailDomain string                             `json:"agent_email_domain"`
 }
 
 // ConfigRequest is the API request for updating town settings.
 type ConfigRequest struct {
-	DefaultAgent     string                        `json:"default_agent"`
-	RoleAgents       map[string]string             `json:"role_agents"`
+	DefaultAgent     string                             `json:"default_agent"`
+	RoleAgents       map[string]string                  `json:"role_agents"`
 	RoleModels       map[string]*config.RoleModelConfig `json:"role_models,omitempty"`
-	Agents           map[string]*config.RuntimeConfig `json:"agents"`
-	AgentEmailDomain string                        `json:"agent_email_domain"`
+	Agents           map[string]*config.RuntimeConfig   `json:"agents"`
+	SystemPrompts    map[string]string                  `json:"system_prompts,omitempty"`
+	AgentEmailDomain string                             `json:"agent_email_domain"`
 }
 
 // handleAPIConfig handles GET and POST for /api/config.
@@ -80,6 +82,7 @@ func (h *GUIHandler) handleAPIConfigGet(w http.ResponseWriter, r *http.Request) 
 		RoleAgents:       settings.RoleAgents,
 		RoleModels:       settings.RoleModels,
 		Agents:           settings.Agents,
+		SystemPrompts:    settings.SystemPrompts,
 		AgentEmailDomain: settings.AgentEmailDomain,
 	}
 
@@ -92,6 +95,9 @@ func (h *GUIHandler) handleAPIConfigGet(w http.ResponseWriter, r *http.Request) 
 	}
 	if resp.Agents == nil {
 		resp.Agents = make(map[string]*config.RuntimeConfig)
+	}
+	if resp.SystemPrompts == nil {
+		resp.SystemPrompts = make(map[string]string)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -168,6 +174,7 @@ func (h *GUIHandler) handleAPIConfigPost(w http.ResponseWriter, r *http.Request)
 	if settings.RoleAgents == nil {
 		settings.RoleAgents = make(map[string]string)
 	}
+
 	settings.RoleModels = req.RoleModels
 	if settings.RoleModels == nil {
 		settings.RoleModels = make(map[string]*config.RoleModelConfig)
@@ -176,6 +183,11 @@ func (h *GUIHandler) handleAPIConfigPost(w http.ResponseWriter, r *http.Request)
 	settings.Agents = req.Agents
 	if settings.Agents == nil {
 		settings.Agents = make(map[string]*config.RuntimeConfig)
+	}
+
+	settings.SystemPrompts = req.SystemPrompts
+	if settings.SystemPrompts == nil {
+		settings.SystemPrompts = make(map[string]string)
 	}
 
 	settings.AgentEmailDomain = req.AgentEmailDomain
