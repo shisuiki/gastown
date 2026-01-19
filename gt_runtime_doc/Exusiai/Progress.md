@@ -6,3 +6,4 @@
 - Added --confirm guardrails to high-risk gt commands and documented new requirement.
 - Closed prompt optimization issues: hq-zqyl, hq-5abf, hq-gpxx, hq-dy59, hq-u9lw.
 - Ran `go test ./internal/templates`.
+- Rebuilt `gt` from repo to include quoting fix; `gt mayor start` now succeeds.
