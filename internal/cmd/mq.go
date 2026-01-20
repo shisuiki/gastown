@@ -5,10 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/git"
+	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/refinery"
 	"github.com/steveyegge/gastown/internal/rig"
 	"github.com/steveyegge/gastown/internal/style"
@@ -29,6 +32,12 @@ var (
 	// Reject flags
 	mqRejectReason string
 	mqRejectNotify bool
+
+	// Merged flags
+	mqMergedCommit       string
+	mqMergedBranch       string
+	mqMergedDeleteBranch bool
+	mqMergedNotifyMayor  bool
 
 	// List command flags
 	mqListReady  bool
@@ -156,6 +165,31 @@ Examples:
   gt mq reject greenplace mr-Nux-12345 --reason "Superseded by other work" --notify`,
 	Args: cobra.ExactArgs(2),
 	RunE: runMQReject,
+}
+
+var mqMergedCmd = &cobra.Command{
+	Use:   "merged <mr-id-or-branch>",
+	Short: "Complete post-merge cleanup for a merge request",
+	Long: `Mark a merge request as successfully merged and perform cleanup.
+
+This command should be run by the Refinery agent after a successful merge.
+It performs the following actions:
+
+  1. Close the MR bead with reason "Merged: <commit-sha>"
+  2. Close the source issue with reason "Merged: <commit-sha>"
+  3. Send MERGED notification to the witness
+  4. Optionally notify the Mayor
+  5. Optionally delete the source branch
+
+This centralizes all post-merge cleanup in one atomic command, ensuring
+nothing is missed.
+
+Examples:
+  gt mq merged hq-abc123 --commit a1b2c3d
+  gt mq merged polecat/chrome/hq-xyz --commit HEAD --delete-branch
+  gt mq merged hq-abc123 --commit $(git rev-parse HEAD) --notify-mayor`,
+	Args: cobra.ExactArgs(1),
+	RunE: runMqMerged,
 }
 
 var mqStatusCmd = &cobra.Command{
@@ -292,6 +326,13 @@ func init() {
 	mqRejectCmd.Flags().BoolVar(&mqRejectNotify, "notify", false, "Send mail notification to worker")
 	_ = mqRejectCmd.MarkFlagRequired("reason") // cobra flags: error only at runtime if missing
 
+	// Merged flags
+	mqMergedCmd.Flags().StringVarP(&mqMergedCommit, "commit", "c", "", "Merge commit SHA (required)")
+	mqMergedCmd.Flags().StringVar(&mqMergedBranch, "branch", "", "Source branch to delete (auto-detected from MR if not specified)")
+	mqMergedCmd.Flags().BoolVar(&mqMergedDeleteBranch, "delete-branch", false, "Delete the source branch after marking merged")
+	mqMergedCmd.Flags().BoolVar(&mqMergedNotifyMayor, "notify-mayor", false, "Send notification to Mayor")
+	_ = mqMergedCmd.MarkFlagRequired("commit")
+
 	// Status flags
 	mqStatusCmd.Flags().BoolVar(&mqStatusJSON, "json", false, "Output as JSON")
 
@@ -300,6 +341,7 @@ func init() {
 	mqCmd.AddCommand(mqRetryCmd)
 	mqCmd.AddCommand(mqListCmd)
 	mqCmd.AddCommand(mqRejectCmd)
+	mqCmd.AddCommand(mqMergedCmd)
 	mqCmd.AddCommand(mqStatusCmd)
 
 	// Integration branch subcommands
@@ -430,5 +472,180 @@ func runMQReject(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %s\n", style.Dim.Render("Worker notified via mail"))
 	}
 
+	return nil
+}
+
+func runMqMerged(cmd *cobra.Command, args []string) error {
+	mrIDOrBranch := args[0]
+
+	// Resolve commit SHA if "HEAD" is passed
+	commitSHA := mqMergedCommit
+	if commitSHA == "HEAD" {
+		g := git.NewGit(".")
+		sha, err := g.Rev("HEAD")
+		if err != nil {
+			return fmt.Errorf("resolving HEAD: %w", err)
+		}
+		commitSHA = sha
+	}
+
+	// Find the current rig
+	townRoot, err := findTownRoot()
+	if err != nil {
+		return fmt.Errorf("not inside a Gas Town workspace: %w", err)
+	}
+
+	rigName, r, err := findCurrentRig(townRoot)
+	if err != nil {
+		return fmt.Errorf("finding current rig: %w", err)
+	}
+
+	// Get beads instance
+	b := beads.New(r.BeadsPath())
+
+	// Find the MR (can be by ID or branch name)
+	var mr *beads.Issue
+	var mrFields *beads.MRFields
+
+	// First try as bead ID
+	mr, err = b.Show(mrIDOrBranch)
+	if err != nil {
+		// Try to find by branch name in open MRs
+		issues, listErr := b.List(beads.ListOptions{
+			Type:     "merge-request",
+			Status:   "open",
+			Priority: -1,
+		})
+		if listErr != nil {
+			return fmt.Errorf("MR not found: %s (and failed to search: %v)", mrIDOrBranch, listErr)
+		}
+
+		for _, issue := range issues {
+			fields := beads.ParseMRFields(issue)
+			if fields != nil && fields.Branch == mrIDOrBranch {
+				mr = issue
+				mrFields = fields
+				break
+			}
+		}
+
+		if mr == nil {
+			return fmt.Errorf("MR not found: %s", mrIDOrBranch)
+		}
+	}
+
+	if mrFields == nil {
+		mrFields = beads.ParseMRFields(mr)
+	}
+
+	// Prepare close reason
+	shortSHA := commitSHA
+	if len(shortSHA) > 8 {
+		shortSHA = shortSHA[:8]
+	}
+	closeReason := fmt.Sprintf("Merged: %s", shortSHA)
+
+	fmt.Printf("Completing merge for: %s\n", mr.ID)
+
+	// 1. Close the MR bead
+	if err := b.CloseWithReason(closeReason, mr.ID); err != nil {
+		fmt.Printf("  %s Failed to close MR bead: %v\n", style.Bold.Render("⚠"), err)
+	} else {
+		fmt.Printf("  %s Closed MR bead: %s\n", style.Bold.Render("✓"), mr.ID)
+	}
+
+	// 2. Close the source issue (if present and valid)
+	if mrFields != nil && mrFields.SourceIssue != "" {
+		// Validate it looks like a bead ID (not a branch name)
+		if strings.Contains(mrFields.SourceIssue, "-") && !strings.Contains(mrFields.SourceIssue, "/") {
+			if err := b.CloseWithReason(closeReason, mrFields.SourceIssue); err != nil {
+				fmt.Printf("  %s Failed to close source issue %s: %v\n", style.Bold.Render("⚠"), mrFields.SourceIssue, err)
+			} else {
+				fmt.Printf("  %s Closed source issue: %s\n", style.Bold.Render("✓"), mrFields.SourceIssue)
+			}
+		} else {
+			fmt.Printf("  %s Skipping source issue (invalid format): %s\n", style.Dim.Render("→"), mrFields.SourceIssue)
+		}
+	}
+
+	// 3. Send MERGED notification to witness
+	router := mail.NewRouter(townRoot)
+	witnessAddr := fmt.Sprintf("%s/witness", rigName)
+
+	polecat := "unknown"
+	branch := mqMergedBranch
+	if mrFields != nil {
+		if mrFields.Worker != "" {
+			polecat = mrFields.Worker
+		}
+		if branch == "" {
+			branch = mrFields.Branch
+		}
+	}
+
+	witnessMsg := &mail.Message{
+		From:    fmt.Sprintf("%s/refinery", rigName),
+		To:      witnessAddr,
+		Subject: fmt.Sprintf("MERGED %s", polecat),
+		Body: fmt.Sprintf(`Branch: %s
+Issue: %s
+Merged-At: %s
+Commit: %s`,
+			branch,
+			mr.ID,
+			time.Now().UTC().Format(time.RFC3339),
+			shortSHA),
+	}
+	if err := router.Send(witnessMsg); err != nil {
+		fmt.Printf("  %s Failed to notify witness: %v\n", style.Bold.Render("⚠"), err)
+	} else {
+		fmt.Printf("  %s Notified witness: %s\n", style.Bold.Render("✓"), witnessAddr)
+	}
+
+	// 4. Optionally notify Mayor
+	if mqMergedNotifyMayor {
+		mayorMsg := &mail.Message{
+			From:    fmt.Sprintf("%s/refinery", rigName),
+			To:      "mayor/",
+			Subject: fmt.Sprintf("MERGED: %s", mr.ID),
+			Body: fmt.Sprintf(`MR %s merged successfully.
+
+Branch: %s
+Commit: %s
+Source Issue: %s
+Worker: %s`,
+				mr.ID,
+				branch,
+				shortSHA,
+				mrFields.SourceIssue,
+				polecat),
+		}
+		if err := router.Send(mayorMsg); err != nil {
+			fmt.Printf("  %s Failed to notify mayor: %v\n", style.Bold.Render("⚠"), err)
+		} else {
+			fmt.Printf("  %s Notified mayor\n", style.Bold.Render("✓"))
+		}
+	}
+
+	// 5. Optionally delete branch
+	if mqMergedDeleteBranch && branch != "" {
+		g := git.NewGit(".")
+
+		// Delete local branch (non-fatal)
+		if err := g.DeleteBranch(branch, true); err != nil {
+			fmt.Printf("  %s Failed to delete local branch: %v\n", style.Dim.Render("→"), err)
+		} else {
+			fmt.Printf("  %s Deleted local branch: %s\n", style.Bold.Render("✓"), branch)
+		}
+
+		// Delete remote branch (non-fatal)
+		if err := g.DeleteRemoteBranch("origin", branch); err != nil {
+			fmt.Printf("  %s Failed to delete remote branch: %v\n", style.Dim.Render("→"), err)
+		} else {
+			fmt.Printf("  %s Deleted remote branch: origin/%s\n", style.Bold.Render("✓"), branch)
+		}
+	}
+
+	fmt.Printf("\n%s Merge completion done for %s\n", style.Bold.Render("✓"), mr.ID)
 	return nil
 }

@@ -242,7 +242,7 @@ id = "merge-push"
 title = "Merge and push to main"
 needs = ["handle-failures"]
 description = """
-Merge to main and push. CRITICAL: Notifications come IMMEDIATELY after push.
+Merge to main and push. CRITICAL: Post-merge cleanup comes IMMEDIATELY after push.
 
 **Step 1: Merge and Push**
 ```bash
@@ -251,63 +251,47 @@ git merge --ff-only temp
 git push origin main
 ```
 
-⚠️ **STOP HERE - DO NOT PROCEED UNTIL STEPS 2-3 COMPLETE**
+⚠️ **STOP HERE - DO NOT PROCEED UNTIL STEP 2 COMPLETES**
 
-**Step 2: Send MERGED Notification (REQUIRED - DO THIS IMMEDIATELY)**
+**Step 2: Complete Post-Merge Cleanup (REQUIRED - USE THIS COMMAND)**
 
-RIGHT NOW, before any cleanup, send MERGED mail to Witness:
-
-```bash
-gt mail send <rig>/witness -s "MERGED <polecat-name>" -m "Branch: <branch>
-Issue: <issue-id>
-Merged-At: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-```
-
-This signals the Witness to nuke the polecat worktree. WITHOUT THIS NOTIFICATION,
-POLECAT WORKTREES ACCUMULATE INDEFINITELY AND THE LIFECYCLE BREAKS.
-
-**Step 3: Close MR Bead (REQUIRED - DO THIS IMMEDIATELY)**
-
-⚠️ **VERIFICATION BEFORE CLOSING**: Confirm the work is actually on main:
-```bash
-# Get the commit message/issue from the branch
-git log origin/main --oneline | grep "<issue-id>"
-# OR verify the commit SHA is on main:
-git branch --contains <commit-sha> | grep main
-```
-
-If work is NOT on main, DO NOT close the MR bead. Investigate first.
+Use the `gt mq merged` command to handle ALL post-merge cleanup atomically:
 
 ```bash
-bd close <mr-bead-id> --reason "Merged to main at $(git rev-parse --short HEAD)"
+gt mq merged <mr-bead-id> --commit $(git rev-parse HEAD) --delete-branch --notify-mayor
 ```
 
-The MR bead ID was in the MERGE_READY message or find via:
+This command performs ALL required cleanup:
+- Closes the MR bead with merge commit SHA
+- Closes the source issue with merge commit SHA
+- Sends MERGED notification to Witness
+- Sends notification to Mayor (if --notify-mayor)
+- Deletes source branch (if --delete-branch)
+
+**If you don't have the MR bead ID**, find it via:
 ```bash
 bd list --type=merge-request --status=open | grep <polecat-name>
 ```
 
-**VALIDATION**: The MR bead's source_issue should be a valid bead ID (gt-xxxxx),
-not a branch name. If source_issue contains a branch name, flag for investigation.
+Or find by branch name:
+```bash
+gt mq merged <branch-name> --commit $(git rev-parse HEAD) --delete-branch
+```
 
-**Step 4: Archive the MERGE_READY mail (REQUIRED)**
+**Step 3: Archive the MERGE_READY mail (REQUIRED)**
 ```bash
 gt mail archive <merge-ready-message-id>
 ```
 The message ID was tracked when you processed inbox-check.
 
-**Step 5: Cleanup (only after Steps 2-4 confirmed)**
+**Step 4: Cleanup temp branch**
 ```bash
 git branch -d temp
-git push origin --delete <polecat-branch>
 ```
 
 **VERIFICATION GATE**: You CANNOT proceed to loop-check without:
-- [x] MERGED mail sent to witness
-- [x] MR bead closed
+- [x] `gt mq merged` completed (closes MR, source issue, notifies witness)
 - [x] MERGE_READY mail archived
-
-If you skipped notifications or archiving, GO BACK AND DO THEM NOW.
 
 Main has moved. Any remaining branches need rebasing on new baseline."""
 
