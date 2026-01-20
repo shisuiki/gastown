@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -167,6 +168,30 @@ type GitBranch struct {
 	Name       string `json:"name"`
 	IsCurrent  bool   `json:"is_current"`
 	LastCommit string `json:"last_commit"`
+}
+
+// GitCommitDetail represents detailed git commit metadata.
+type GitCommitDetail struct {
+	Hash         string   `json:"hash"`
+	ShortHash    string   `json:"short_hash"`
+	Author       string   `json:"author"`
+	Email        string   `json:"email"`
+	Date         string   `json:"date"`
+	RelativeDate string   `json:"relative_date"`
+	Message      string   `json:"message"`
+	Body         string   `json:"body,omitempty"`
+	Parents      []string `json:"parents,omitempty"`
+	Refs         string   `json:"refs,omitempty"`
+}
+
+// GitDiffFile represents per-file stats in a commit diff.
+type GitDiffFile struct {
+	Path      string `json:"path"`
+	OldPath   string `json:"old_path,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Additions int    `json:"additions,omitempty"`
+	Deletions int    `json:"deletions,omitempty"`
+	Binary    bool   `json:"binary,omitempty"`
 }
 
 // GitGraphRow represents a line in the git graph output.
@@ -498,6 +523,96 @@ func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAPIGitCommit returns detailed metadata for a single commit.
+func (h *GUIHandler) handleAPIGitCommit(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rig := r.URL.Query().Get("rig")
+	hash := strings.TrimSpace(r.URL.Query().Get("hash"))
+	if hash == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "missing hash",
+		})
+		return
+	}
+
+	dir := getRigRepoDir(rig)
+	fieldSep := "\x1f"
+	format := strings.Join([]string{
+		"%H",
+		"%h",
+		"%an",
+		"%ae",
+		"%ad",
+		"%ar",
+		"%s",
+		"%b",
+		"%P",
+		"%D",
+	}, fieldSep)
+
+	cmd, cancel := command("git", "show", "--no-patch", "--date=iso-strict", "--format="+format, hash)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	detail, parseErr := parseGitCommitDetail(strings.TrimRight(string(output), "\n"), fieldSep)
+	if parseErr != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": parseErr.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"commit": detail,
+	})
+}
+
+// handleAPIGitCommitDiff returns file stats + patch for a commit.
+func (h *GUIHandler) handleAPIGitCommitDiff(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rig := r.URL.Query().Get("rig")
+	hash := strings.TrimSpace(r.URL.Query().Get("hash"))
+	if hash == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "missing hash",
+		})
+		return
+	}
+
+	dir := getRigRepoDir(rig)
+
+	files, err := gitCommitFiles(dir, hash)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	patch, truncated, err := gitCommitPatch(dir, hash)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"files":     files,
+		"patch":     patch,
+		"truncated": truncated,
+	})
+}
+
 func parseGitGraphRows(output, graphSep string) []GitGraphRow {
 	if output == "" {
 		return nil
@@ -546,6 +661,159 @@ func parseGitGraphRows(output, graphSep string) []GitGraphRow {
 	}
 
 	return rows
+}
+
+func parseGitCommitDetail(output, fieldSep string) (*GitCommitDetail, error) {
+	parts := strings.Split(output, fieldSep)
+	if len(parts) < 9 {
+		return nil, fmt.Errorf("unexpected commit detail format")
+	}
+
+	detail := &GitCommitDetail{
+		Hash:         parts[0],
+		ShortHash:    parts[1],
+		Author:       parts[2],
+		Email:        parts[3],
+		Date:         parts[4],
+		RelativeDate: parts[5],
+		Message:      parts[6],
+		Body:         strings.TrimSpace(parts[7]),
+	}
+	if parts[8] != "" {
+		detail.Parents = strings.Fields(parts[8])
+	}
+	if len(parts) > 9 {
+		detail.Refs = parts[9]
+	}
+
+	return detail, nil
+}
+
+func gitCommitFiles(dir, hash string) ([]GitDiffFile, error) {
+	nameStatus, err := gitNameStatus(dir, hash)
+	if err != nil {
+		return nil, err
+	}
+
+	numstats, err := gitNumStats(dir, hash)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range nameStatus {
+		if stat, ok := numstats[nameStatus[i].Path]; ok {
+			nameStatus[i].Additions = stat.Additions
+			nameStatus[i].Deletions = stat.Deletions
+			nameStatus[i].Binary = stat.Binary
+		}
+	}
+
+	return nameStatus, nil
+}
+
+func gitNameStatus(dir, hash string) ([]GitDiffFile, error) {
+	cmd, cancel := command("git", "show", "--name-status", "--format=", hash)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []GitDiffFile
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			continue
+		}
+		status := parts[0]
+		file := GitDiffFile{Status: status}
+
+		switch {
+		case strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C"):
+			if len(parts) >= 3 {
+				file.OldPath = parts[1]
+				file.Path = parts[2]
+			}
+		default:
+			file.Path = parts[1]
+		}
+
+		if file.Path == "" && len(parts) > 1 {
+			file.Path = parts[len(parts)-1]
+		}
+		files = append(files, file)
+	}
+
+	return files, nil
+}
+
+func gitNumStats(dir, hash string) (map[string]GitDiffFile, error) {
+	cmd, cancel := command("git", "show", "--numstat", "--format=", hash)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]GitDiffFile)
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+		additions, additionsBinary := parseGitNumStat(parts[0])
+		deletions, deletionsBinary := parseGitNumStat(parts[1])
+		path := parts[2]
+		if len(parts) >= 4 {
+			path = parts[3]
+		}
+		stats[path] = GitDiffFile{
+			Path:      path,
+			Additions: additions,
+			Deletions: deletions,
+			Binary:    additionsBinary || deletionsBinary,
+		}
+	}
+
+	return stats, nil
+}
+
+func parseGitNumStat(value string) (int, bool) {
+	if value == "-" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false
+	}
+	return n, false
+}
+
+func gitCommitPatch(dir, hash string) (string, bool, error) {
+	const maxDiffBytes = 200000
+
+	cmd, cancel := longCommand("git", "show", "--format=", "--patch", hash)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return "", false, err
+	}
+
+	patch := string(output)
+	if len(patch) > maxDiffBytes {
+		return patch[:maxDiffBytes] + "\n... (diff truncated)\n", true, nil
+	}
+
+	return patch, false, nil
 }
 
 // ClaudeUsage represents Claude Code usage statistics from ccusage.

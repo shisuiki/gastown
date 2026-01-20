@@ -41,6 +41,10 @@
         .commit-item:hover {
             background: rgba(255, 255, 255, 0.02);
         }
+        .commit-item.selected {
+            background: rgba(96, 165, 250, 0.08);
+            border-color: rgba(96, 165, 250, 0.3);
+        }
         .commit-item:last-child {
             border-bottom: none;
         }
@@ -68,6 +72,67 @@
         }
         .commit-author {
             color: #94a3b8;
+        }
+        .commit-panel {
+            display: grid;
+            grid-template-columns: 1fr 1.1fr;
+            gap: 20px;
+        }
+        .detail-card {
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 16px;
+            background: rgba(15, 23, 42, 0.4);
+        }
+        .detail-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            color: #cbd5f5;
+        }
+        .detail-label {
+            color: #64748b;
+            min-width: 100px;
+        }
+        .diff-files {
+            margin-top: 12px;
+            border-top: 1px solid #333;
+            padding-top: 12px;
+            font-size: 0.85rem;
+        }
+        .diff-file {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        .diff-file:last-child {
+            border-bottom: none;
+        }
+        .diff-file-path {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            color: #e2e8f0;
+            word-break: break-all;
+        }
+        .diff-file-stats {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+        .diff-patch {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #0b1220;
+            border: 1px solid #1f2937;
+            color: #e2e8f0;
+            white-space: pre;
+            overflow-x: auto;
+            max-height: 420px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.8rem;
         }
         .branch-tag {
             display: inline-block;
@@ -189,6 +254,9 @@
                 flex-direction: column;
                 gap: 8px;
             }
+            .commit-panel {
+                grid-template-columns: 1fr;
+            }
             .graph-text {
                 min-width: 60px;
             }
@@ -203,7 +271,7 @@
             <h1 style="font-size: 1.2rem; color: #94a3b8;">Git Repository</h1>
             <div class="rig-selector">
                 <label class="text-muted">Repository:</label>
-                <select x-model="selectedRig" @change="loadAll(); graphRows = [];">
+                <select x-model="selectedRig" @change="resetSelection(); loadAll(); graphRows = [];">
                     <option value="">Town Root (~/gt)</option>
                     <template x-for="rig in rigs" :key="rig.name">
                         <option :value="rig.name" x-text="rig.name + ' (' + rig.repo_dir + ')'"></option>
@@ -248,25 +316,102 @@
                 <template x-if="!loading.commits && commits.length === 0">
                     <p class="text-muted">No commits found</p>
                 </template>
-                <div class="commit-list" x-show="!loading.commits && commits.length > 0">
-                    <template x-for="(commit, index) in commits" :key="commit.hash">
-                        <div class="commit-item">
-                            <span class="commit-hash" x-text="commit.short_hash"></span>
-                            <div class="commit-info">
-                                <div class="commit-message">
-                                    <span x-text="commit.message"></span>
-                                    <template x-if="commit.branch && index === 0">
-                                        <span class="branch-tag" x-text="commit.branch"></span>
-                                    </template>
-                                </div>
-                                <div class="commit-meta">
-                                    <span class="commit-author" x-text="commit.author"></span>
-                                    <span> · </span>
-                                    <span x-text="commit.date"></span>
+                <div class="commit-panel" x-show="!loading.commits && commits.length > 0">
+                    <div class="commit-list">
+                        <template x-for="(commit, index) in commits" :key="commit.hash">
+                            <div class="commit-item" :class="{ selected: selectedCommitHash === commit.hash }" @click="selectCommit(commit)">
+                                <span class="commit-hash" x-text="commit.short_hash"></span>
+                                <div class="commit-info">
+                                    <div class="commit-message">
+                                        <span x-text="commit.message"></span>
+                                        <template x-if="commit.branch && index === 0">
+                                            <span class="branch-tag" x-text="commit.branch"></span>
+                                        </template>
+                                    </div>
+                                    <div class="commit-meta">
+                                        <span class="commit-author" x-text="commit.author"></span>
+                                        <span> · </span>
+                                        <span x-text="commit.date"></span>
+                                    </div>
                                 </div>
                             </div>
+                        </template>
+                    </div>
+                    <div class="detail-card">
+                        <template x-if="!selectedCommitHash">
+                            <p class="text-muted">Select a commit to view details.</p>
+                        </template>
+                        <template x-if="selectedCommitHash && loading.detail">
+                            <p class="text-muted">Loading commit details...</p>
+                        </template>
+                        <template x-if="selectedCommitHash && !loading.detail && commitDetail">
+                            <div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Commit</span>
+                                    <span class="commit-hash" x-text="commitDetail.short_hash"></span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Author</span>
+                                    <span x-text="commitDetail.author + ' <' + commitDetail.email + '>'"></span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Date</span>
+                                    <span x-text="commitDetail.date"></span>
+                                </div>
+                                <div class="detail-row" x-show="commitDetail.relative_date">
+                                    <span class="detail-label">Relative</span>
+                                    <span x-text="commitDetail.relative_date"></span>
+                                </div>
+                                <div class="detail-row" x-show="commitDetail.parents && commitDetail.parents.length">
+                                    <span class="detail-label">Parents</span>
+                                    <span x-text="commitDetail.parents.join(', ')"></span>
+                                </div>
+                                <div class="detail-row" x-show="commitDetail.refs">
+                                    <span class="detail-label">Refs</span>
+                                    <span x-text="commitDetail.refs"></span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Message</span>
+                                    <span x-text="commitDetail.message"></span>
+                                </div>
+                                <template x-if="commitDetail.body">
+                                    <div class="detail-row">
+                                        <span class="detail-label">Body</span>
+                                        <span x-text="commitDetail.body"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <div class="diff-files" x-show="selectedCommitHash">
+                            <div style="display:flex; align-items:center; justify-content:space-between;">
+                                <strong>Files</strong>
+                                <button class="tab-btn" style="border-radius: 6px;" @click="toggleDiff()" x-text="showDiff ? 'Hide diff' : 'Show diff'"></button>
+                            </div>
+                            <template x-if="loading.diff">
+                                <p class="text-muted">Loading diff...</p>
+                            </template>
+                            <template x-if="!loading.diff && commitDiff">
+                                <div>
+                                    <template x-if="commitDiff.files.length === 0">
+                                        <p class="text-muted">No file changes</p>
+                                    </template>
+                                    <template x-for="file in commitDiff.files" :key="file.path">
+                                        <div class="diff-file">
+                                            <span class="diff-file-path" x-text="formatFilePath(file)"></span>
+                                            <span class="diff-file-stats" x-text="formatFileStats(file)"></span>
+                                        </div>
+                                    </template>
+                                    <template x-if="showDiff && commitDiff.patch">
+                                        <pre class="diff-patch" x-text="commitDiff.patch"></pre>
+                                    </template>
+                                    <template x-if="showDiff && commitDiff.truncated">
+                                        <p class="text-muted">Diff truncated for size.</p>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
-                    </template>
+                    </div>
                 </div>
             </div>
 
@@ -338,6 +483,10 @@
                 commits: [],
                 branches: [],
                 graphRows: [],
+                selectedCommitHash: '',
+                commitDetail: null,
+                commitDiff: null,
+                showDiff: false,
                 currentBranch: '',
                 stats: {
                     commits: '-',
@@ -346,7 +495,9 @@
                 loading: {
                     commits: true,
                     branches: true,
-                    graph: false
+                    graph: false,
+                    detail: false,
+                    diff: false
                 },
 
                 init() {
@@ -382,6 +533,9 @@
                         this.stats.commits = this.commits.length;
                         if (this.commits.length > 0 && this.commits[0].branch) {
                             this.currentBranch = this.commits[0].branch;
+                        }
+                        if (this.commits.length > 0 && !this.selectedCommitHash) {
+                            this.selectCommit(this.commits[0]);
                         }
                     } catch (e) {
                         console.error('Failed to load commits:', e);
@@ -419,6 +573,73 @@
                         console.error('Failed to load graph:', e);
                     }
                     this.loading.graph = false;
+                },
+
+                async selectCommit(commit) {
+                    if (!commit || !commit.hash) return;
+                    this.selectedCommitHash = commit.hash;
+                    this.commitDetail = null;
+                    this.commitDiff = null;
+                    this.showDiff = false;
+                    await this.loadCommitDetail(commit.hash);
+                    await this.loadCommitDiff(commit.hash);
+                },
+
+                async loadCommitDetail(hash) {
+                    this.loading.detail = true;
+                    try {
+                        const url = '/api/git/commit?hash=' + encodeURIComponent(hash) + (this.selectedRig ? '&rig=' + this.selectedRig : '');
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        this.commitDetail = data.commit || null;
+                    } catch (e) {
+                        console.error('Failed to load commit detail:', e);
+                    }
+                    this.loading.detail = false;
+                },
+
+                async loadCommitDiff(hash) {
+                    this.loading.diff = true;
+                    try {
+                        const url = '/api/git/commit/diff?hash=' + encodeURIComponent(hash) + (this.selectedRig ? '&rig=' + this.selectedRig : '');
+                        const res = await fetch(url);
+                        const data = await res.json();
+                        this.commitDiff = {
+                            files: data.files || [],
+                            patch: data.patch || '',
+                            truncated: data.truncated || false
+                        };
+                    } catch (e) {
+                        console.error('Failed to load commit diff:', e);
+                    }
+                    this.loading.diff = false;
+                },
+
+                resetSelection() {
+                    this.selectedCommitHash = '';
+                    this.commitDetail = null;
+                    this.commitDiff = null;
+                    this.showDiff = false;
+                },
+
+                toggleDiff() {
+                    this.showDiff = !this.showDiff;
+                },
+
+                formatFilePath(file) {
+                    if (file.old_path) {
+                        return file.old_path + ' → ' + file.path;
+                    }
+                    return file.path;
+                },
+
+                formatFileStats(file) {
+                    if (file.binary) {
+                        return file.status + ' (binary)';
+                    }
+                    const add = file.additions || 0;
+                    const del = file.deletions || 0;
+                    return file.status + ' +' + add + ' -' + del;
                 }
             };
         }
