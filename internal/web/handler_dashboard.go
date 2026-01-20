@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -195,7 +196,7 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 		return MailStatus{}
 	}
 
-	mailbox, err := router.GetMailbox("mayor/")
+	mailbox, err := router.GetMailbox(dashboardMailIdentity())
 	if err != nil {
 		return MailStatus{}
 	}
@@ -209,6 +210,16 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 		Unread: unread,
 		Total:  total,
 	}
+}
+
+func dashboardMailIdentity() string {
+	if identity := strings.TrimSpace(os.Getenv("GT_DASHBOARD_MAIL_IDENTITY")); identity != "" {
+		return identity
+	}
+	if identity := strings.TrimSpace(os.Getenv("GT_WEB_MAIL_IDENTITY")); identity != "" {
+		return identity
+	}
+	return "overseer"
 }
 
 // renderTemplate renders a template with the layout.
