@@ -115,7 +115,7 @@ func runPark(cmd *cobra.Command, args []string) error {
 	workDir, err := findLocalBeadsDir()
 	if err == nil {
 		b := beads.New(workDir)
-		pinnedBeads, err := b.List(beads.ListOptions{
+		pinnedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 			Status:   beads.StatusPinned,
 			Assignee: agentID,
 			Priority: -1,

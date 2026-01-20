@@ -155,7 +155,7 @@ func runHook(_ *cobra.Command, args []string) error {
 	b := beads.New(workDir)
 
 	// Check for existing hooked bead for this agent
-	existingPinned, err := b.List(beads.ListOptions{
+	existingPinned, err := listBeadsForAssignee(b, beads.ListOptions{
 		Status:   beads.StatusHooked,
 		Assignee: agentID,
 		Priority: -1,
@@ -300,7 +300,7 @@ func runHookShow(cmd *cobra.Command, args []string) error {
 	b := beads.New(workDir)
 
 	// Query for hooked beads assigned to the target
-	hookedBeads, err := b.List(beads.ListOptions{
+	hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 		Status:   beads.StatusHooked,
 		Assignee: target,
 		Priority: -1,

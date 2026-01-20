@@ -43,7 +43,7 @@ func sessionToAgentID(sessionName string) string {
 		// Fallback for unparseable sessions
 		return sessionName
 	}
-	return identity.Address()
+	return normalizeTownIdentity(identity.Address())
 }
 
 // resolveSelfTarget determines agent identity, pane, and hook root for slinging to self.

@@ -349,7 +349,7 @@ func outputAttachmentStatus(ctx RoleContext) {
 	}
 
 	// Find pinned beads for this agent
-	pinnedBeads, err := b.List(beads.ListOptions{
+	pinnedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 		Status:   beads.StatusPinned,
 		Assignee: assignee,
 		Priority: -1,

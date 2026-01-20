@@ -329,10 +329,10 @@ func detectActor() string {
 // townRoot is needed to look up the rig's configured prefix.
 func agentIDToBeadID(agentID, townRoot string) string {
 	// Handle simple cases (town-level agents with hq- prefix)
-	if agentID == "mayor" {
+	if agentID == "mayor" || agentID == "mayor/" {
 		return beads.MayorBeadIDTown()
 	}
-	if agentID == "deacon" {
+	if agentID == "deacon" || agentID == "deacon/" {
 		return beads.DeaconBeadIDTown()
 	}
 

@@ -247,7 +247,7 @@ func outputDeaconPatrolContext(ctx RoleContext) {
 		RoleName:        "deacon",
 		PatrolMolName:   "mol-deacon-patrol",
 		BeadsDir:        ctx.TownRoot, // Town-level role uses town root beads
-		Assignee:        "deacon",
+		Assignee:        "deacon/",
 		HeaderEmoji:     "🔄",
 		HeaderTitle:     "Patrol Status (Wisp-based)",
 		CheckInProgress: false,

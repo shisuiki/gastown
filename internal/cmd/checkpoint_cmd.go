@@ -234,7 +234,7 @@ func detectMoleculeContext(workDir string, ctx RoleInfo) (moleculeID, stepID, st
 	}
 
 	// Find in-progress issues for this agent
-	issues, err := b.List(beads.ListOptions{
+	issues, err := listBeadsForAssignee(b, beads.ListOptions{
 		Status:   "in_progress",
 		Assignee: assignee,
 		Priority: -1,
@@ -277,7 +277,7 @@ func detectHookedBead(workDir string, ctx RoleInfo) string {
 	}
 
 	// Find hooked beads for this agent
-	hookedBeads, err := b.List(beads.ListOptions{
+	hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 		Status:   beads.StatusHooked,
 		Assignee: assignee,
 		Priority: -1,

@@ -733,7 +733,7 @@ func getHookedWork(identity string, maxLen int, beadsDir string) string {
 	b := beads.New(beadsDir)
 
 	// Query for hooked beads assigned to this agent
-	hookedBeads, err := b.List(beads.ListOptions{
+	hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 		Status:   beads.StatusHooked,
 		Assignee: identity,
 		Priority: -1,

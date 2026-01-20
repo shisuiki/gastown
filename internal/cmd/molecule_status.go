@@ -41,9 +41,9 @@ func buildAgentBeadID(identity string, role Role, townRoot string) string {
 	// If role is unknown or empty, try to infer from identity
 	if role == RoleUnknown || role == Role("") {
 		switch {
-		case identity == "mayor":
+		case identity == "mayor" || identity == "mayor/":
 			return beads.MayorBeadIDTown()
-		case identity == "deacon":
+		case identity == "deacon" || identity == "deacon/":
 			return beads.DeaconBeadIDTown()
 		case len(parts) == 2 && parts[1] == "witness":
 			return beads.WitnessBeadIDWithPrefix(getPrefix(parts[0]), parts[0])
@@ -376,7 +376,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 	} else {
 		// FALLBACK: Query for hooked beads (work on agent's hook)
 		// First try status=hooked (work that's been slung but not yet claimed)
-		hookedBeads, err := b.List(beads.ListOptions{
+		hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 			Status:   beads.StatusHooked,
 			Assignee: target,
 			Priority: -1,
@@ -389,7 +389,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 		// This handles the case where work was claimed (status changed to in_progress)
 		// but the session was interrupted before completion. The hook should persist.
 		if len(hookedBeads) == 0 {
-			inProgressBeads, err := b.List(beads.ListOptions{
+			inProgressBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 				Status:   "in_progress",
 				Assignee: target,
 				Priority: -1,
@@ -923,7 +923,7 @@ func scanAllRigsForHookedBeads(townRoot, target string) []*beads.Issue {
 		b := beads.New(rigBeadsDir)
 
 		// First check for hooked beads
-		hookedBeads, err := b.List(beads.ListOptions{
+		hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 			Status:   beads.StatusHooked,
 			Assignee: target,
 			Priority: -1,
@@ -937,7 +937,7 @@ func scanAllRigsForHookedBeads(townRoot, target string) []*beads.Issue {
 		}
 
 		// Also check for in_progress beads (work that was claimed but session interrupted)
-		inProgressBeads, err := b.List(beads.ListOptions{
+		inProgressBeads, err := listBeadsForAssignee(b, beads.ListOptions{
 			Status:   "in_progress",
 			Assignee: target,
 			Priority: -1,

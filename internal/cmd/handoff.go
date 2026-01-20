@@ -224,6 +224,8 @@ func getCurrentTmuxSession() (string, error) {
 //
 // For role shortcuts that need context (crew, witness, refinery), it auto-detects from environment.
 func resolveRoleToSession(role string) (string, error) {
+	role = strings.TrimSuffix(role, "/")
+
 	// First, check if it's a path format (contains /)
 	if strings.Contains(role, "/") {
 		return resolvePathToSession(role)
