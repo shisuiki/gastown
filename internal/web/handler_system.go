@@ -169,6 +169,10 @@ type GitBranch struct {
 	Name       string `json:"name"`
 	IsCurrent  bool   `json:"is_current"`
 	LastCommit string `json:"last_commit"`
+	Upstream   string `json:"upstream,omitempty"`
+	Ahead      int    `json:"ahead,omitempty"`
+	Behind     int    `json:"behind,omitempty"`
+	IsRemote   bool   `json:"is_remote,omitempty"`
 }
 
 // GitCommitDetail represents detailed git commit metadata.
@@ -472,10 +476,7 @@ func (h *GUIHandler) handleAPIGitBranches(w http.ResponseWriter, r *http.Request
 	rig := r.URL.Query().Get("rig")
 	dir := getRigRepoDir(rig)
 
-	cmd, cancel := command("git", "branch", "-a", "--format=%(refname:short)|%(HEAD)|%(objectname:short)")
-	defer cancel()
-	cmd.Dir = dir
-	output, err := cmd.Output()
+	localBranches, err := gitLocalBranches(dir)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"branches": []interface{}{},
@@ -484,24 +485,16 @@ func (h *GUIHandler) handleAPIGitBranches(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var branches []GitBranch
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "|", 3)
-		if len(parts) >= 2 {
-			branch := GitBranch{
-				Name:      parts[0],
-				IsCurrent: parts[1] == "*",
-			}
-			if len(parts) >= 3 {
-				branch.LastCommit = parts[2]
-			}
-			branches = append(branches, branch)
-		}
+	remoteBranches, err := gitRemoteBranches(dir)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"branches": []interface{}{},
+			"error":    err.Error(),
+		})
+		return
 	}
 
+	branches := append(localBranches, remoteBranches...)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"branches": branches,
 	})
@@ -892,6 +885,101 @@ func gitCommitPatch(dir, hash string) (string, bool, error) {
 	}
 
 	return patch, false, nil
+}
+
+func gitLocalBranches(dir string) ([]GitBranch, error) {
+	cmd, cancel := command("git", "for-each-ref", "refs/heads",
+		"--format=%(refname:short)|%(HEAD)|%(objectname:short)|%(upstream:short)|%(upstream:track)")
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var branches []GitBranch
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 5)
+		if len(parts) < 3 {
+			continue
+		}
+		branch := GitBranch{
+			Name:       parts[0],
+			IsCurrent:  parts[1] == "*",
+			LastCommit: parts[2],
+		}
+		if len(parts) > 3 {
+			branch.Upstream = parts[3]
+		}
+		if len(parts) > 4 {
+			branch.Ahead, branch.Behind = parseAheadBehind(parts[4])
+		}
+		branches = append(branches, branch)
+	}
+
+	return branches, nil
+}
+
+func gitRemoteBranches(dir string) ([]GitBranch, error) {
+	cmd, cancel := command("git", "for-each-ref", "refs/remotes",
+		"--format=%(refname:short)|%(objectname:short)")
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var branches []GitBranch
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		name := parts[0]
+		if strings.HasSuffix(name, "/HEAD") {
+			continue
+		}
+		branches = append(branches, GitBranch{
+			Name:       name,
+			LastCommit: parts[1],
+			IsRemote:   true,
+		})
+	}
+
+	return branches, nil
+}
+
+func parseAheadBehind(track string) (ahead, behind int) {
+	track = strings.TrimSpace(track)
+	track = strings.TrimPrefix(track, "[")
+	track = strings.TrimSuffix(track, "]")
+	if track == "" {
+		return 0, 0
+	}
+	for _, part := range strings.Split(track, ",") {
+		fields := strings.Fields(strings.TrimSpace(part))
+		if len(fields) != 2 {
+			continue
+		}
+		count, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		switch fields[0] {
+		case "ahead":
+			ahead = count
+		case "behind":
+			behind = count
+		}
+	}
+	return ahead, behind
 }
 
 func gitTreeEntries(dir, ref, path string) ([]GitTreeEntry, error) {

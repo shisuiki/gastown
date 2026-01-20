@@ -267,6 +267,10 @@
             color: #64748b;
             font-family: monospace;
         }
+        .branch-meta {
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
         .current-indicator {
             color: #4ade80;
             font-size: 0.8rem;
@@ -544,6 +548,15 @@
                             </template>
                             <span class="branch-name" x-text="branch.name"></span>
                             <span class="branch-commit" x-text="branch.last_commit"></span>
+                            <template x-if="branch.is_remote">
+                                <span class="branch-meta">remote</span>
+                            </template>
+                            <template x-if="branch.upstream">
+                                <span class="branch-meta" x-text="'⇢ ' + branch.upstream"></span>
+                            </template>
+                            <template x-if="branch.ahead || branch.behind">
+                                <span class="branch-meta" x-text="'↑' + (branch.ahead || 0) + ' ↓' + (branch.behind || 0)"></span>
+                            </template>
                         </div>
                     </template>
                 </div>
