@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>Docs - Gas Town</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vanillatree/vanillatree.css">
+</head>
+<body>
+    {{template "nav" .}}
+
+    <div class="container docs-layout">
+        <div class="card docs-sidebar">
+            <h2>📚 Docs</h2>
+            <input id="docs-filter" class="input-field docs-filter" type="text" placeholder="Filter docs...">
+            <div id="docs-tree" class="docs-tree"></div>
+            <div id="docs-count" class="text-muted docs-count"></div>
+        </div>
+
+        <div class="card docs-viewer">
+            <div class="docs-toolbar">
+                <div id="doc-path" class="docs-path">Select a markdown file</div>
+                <button id="docs-refresh" class="btn btn-secondary btn-sm">Refresh</button>
+            </div>
+            <div id="doc-render" class="docs-render text-muted">
+                Choose a document from the tree to view it here.
+            </div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanillatree"></script>
+    <script src="/static/js/docs.js"></script>
+</body>
+</html>
