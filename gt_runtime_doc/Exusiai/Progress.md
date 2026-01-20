@@ -15,3 +15,4 @@
 - Reworked git graph API to return node list (no ASCII parsing) and updated graph panel rendering with fixed sizing.
 - Replaced vis-network graph with custom SVG lane renderer, fixed scroll sync and styling for readable graph rows.
 - Graph now renders rich rows (message, refs, author, hash, date) with SVG lanes and fixed-height scroll panel.
+- Locked graph panel height with explicit max-height and runtime sizing to keep it inside its scroll box.
