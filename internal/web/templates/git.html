@@ -85,43 +85,16 @@
         }
         .graph-row {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             min-height: 40px;
             position: relative;
         }
-        .graph-lines {
-            width: 80px;
+        .graph-text {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            white-space: pre;
+            color: #94a3b8;
+            padding-right: 12px;
             min-width: 80px;
-            position: relative;
-            height: 40px;
-        }
-        .graph-node {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #60a5fa;
-            position: absolute;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 2;
-        }
-        .graph-node.merge {
-            background: #4ade80;
-        }
-        .graph-line {
-            position: absolute;
-            width: 2px;
-            background: #60a5fa;
-            left: 24px;
-        }
-        .graph-line.top {
-            top: 0;
-            height: 50%;
-        }
-        .graph-line.bottom {
-            top: 50%;
-            height: 50%;
         }
         .graph-content {
             flex: 1;
@@ -216,9 +189,8 @@
                 flex-direction: column;
                 gap: 8px;
             }
-            .graph-lines {
-                width: 50px;
-                min-width: 50px;
+            .graph-text {
+                min-width: 60px;
             }
         }
     </style>
@@ -231,7 +203,7 @@
             <h1 style="font-size: 1.2rem; color: #94a3b8;">Git Repository</h1>
             <div class="rig-selector">
                 <label class="text-muted">Repository:</label>
-                <select x-model="selectedRig" @change="loadAll(); graphNodes = [];">
+                <select x-model="selectedRig" @change="loadAll(); graphRows = [];">
                     <option value="">Town Root (~/gt)</option>
                     <template x-for="rig in rigs" :key="rig.name">
                         <option :value="rig.name" x-text="rig.name + ' (' + rig.repo_dir + ')'"></option>
@@ -303,37 +275,31 @@
                 <template x-if="loading.graph">
                     <p class="text-muted">Loading graph...</p>
                 </template>
-                <template x-if="!loading.graph && graphNodes.length === 0">
+                <template x-if="!loading.graph && graphRows.length === 0">
                     <p class="text-muted">No graph data</p>
                 </template>
-                <div class="graph-container" x-show="!loading.graph && graphNodes.length > 0">
-                    <template x-for="(node, index) in graphNodes" :key="node.hash">
+                <div class="graph-container" x-show="!loading.graph && graphRows.length > 0">
+                    <template x-for="(row, index) in graphRows" :key="row.hash || 'graph-' + index">
                         <div class="graph-row">
-                            <div class="graph-lines">
-                                <template x-if="index > 0">
-                                    <div class="graph-line top"></div>
-                                </template>
-                                <div class="graph-node" :class="{ merge: node.parents && node.parents.length > 1 }"></div>
-                                <template x-if="index < graphNodes.length - 1">
-                                    <div class="graph-line bottom"></div>
-                                </template>
-                            </div>
-                            <div class="graph-content">
-                                <span class="commit-hash" x-text="node.short_hash"></span>
-                                <div class="commit-info">
-                                    <div class="commit-message">
-                                        <span x-text="node.message"></span>
-                                        <template x-if="node.refs">
-                                            <span class="branch-tag" x-text="node.refs"></span>
-                                        </template>
-                                    </div>
-                                    <div class="commit-meta">
-                                        <span class="commit-author" x-text="node.author"></span>
-                                        <span> · </span>
-                                        <span x-text="node.date"></span>
+                            <span class="graph-text" x-text="row.graph"></span>
+                            <template x-if="!row.graph_only">
+                                <div class="graph-content">
+                                    <span class="commit-hash" x-text="row.short_hash"></span>
+                                    <div class="commit-info">
+                                        <div class="commit-message">
+                                            <span x-text="row.message"></span>
+                                            <template x-if="row.refs">
+                                                <span class="branch-tag" x-text="row.refs"></span>
+                                            </template>
+                                        </div>
+                                        <div class="commit-meta">
+                                            <span class="commit-author" x-text="row.author"></span>
+                                            <span> · </span>
+                                            <span x-text="row.date"></span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -371,7 +337,7 @@
                 rigs: [],
                 commits: [],
                 branches: [],
-                graphNodes: [],
+                graphRows: [],
                 currentBranch: '',
                 stats: {
                     commits: '-',
@@ -442,13 +408,13 @@
                 },
 
                 async loadGraph() {
-                    if (this.graphNodes.length > 0) return;
+                    if (this.graphRows.length > 0) return;
                     this.loading.graph = true;
                     try {
                         const url = '/api/git/graph' + (this.selectedRig ? '?rig=' + this.selectedRig : '');
                         const res = await fetch(url);
                         const data = await res.json();
-                        this.graphNodes = data.nodes || [];
+                        this.graphRows = data.rows || [];
                     } catch (e) {
                         console.error('Failed to load graph:', e);
                     }

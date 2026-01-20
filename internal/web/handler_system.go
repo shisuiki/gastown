@@ -169,6 +169,19 @@ type GitBranch struct {
 	LastCommit string `json:"last_commit"`
 }
 
+// GitGraphRow represents a line in the git graph output.
+type GitGraphRow struct {
+	Graph     string   `json:"graph"`
+	Hash      string   `json:"hash,omitempty"`
+	ShortHash string   `json:"short_hash,omitempty"`
+	Author    string   `json:"author,omitempty"`
+	Date      string   `json:"date,omitempty"`
+	Message   string   `json:"message,omitempty"`
+	Refs      string   `json:"refs,omitempty"`
+	Parents   []string `json:"parents,omitempty"`
+	GraphOnly bool     `json:"graph_only,omitempty"`
+}
+
 // GitPageData is the data for the git page.
 type GitPageData struct {
 	Title      string
@@ -463,57 +476,76 @@ func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get commits with parent info for graph
-	cmd, cancel := command("git", "log", "-"+strconv.Itoa(count), "--all",
-		"--format=%H|%P|%h|%an|%ar|%s|%D")
+	graphSep := "\x01"
+	format := graphSep + "%H\t%h\t%an\t%ar\t%s\t%D\t%P"
+
+	// Get commits with graph prefix + parent info.
+	cmd, cancel := longCommand("git", "log", "-"+strconv.Itoa(count), "--all",
+		"--graph", "--decorate", "--date=relative", "--format="+format)
 	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"nodes": []interface{}{},
+			"rows":  []interface{}{},
 			"error": err.Error(),
 		})
 		return
 	}
 
-	type GraphNode struct {
-		Hash      string   `json:"hash"`
-		ShortHash string   `json:"short_hash"`
-		Parents   []string `json:"parents"`
-		Author    string   `json:"author"`
-		Date      string   `json:"date"`
-		Message   string   `json:"message"`
-		Refs      string   `json:"refs"`
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"rows": parseGitGraphRows(strings.TrimSpace(string(output)), graphSep),
+	})
+}
+
+func parseGitGraphRows(output, graphSep string) []GitGraphRow {
+	if output == "" {
+		return nil
 	}
 
-	var nodes []GraphNode
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+	var rows []GitGraphRow
+	for _, line := range strings.Split(output, "\n") {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 7)
-		if len(parts) >= 6 {
-			node := GraphNode{
-				Hash:      parts[0],
-				ShortHash: parts[2],
-				Author:    parts[3],
-				Date:      parts[4],
-				Message:   parts[5],
-			}
-			if parts[1] != "" {
-				node.Parents = strings.Fields(parts[1])
-			}
-			if len(parts) >= 7 {
-				node.Refs = parts[6]
-			}
-			nodes = append(nodes, node)
+		idx := strings.Index(line, graphSep)
+		if idx == -1 {
+			rows = append(rows, GitGraphRow{
+				Graph:     line,
+				GraphOnly: true,
+			})
+			continue
 		}
+
+		graph := strings.TrimRight(line[:idx], " ")
+		data := line[idx+len(graphSep):]
+		parts := strings.SplitN(data, "\t", 7)
+		if len(parts) < 5 {
+			rows = append(rows, GitGraphRow{
+				Graph:     graph,
+				GraphOnly: true,
+			})
+			continue
+		}
+
+		row := GitGraphRow{
+			Graph:     graph,
+			Hash:      parts[0],
+			ShortHash: parts[1],
+			Author:    parts[2],
+			Date:      parts[3],
+			Message:   parts[4],
+		}
+		if len(parts) > 5 {
+			row.Refs = parts[5]
+		}
+		if len(parts) > 6 && parts[6] != "" {
+			row.Parents = strings.Fields(parts[6])
+		}
+		rows = append(rows, row)
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"nodes": nodes,
-	})
+	return rows
 }
 
 // ClaudeUsage represents Claude Code usage statistics from ccusage.
