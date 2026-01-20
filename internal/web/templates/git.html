@@ -275,6 +275,7 @@
             border-radius: 8px;
             background: #0b1220;
             overflow: hidden;
+            position: relative;
         }
         .tabs-panel {
             margin-top: 18px;
@@ -498,6 +499,9 @@
                     <input type="number" min="20" max="400" x-model="graphLimit" style="width: 80px;">
                     <button class="tab-btn" style="border-radius: 6px;" @click="loadGraph(true)">Refresh</button>
                 </div>
+                <template x-if="graphNodes.length === 0">
+                    <p class="text-muted">No graph data</p>
+                </template>
                 <div id="git-graph" class="graph-canvas"></div>
             </div>
         </div>
@@ -783,7 +787,7 @@
                 rigs: [],
                 commits: [],
                 branches: [],
-                graphRows: [],
+                graphNodes: [],
                 graphNetwork: null,
                 graphLimit: 150,
                 commitLimit: 150,
@@ -895,7 +899,7 @@
                 },
 
                 async loadGraph(force) {
-                    if (!force && this.graphRows.length > 0) return;
+                    if (!force && this.graphNodes.length > 0) return;
                     if (this.graphLimit !== this.commitLimit) {
                         this.commitLimit = this.graphLimit;
                         this.loadCommits();
@@ -906,7 +910,7 @@
                         if (this.selectedRig) params.set('rig', this.selectedRig);
                         const res = await fetch('/api/git/graph?' + params.toString());
                         const data = await res.json();
-                        this.graphRows = data.rows || [];
+                        this.graphNodes = data.nodes || [];
                         this.buildGraph();
                     } catch (e) {
                         console.error('Failed to load graph:', e);
@@ -914,35 +918,40 @@
                 },
 
                 buildGraph() {
-                    if (!this.graphRows.length || typeof vis === 'undefined') return;
+                    if (!this.graphNodes.length || typeof vis === 'undefined') return;
                     const container = document.getElementById('git-graph');
                     if (!container) return;
+                    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+                    const height = isMobile ? 360 : 520;
+                    container.style.height = height + 'px';
+                    container.style.minHeight = height + 'px';
+                    container.style.maxHeight = height + 'px';
 
                     const nodes = [];
                     const edges = [];
-                    const index = new Map();
+                    const index = new Set();
 
-                    this.graphRows.forEach((row, idx) => {
-                        if (!row.hash) return;
-                        index.set(row.hash, idx);
-                        const isMerge = row.parents && row.parents.length > 1;
+                    this.graphNodes.forEach((node) => {
+                        if (!node.hash) return;
+                        index.add(node.hash);
+                        const isMerge = node.parents && node.parents.length > 1;
                         nodes.push({
-                            id: row.hash,
-                            label: row.short_hash,
+                            id: node.hash,
+                            label: node.short_hash,
                             shape: 'dot',
                             size: isMerge ? 10 : 8,
                             color: isMerge ? { background: '#4ade80', border: '#166534' } : { background: '#60a5fa', border: '#1d4ed8' },
                             font: { color: '#e2e8f0', size: 12 },
-                            title: row.message || row.hash
+                            title: node.message || node.hash
                         });
                     });
 
-                    this.graphRows.forEach((row) => {
-                        if (!row.hash || !row.parents) return;
-                        row.parents.forEach((parent) => {
+                    this.graphNodes.forEach((node) => {
+                        if (!node.hash || !node.parents) return;
+                        node.parents.forEach((parent) => {
                             if (!index.has(parent)) return;
                             edges.push({
-                                from: row.hash,
+                                from: node.hash,
                                 to: parent,
                                 arrows: '',
                                 color: { color: '#3b82f6', opacity: 0.5 }
@@ -987,7 +996,9 @@
                             this.selectCommitByHash(params.nodes[0], true);
                         }
                     });
-                    this.graphNetwork.fit({ animation: { duration: 200, easingFunction: 'easeInOutQuad' } });
+                    this.graphNetwork.once('stabilized', () => {
+                        this.graphNetwork.fit({ animation: { duration: 200, easingFunction: 'easeInOutQuad' } });
+                    });
                 },
 
                 async selectCommit(commit) {
@@ -1023,13 +1034,7 @@
                 selectBranch(branch) {
                     if (!branch) return;
                     this.selectedBranch = branch.name;
-                    let target = branch.commit || branch.last_commit;
-                    if (!target && branch.short_commit) {
-                        const match = this.graphRows.find(row => row.hash && row.hash.startsWith(branch.short_commit));
-                        if (match) {
-                            target = match.hash;
-                        }
-                    }
+                    const target = branch.commit || branch.last_commit;
                     if (target) {
                         this.focusGraphNode(target);
                         this.scrollCommitIntoView(target);
@@ -1084,7 +1089,7 @@
                     this.compareDiff = null;
                     this.searchCommits = [];
                     this.searchFiles = [];
-                    this.graphRows = [];
+                    this.graphNodes = [];
                     if (this.graphNetwork) {
                         this.graphNetwork.destroy();
                         this.graphNetwork = null;

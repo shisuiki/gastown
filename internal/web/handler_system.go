@@ -33,10 +33,10 @@ var Version = "0.2.6"
 
 // Build info - set via ldflags at compile time
 var (
-	BuildNumber = "dev"              // git commit count or build number
-	BuildCommit = "unknown"          // git short hash
-	BuildTime   = "unknown"          // build timestamp
-	StartTime   = time.Now()         // service start time
+	BuildNumber = "dev"      // git commit count or build number
+	BuildCommit = "unknown"  // git short hash
+	BuildTime   = "unknown"  // build timestamp
+	StartTime   = time.Now() // service start time
 )
 
 // getGTRoot returns the GT_ROOT directory.
@@ -245,17 +245,15 @@ type GitSearchMatch struct {
 	Content string `json:"content"`
 }
 
-// GitGraphRow represents a line in the git graph output.
-type GitGraphRow struct {
-	Graph     string   `json:"graph"`
-	Hash      string   `json:"hash,omitempty"`
-	ShortHash string   `json:"short_hash,omitempty"`
-	Author    string   `json:"author,omitempty"`
-	Date      string   `json:"date,omitempty"`
-	Message   string   `json:"message,omitempty"`
+// GitGraphNode represents a commit in the graph view.
+type GitGraphNode struct {
+	Hash      string   `json:"hash"`
+	ShortHash string   `json:"short_hash"`
+	Author    string   `json:"author"`
+	Date      string   `json:"date"`
+	Message   string   `json:"message"`
 	Refs      string   `json:"refs,omitempty"`
 	Parents   []string `json:"parents,omitempty"`
-	GraphOnly bool     `json:"graph_only,omitempty"`
 }
 
 // GitPageData is the data for the git page.
@@ -541,25 +539,22 @@ func (h *GUIHandler) handleAPIGitGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	graphSep := "\x01"
-	format := graphSep + "%H\t%h\t%an\t%ar\t%s\t%D\t%P"
-
-	// Get commits with graph prefix + parent info.
+	format := "%H|%h|%an|%ar|%s|%D|%P"
 	cmd, cancel := longCommand("git", "log", "-"+strconv.Itoa(count), "--all",
-		"--graph", "--decorate", "--date=relative", "--format="+format)
+		"--decorate", "--date=relative", "--format="+format)
 	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"rows":  []interface{}{},
+			"nodes": []interface{}{},
 			"error": err.Error(),
 		})
 		return
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"rows": parseGitGraphRows(strings.TrimSpace(string(output)), graphSep),
+		"nodes": parseGitGraphNodes(strings.TrimSpace(string(output))),
 	})
 }
 
@@ -815,38 +810,21 @@ func (h *GUIHandler) handleAPIGitSearch(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func parseGitGraphRows(output, graphSep string) []GitGraphRow {
+func parseGitGraphNodes(output string) []GitGraphNode {
 	if output == "" {
 		return nil
 	}
 
-	var rows []GitGraphRow
+	var nodes []GitGraphNode
 	for _, line := range strings.Split(output, "\n") {
 		if line == "" {
 			continue
 		}
-		idx := strings.Index(line, graphSep)
-		if idx == -1 {
-			rows = append(rows, GitGraphRow{
-				Graph:     line,
-				GraphOnly: true,
-			})
-			continue
-		}
-
-		graph := strings.TrimRight(line[:idx], " ")
-		data := line[idx+len(graphSep):]
-		parts := strings.SplitN(data, "\t", 7)
+		parts := strings.SplitN(line, "|", 7)
 		if len(parts) < 5 {
-			rows = append(rows, GitGraphRow{
-				Graph:     graph,
-				GraphOnly: true,
-			})
 			continue
 		}
-
-		row := GitGraphRow{
-			Graph:     graph,
+		node := GitGraphNode{
 			Hash:      parts[0],
 			ShortHash: parts[1],
 			Author:    parts[2],
@@ -854,15 +832,15 @@ func parseGitGraphRows(output, graphSep string) []GitGraphRow {
 			Message:   parts[4],
 		}
 		if len(parts) > 5 {
-			row.Refs = parts[5]
+			node.Refs = parts[5]
 		}
 		if len(parts) > 6 && parts[6] != "" {
-			row.Parents = strings.Fields(parts[6])
+			node.Parents = strings.Fields(parts[6])
 		}
-		rows = append(rows, row)
+		nodes = append(nodes, node)
 	}
 
-	return rows
+	return nodes
 }
 
 func parseGitCommitDetail(output, fieldSep string) (*GitCommitDetail, error) {
@@ -1445,51 +1423,51 @@ func gitBlob(dir, ref, path string) (*GitBlob, error) {
 
 // ClaudeUsage represents Claude Code usage statistics from ccusage.
 type ClaudeUsage struct {
-	Today      *DailyUsage  `json:"today,omitempty"`
-	Totals     *UsageTotals `json:"totals,omitempty"`
+	Today       *DailyUsage   `json:"today,omitempty"`
+	Totals      *UsageTotals  `json:"totals,omitempty"`
 	ActiveBlock *BillingBlock `json:"active_block,omitempty"`
-	Error      string       `json:"error,omitempty"`
+	Error       string        `json:"error,omitempty"`
 }
 
 // DailyUsage represents a single day's usage.
 type DailyUsage struct {
-	Date        string         `json:"date"`
-	InputTokens int64          `json:"input_tokens"`
-	OutputTokens int64         `json:"output_tokens"`
-	CacheCreate int64          `json:"cache_create"`
-	CacheRead   int64          `json:"cache_read"`
-	TotalTokens int64          `json:"total_tokens"`
-	TotalCost   float64        `json:"total_cost"`
-	Models      []ModelBreakdown `json:"models,omitempty"`
+	Date         string           `json:"date"`
+	InputTokens  int64            `json:"input_tokens"`
+	OutputTokens int64            `json:"output_tokens"`
+	CacheCreate  int64            `json:"cache_create"`
+	CacheRead    int64            `json:"cache_read"`
+	TotalTokens  int64            `json:"total_tokens"`
+	TotalCost    float64          `json:"total_cost"`
+	Models       []ModelBreakdown `json:"models,omitempty"`
 }
 
 // UsageTotals represents cumulative usage totals.
 type UsageTotals struct {
-	InputTokens int64   `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
-	CacheCreate int64   `json:"cache_create"`
-	CacheRead   int64   `json:"cache_read"`
-	TotalTokens int64   `json:"total_tokens"`
-	TotalCost   float64 `json:"total_cost"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	CacheCreate  int64   `json:"cache_create"`
+	CacheRead    int64   `json:"cache_read"`
+	TotalTokens  int64   `json:"total_tokens"`
+	TotalCost    float64 `json:"total_cost"`
 }
 
 // ModelBreakdown represents usage for a single model.
 type ModelBreakdown struct {
-	Model       string  `json:"model"`
-	InputTokens int64   `json:"input_tokens"`
-	OutputTokens int64  `json:"output_tokens"`
-	CacheCreate int64   `json:"cache_create"`
-	CacheRead   int64   `json:"cache_read"`
-	Cost        float64 `json:"cost"`
+	Model        string  `json:"model"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	CacheCreate  int64   `json:"cache_create"`
+	CacheRead    int64   `json:"cache_read"`
+	Cost         float64 `json:"cost"`
 }
 
 // BillingBlock represents an active billing window.
 type BillingBlock struct {
-	StartTime    string  `json:"start_time"`
-	EndTime      string  `json:"end_time"`
-	TotalTokens  int64   `json:"total_tokens"`
-	TotalCost    float64 `json:"total_cost"`
-	BurnRate     float64 `json:"burn_rate"`      // cost per hour
+	StartTime     string  `json:"start_time"`
+	EndTime       string  `json:"end_time"`
+	TotalTokens   int64   `json:"total_tokens"`
+	TotalCost     float64 `json:"total_cost"`
+	BurnRate      float64 `json:"burn_rate"`      // cost per hour
 	ProjectedCost float64 `json:"projected_cost"` // projected total for this block
 }
 
@@ -1524,29 +1502,29 @@ func (h *GUIHandler) fetchClaudeUsage() ClaudeUsage {
 	if err == nil {
 		var dailyData struct {
 			Daily []struct {
-				Date        string  `json:"date"`
-				InputTokens int64   `json:"inputTokens"`
-				OutputTokens int64  `json:"outputTokens"`
-				CacheCreationTokens int64 `json:"cacheCreationTokens"`
-				CacheReadTokens int64 `json:"cacheReadTokens"`
-				TotalTokens int64   `json:"totalTokens"`
-				TotalCost   float64 `json:"totalCost"`
-				ModelBreakdowns []struct {
-					ModelName   string  `json:"modelName"`
-					InputTokens int64   `json:"inputTokens"`
-					OutputTokens int64  `json:"outputTokens"`
-					CacheCreationTokens int64 `json:"cacheCreationTokens"`
-					CacheReadTokens int64 `json:"cacheReadTokens"`
-					Cost        float64 `json:"cost"`
+				Date                string  `json:"date"`
+				InputTokens         int64   `json:"inputTokens"`
+				OutputTokens        int64   `json:"outputTokens"`
+				CacheCreationTokens int64   `json:"cacheCreationTokens"`
+				CacheReadTokens     int64   `json:"cacheReadTokens"`
+				TotalTokens         int64   `json:"totalTokens"`
+				TotalCost           float64 `json:"totalCost"`
+				ModelBreakdowns     []struct {
+					ModelName           string  `json:"modelName"`
+					InputTokens         int64   `json:"inputTokens"`
+					OutputTokens        int64   `json:"outputTokens"`
+					CacheCreationTokens int64   `json:"cacheCreationTokens"`
+					CacheReadTokens     int64   `json:"cacheReadTokens"`
+					Cost                float64 `json:"cost"`
 				} `json:"modelBreakdowns"`
 			} `json:"daily"`
 			Totals struct {
-				InputTokens int64   `json:"inputTokens"`
-				OutputTokens int64  `json:"outputTokens"`
-				CacheCreationTokens int64 `json:"cacheCreationTokens"`
-				CacheReadTokens int64 `json:"cacheReadTokens"`
-				TotalTokens int64   `json:"totalTokens"`
-				TotalCost   float64 `json:"totalCost"`
+				InputTokens         int64   `json:"inputTokens"`
+				OutputTokens        int64   `json:"outputTokens"`
+				CacheCreationTokens int64   `json:"cacheCreationTokens"`
+				CacheReadTokens     int64   `json:"cacheReadTokens"`
+				TotalTokens         int64   `json:"totalTokens"`
+				TotalCost           float64 `json:"totalCost"`
 			} `json:"totals"`
 		}
 
@@ -1555,33 +1533,33 @@ func (h *GUIHandler) fetchClaudeUsage() ClaudeUsage {
 			if len(dailyData.Daily) > 0 {
 				today := dailyData.Daily[len(dailyData.Daily)-1]
 				usage.Today = &DailyUsage{
-					Date:        today.Date,
-					InputTokens: today.InputTokens,
+					Date:         today.Date,
+					InputTokens:  today.InputTokens,
 					OutputTokens: today.OutputTokens,
-					CacheCreate: today.CacheCreationTokens,
-					CacheRead:   today.CacheReadTokens,
-					TotalTokens: today.TotalTokens,
-					TotalCost:   today.TotalCost,
+					CacheCreate:  today.CacheCreationTokens,
+					CacheRead:    today.CacheReadTokens,
+					TotalTokens:  today.TotalTokens,
+					TotalCost:    today.TotalCost,
 				}
 				for _, m := range today.ModelBreakdowns {
 					usage.Today.Models = append(usage.Today.Models, ModelBreakdown{
-						Model:       m.ModelName,
-						InputTokens: m.InputTokens,
+						Model:        m.ModelName,
+						InputTokens:  m.InputTokens,
 						OutputTokens: m.OutputTokens,
-						CacheCreate: m.CacheCreationTokens,
-						CacheRead:   m.CacheReadTokens,
-						Cost:        m.Cost,
+						CacheCreate:  m.CacheCreationTokens,
+						CacheRead:    m.CacheReadTokens,
+						Cost:         m.Cost,
 					})
 				}
 			}
 
 			usage.Totals = &UsageTotals{
-				InputTokens: dailyData.Totals.InputTokens,
+				InputTokens:  dailyData.Totals.InputTokens,
 				OutputTokens: dailyData.Totals.OutputTokens,
-				CacheCreate: dailyData.Totals.CacheCreationTokens,
-				CacheRead:   dailyData.Totals.CacheReadTokens,
-				TotalTokens: dailyData.Totals.TotalTokens,
-				TotalCost:   dailyData.Totals.TotalCost,
+				CacheCreate:  dailyData.Totals.CacheCreationTokens,
+				CacheRead:    dailyData.Totals.CacheReadTokens,
+				TotalTokens:  dailyData.Totals.TotalTokens,
+				TotalCost:    dailyData.Totals.TotalCost,
 			}
 		}
 	}
@@ -1593,10 +1571,10 @@ func (h *GUIHandler) fetchClaudeUsage() ClaudeUsage {
 	if err == nil {
 		var blocksData struct {
 			Blocks []struct {
-				StartTime   string `json:"startTime"`
-				EndTime     string `json:"endTime"`
-				IsActive    bool   `json:"isActive"`
-				TotalTokens int64  `json:"totalTokens"`
+				StartTime   string  `json:"startTime"`
+				EndTime     string  `json:"endTime"`
+				IsActive    bool    `json:"isActive"`
+				TotalTokens int64   `json:"totalTokens"`
 				CostUSD     float64 `json:"costUSD"`
 				BurnRate    *struct {
 					CostPerHour float64 `json:"costPerHour"`

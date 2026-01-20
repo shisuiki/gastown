@@ -12,3 +12,4 @@
 - Rebuilt `gt` from repo to include quoting fix; `gt mayor start` now succeeds.
 - Fixed auto-sync chain: updated post-merge hook to restart user-level web service, added PATH/HOME to sync service, enabled linger, added user logrotate timer for sync log, restarted web service under systemd.
 - Adjusted graph rendering to fit within fixed height, auto-fit view, and improve layout spacing.
+- Reworked git graph API to return node list (no ASCII parsing) and updated graph panel rendering with fixed sizing.
