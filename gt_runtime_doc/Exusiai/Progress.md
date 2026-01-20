@@ -47,3 +47,24 @@ Without `gt done`, no MR bead is created. The Witness finds "orphan" polecats du
 3. **For source issues still HOOKED**: Unhook or close based on merge state
 
 See hq-uog2 (assigned to shiny) for MR bead closure after merge.
+
+## 2026-01-20: hq-uog2 - Fix Refinery MR Bead Closure
+
+**Problem**: After refinery merges branches, MR beads remain OPEN because:
+1. Claude refinery agent does manual git merges
+2. Agent is supposed to run `bd close` manually per formula instructions
+3. Error-prone: steps get skipped, MR bead IDs not tracked properly
+
+**Solution**: Added `gt mq merged` command (commit 82a232de) that atomically handles ALL post-merge cleanup:
+- Closes MR bead with merge commit SHA
+- Closes source issue with merge commit SHA
+- Sends MERGED notification to Witness
+- Optionally notifies Mayor (--notify-mayor)
+- Optionally deletes source branch (--delete-branch)
+
+**Usage**:
+```bash
+gt mq merged <mr-id-or-branch> --commit $(git rev-parse HEAD) --delete-branch --notify-mayor
+```
+
+Updated refinery patrol formula to use this command instead of manual `bd close` calls.
