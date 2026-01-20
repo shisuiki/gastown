@@ -10,7 +10,7 @@ GitHub (shisuiki/gastown)
 ~/laplace/gastown-src (local source)
         ↓ git pull (triggers post-merge hook → go build)
 ~/go/bin/gt (binary with embedded webui)
-        ↓ (sync auto-restarts gastown-web.service)
+        ↓ (sync auto-restarts web UI service)
 http://localhost:8080 (Web UI)
 ```
 
@@ -26,31 +26,36 @@ http://localhost:8080 (Web UI)
 
 ### 2. Systemd Services
 
-Two user-level systemd services manage the deployment:
+This deployment uses one system-level service for the GUI and a user-level
+service for sync. The legacy user-level `gastown-web.service` may still exist
+but is typically disabled when `gastown-gui.service` is active.
 
-#### gastown-web.service
+#### gastown-gui.service (system-level)
 Runs the Web UI server.
 
 ```ini
 [Unit]
-Description=Gas Town Web UI
+Description=Gas Town Web GUI
 After=network.target
 
 [Service]
 Type=simple
+User=shisui
 WorkingDirectory=/home/shisui/gt
+ExecStartPre=/home/shisui/gt/scripts/gastown-web-guard.sh
 ExecStart=/home/shisui/go/bin/gt gui --port 8080
-Restart=on-failure
+Restart=always
 RestartSec=5
 Environment=HOME=/home/shisui
-Environment=GT_ROOT=/home/shisui/gt
-Environment=PATH=/home/shisui/go/bin:/home/shisui/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/shisui/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=GASTOWN_WEB_PORT=8080
+Environment=GASTOWN_SRC=/home/shisui/laplace/gastown-src
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 ```
 
-#### gastown-sync.service
+#### gastown-sync.service (user-level)
 Watches for upstream changes and auto-syncs.
 
 ```ini
@@ -108,17 +113,23 @@ curl -X POST "http://your-server:9876/sync?token=your_secret"
 ### 1. Install Systemd Services
 
 ```bash
-# Copy service files
+# Copy service files (user-level sync)
 mkdir -p ~/.config/systemd/user
-cp deploy/gastown-web.service ~/.config/systemd/user/
 cp deploy/gastown-sync.service ~/.config/systemd/user/
 
-# Reload and enable
+# Reload and enable (user-level sync)
 systemctl --user daemon-reload
-systemctl --user enable --now gastown-web.service gastown-sync.service
+systemctl --user enable --now gastown-sync.service
 
 # Enable linger for services to run without login
 loginctl enable-linger $USER
+```
+
+System-level GUI service (managed in `/etc/systemd/system`):
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now gastown-gui.service
 ```
 
 ### 2. Install Sync Script
