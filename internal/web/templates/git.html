@@ -144,7 +144,8 @@
         }
         .branches-list {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column;
+            flex-wrap: nowrap;
             gap: 8px;
         }
         .branch-item {
@@ -156,6 +157,8 @@
             border-radius: 6px;
             border: 1px solid #333;
             cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
         }
         .branch-item.current {
             border-color: #4ade80;
@@ -266,10 +269,12 @@
         }
         .graph-canvas {
             flex: 1;
+            height: 520px;
             min-height: 520px;
             border: 1px solid #1f2937;
             border-radius: 8px;
             background: #0b1220;
+            overflow: hidden;
         }
         .tabs-panel {
             margin-top: 18px;
@@ -387,6 +392,7 @@
                 grid-row: auto;
             }
             .graph-canvas {
+                height: 360px;
                 min-height: 360px;
             }
         }
@@ -923,7 +929,6 @@
                         nodes.push({
                             id: row.hash,
                             label: row.short_hash,
-                            level: idx,
                             shape: 'dot',
                             size: isMerge ? 10 : 8,
                             color: isMerge ? { background: '#4ade80', border: '#166534' } : { background: '#60a5fa', border: '#1d4ed8' },
@@ -960,15 +965,19 @@
                                 enabled: true,
                                 direction: 'UD',
                                 sortMethod: 'directed',
-                                levelSeparation: 70,
-                                nodeSpacing: 140,
-                                treeSpacing: 180
+                                levelSeparation: 50,
+                                nodeSpacing: 120,
+                                treeSpacing: 140,
+                                blockShifting: true,
+                                edgeMinimization: true
                             }
                         },
                         physics: false,
                         interaction: {
                             dragNodes: false,
-                            hover: true
+                            hover: true,
+                            dragView: true,
+                            zoomView: true
                         }
                     };
 
@@ -978,6 +987,7 @@
                             this.selectCommitByHash(params.nodes[0], true);
                         }
                     });
+                    this.graphNetwork.fit({ animation: { duration: 200, easingFunction: 'easeInOutQuad' } });
                 },
 
                 async selectCommit(commit) {
