@@ -462,3 +462,52 @@ func TestThemeForRigDeterministic(t *testing.T) {
 		t.Errorf("theme not deterministic: got %q and %q", theme1, theme2)
 	}
 }
+
+func TestNamePool_SkipsReservedNames(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "namepool-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create pool with custom names that include reserved role names
+	custom := []string{"witness", "alpha", "deacon", "beta", "refinery", "gamma"}
+	pool := NewNamePoolWithConfig(tmpDir, "testrig", "", custom, 6)
+
+	// Should skip witness, deacon, refinery and allocate alpha, beta, gamma
+	name1, _ := pool.Allocate()
+	name2, _ := pool.Allocate()
+	name3, _ := pool.Allocate()
+
+	if name1 != "alpha" {
+		t.Errorf("expected alpha (skipping witness), got %s", name1)
+	}
+	if name2 != "beta" {
+		t.Errorf("expected beta (skipping deacon), got %s", name2)
+	}
+	if name3 != "gamma" {
+		t.Errorf("expected gamma (skipping refinery), got %s", name3)
+	}
+
+	// Fourth allocation should overflow since only 3 non-reserved names
+	name4, _ := pool.Allocate()
+	if name4 != "testrig-7" {
+		t.Errorf("expected overflow testrig-7, got %s", name4)
+	}
+}
+
+func TestIsReservedName(t *testing.T) {
+	reserved := []string{"witness", "mayor", "deacon", "refinery", "overseer"}
+	for _, name := range reserved {
+		if !IsReservedName(name) {
+			t.Errorf("expected %q to be reserved", name)
+		}
+	}
+
+	notReserved := []string{"furiosa", "nux", "chrome", "alpha", "polecat"}
+	for _, name := range notReserved {
+		if IsReservedName(name) {
+			t.Errorf("expected %q to NOT be reserved", name)
+		}
+	}
+}

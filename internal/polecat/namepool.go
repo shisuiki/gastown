@@ -22,6 +22,17 @@ const (
 	DefaultTheme = "mad-max"
 )
 
+// ReservedRoleNames are names that cannot be used for polecats because they
+// collide with reserved Gas Town roles. These names appear in some themes
+// but must be skipped during allocation.
+var ReservedRoleNames = map[string]bool{
+	"witness":  true, // Witness role (rig-level monitor)
+	"mayor":    true, // Mayor role (town-level orchestrator)
+	"deacon":   true, // Deacon role (town-level daemon)
+	"refinery": true, // Refinery role (merge queue manager)
+	"overseer": true, // Overseer role (human operator)
+}
+
 // Built-in themes with themed polecat names.
 var BuiltinThemes = map[string][]string{
 	"mad-max": {
@@ -216,7 +227,7 @@ func (p *NamePool) Save() error {
 
 // Allocate returns a name from the pool.
 // It prefers names in order from the theme list, and falls back to overflow names
-// when the pool is exhausted.
+// when the pool is exhausted. Reserved role names are skipped even if present in the theme.
 func (p *NamePool) Allocate() (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -226,6 +237,10 @@ func (p *NamePool) Allocate() (string, error) {
 	// Try to find first available name from the theme
 	for i := 0; i < len(names) && i < p.MaxSize; i++ {
 		name := names[i]
+		// Skip reserved role names (witness, mayor, deacon, refinery, overseer)
+		if ReservedRoleNames[name] {
+			continue
+		}
 		if !p.InUse[name] {
 			p.InUse[name] = true
 			return name, nil
@@ -410,4 +425,10 @@ func (p *NamePool) Reset() {
 
 	p.InUse = make(map[string]bool)
 	p.OverflowNext = p.MaxSize + 1
+}
+
+// IsReservedName returns true if the name is reserved for a Gas Town role.
+// Reserved names cannot be used for polecats.
+func IsReservedName(name string) bool {
+	return ReservedRoleNames[name]
 }
