@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strings"
 
+	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/mail"
 )
 
@@ -46,9 +49,34 @@ func (h *DefaultRefineryHandler) SetOutput(w io.Writer) {
 // NOTE: The merge-request bead is created by `gt done`, so we no longer need
 // to add to the mrqueue here. The Refinery queries beads directly for ready MRs.
 func (h *DefaultRefineryHandler) HandleMergeReady(payload *MergeReadyPayload) error {
+	issue := normalizeMergeReadyIssue(payload.Issue)
+	mrID := ""
+
+	bd := beads.New(h.WorkDir)
+	mr, err := bd.FindMRForBranch(payload.Branch)
+	if err != nil {
+		return fmt.Errorf("lookup MR for branch %s: %w", payload.Branch, err)
+	}
+
+	if mr != nil {
+		mrID = mr.ID
+		if fields := beads.ParseMRFields(mr); fields != nil && fields.SourceIssue != "" {
+			issue = fields.SourceIssue
+		}
+	}
+
+	if issue == "" {
+		issue = inferIssueFromBranch(payload.Branch)
+	}
+
+	payload.Issue = issue
+
 	_, _ = fmt.Fprintf(h.Output, "[Refinery] MERGE_READY received for polecat %s\n", payload.Polecat)
 	_, _ = fmt.Fprintf(h.Output, "  Branch: %s\n", payload.Branch)
 	_, _ = fmt.Fprintf(h.Output, "  Issue: %s\n", payload.Issue)
+	if mrID != "" {
+		_, _ = fmt.Fprintf(h.Output, "  MR: %s\n", mrID)
+	}
 	_, _ = fmt.Fprintf(h.Output, "  Verified: %s\n", payload.Verified)
 
 	// Validate required fields
@@ -57,6 +85,23 @@ func (h *DefaultRefineryHandler) HandleMergeReady(payload *MergeReadyPayload) er
 	}
 	if payload.Polecat == "" {
 		return fmt.Errorf("missing polecat in MERGE_READY payload")
+	}
+	if payload.Issue == "" || strings.EqualFold(payload.Issue, "none") {
+		reason := "missing issue in MERGE_READY payload"
+		if mr == nil {
+			reason = "missing issue and no merge-request bead found for branch"
+		}
+		if err := h.notifyInvalidMergeReady(payload, reason, mrID); err != nil {
+			return fmt.Errorf("sending merge-ready failure notice: %w", err)
+		}
+		return fmt.Errorf("invalid MERGE_READY: %s (branch=%s)", reason, payload.Branch)
+	}
+	if mr == nil {
+		reason := "no merge-request bead found for branch"
+		if err := h.notifyInvalidMergeReady(payload, reason, mrID); err != nil {
+			return fmt.Errorf("sending merge-ready failure notice: %w", err)
+		}
+		return fmt.Errorf("invalid MERGE_READY: %s (branch=%s)", reason, payload.Branch)
 	}
 
 	// The merge-request bead is created by `gt done` with gt:merge-request label.
@@ -125,3 +170,84 @@ func (h *DefaultRefineryHandler) NotifyMergeOutcome(polecat, branch, issue, targ
 
 // Ensure DefaultRefineryHandler implements RefineryHandler.
 var _ RefineryHandler = (*DefaultRefineryHandler)(nil)
+
+var mergeReadyIssuePattern = regexp.MustCompile(`^[a-z]+-[a-z0-9]+(?:\.[0-9]+)?$`)
+
+func normalizeMergeReadyIssue(issue string) string {
+	issue = strings.TrimSpace(issue)
+	if strings.EqualFold(issue, "none") {
+		return ""
+	}
+	return issue
+}
+
+func inferIssueFromBranch(branch string) string {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(branch, "polecat/") {
+		parts := strings.Split(branch, "/")
+		if len(parts) >= 3 {
+			issue := strings.TrimSpace(parts[2])
+			if at := strings.Index(issue, "@"); at > 0 {
+				issue = issue[:at]
+			}
+			if mergeReadyIssuePattern.MatchString(issue) {
+				return issue
+			}
+		}
+		return ""
+	}
+
+	for _, part := range strings.Split(branch, "/") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if at := strings.Index(part, "@"); at > 0 {
+			part = part[:at]
+		}
+		if mergeReadyIssuePattern.MatchString(part) {
+			return part
+		}
+	}
+
+	return ""
+}
+
+func (h *DefaultRefineryHandler) notifyInvalidMergeReady(payload *MergeReadyPayload, reason, mrID string) error {
+	msg := &mail.Message{
+		From:     fmt.Sprintf("%s/refinery", h.Rig),
+		To:       fmt.Sprintf("%s/witness", h.Rig),
+		Subject:  fmt.Sprintf("MERGE_READY invalid %s", payload.Polecat),
+		Priority: mail.PriorityHigh,
+		Type:     mail.TypeTask,
+		Body: fmt.Sprintf(`MERGE_READY could not be processed.
+
+Branch: %s
+Issue: %s
+Polecat: %s
+MR: %s
+Reason: %s
+
+Action: ensure a merge-request bead exists (run "gt done" or
+"gt mq submit --issue <id>") and resend MERGE_READY with a valid Issue.`,
+			payload.Branch,
+			payload.Issue,
+			payload.Polecat,
+			emptyIfUnset(mrID),
+			reason,
+		),
+	}
+
+	return h.Router.Send(msg)
+}
+
+func emptyIfUnset(value string) string {
+	if value == "" {
+		return "none"
+	}
+	return value
+}

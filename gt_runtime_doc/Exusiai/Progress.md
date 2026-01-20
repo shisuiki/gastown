@@ -16,3 +16,4 @@
 - Replaced vis-network graph with custom SVG lane renderer, fixed scroll sync and styling for readable graph rows.
 - Graph now renders rich rows (message, refs, author, hash, date) with SVG lanes and fixed-height scroll panel.
 - Locked graph panel height with explicit max-height and runtime sizing to keep it inside its scroll box.
+- Added MERGE_READY validation in refinery handler with issue inference and explicit failure notice for missing issue/MR.
