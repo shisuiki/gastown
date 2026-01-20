@@ -1,17 +1,17 @@
 # Roadmap
 
-## Phase 0: Docs viewer scope
-- [x] Define target doc roots (repo docs + runtime docs).
-- [x] Choose markdown renderer + tree viewer (open-source first).
+## Phase 0: Service inventory
+- Inspect user systemd units and deployment scripts.
+- Identify missing or renamed services and broken paths.
 
-## Phase 1: Backend API
-- [x] Add docs page route and API endpoints for tree + file content.
-- [x] Constrain file access to markdown only (path safety + size limits).
+## Phase 1: Restore sync script
+- Ensure `gastown-sync.sh` exists at the path used by systemd.
+- Align webhook script path with docs.
 
-## Phase 2: Docs UI
-- [x] Add Docs nav tab and template layout (tree + viewer).
-- [x] Implement markdown rendering and file tree interactions.
+## Phase 2: Service compatibility
+- Restore or alias `gastown-gui.service` to the current web service.
+- Reload and restart affected units.
 
-## Phase 3: Polish + QA
-- [x] Add search/filter and selection persistence.
-- [x] Verify loading/error states and basic navigation behavior.
+## Phase 3: Verification
+- Confirm sync service can run on restart.
+- Validate web service restart on sync.
