@@ -86,6 +86,10 @@ func (h *GUIHandler) handleAPIDocsFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func docsRepoRoot() (string, error) {
+	if envRoot := repoRootFromEnv(); envRoot != "" {
+		return envRoot, nil
+	}
+
 	_, cwd, err := workspace.FindFromCwdWithFallback()
 	if err != nil {
 		return "", err
@@ -97,6 +101,27 @@ func docsRepoRoot() (string, error) {
 		}
 	}
 	return findRepoRoot(cwd)
+}
+
+func repoRootFromEnv() string {
+	for _, key := range []string{"GASTOWN_DOCS_ROOT", "GASTOWN_SRC", "GT_ROOT"} {
+		value := strings.TrimSpace(os.Getenv(key))
+		if value == "" {
+			continue
+		}
+		if root, err := findRepoRoot(value); err == nil {
+			return root
+		}
+		if docsOK(value) {
+			return value
+		}
+	}
+	return ""
+}
+
+func docsOK(root string) bool {
+	info, err := os.Stat(filepath.Join(root, "docs"))
+	return err == nil && info.IsDir()
 }
 
 func findRepoRoot(start string) (string, error) {

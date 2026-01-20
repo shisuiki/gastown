@@ -2,6 +2,12 @@
 
 ## 2026-01-20
 
+### P2 Incident: Docs Root Regression
+
+1. Investigated mayor commit 39f9618 vs MisumiUika fix d2633f4 and confirmed env-based docs root lookup was reverted.
+2. Restored env-first docs root resolution in `internal/web/handler_docs.go`.
+3. Verified `go test ./internal/web/...` after fix.
+
 ### Handoff Summary
 
 **WebUI Workflow Page Refactoring - Complete**
