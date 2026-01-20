@@ -13,3 +13,4 @@
 - Fixed auto-sync chain: updated post-merge hook to restart user-level web service, added PATH/HOME to sync service, enabled linger, added user logrotate timer for sync log, restarted web service under systemd.
 - Adjusted graph rendering to fit within fixed height, auto-fit view, and improve layout spacing.
 - Reworked git graph API to return node list (no ASCII parsing) and updated graph panel rendering with fixed sizing.
+- Replaced vis-network graph with custom SVG lane renderer, fixed scroll sync and styling for readable graph rows.

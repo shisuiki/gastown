@@ -3,8 +3,12 @@
 <head>
     {{template "head" .}}
     <title>Git - Gas Town</title>
-    <link rel="stylesheet" href="/static/css/vis-network.min.css">
     <style>
+        :root {
+            --commit-row-height: 48px;
+            --graph-row-height: 48px;
+            --graph-lane-width: 14px;
+        }
         .git-stats {
             display: flex;
             gap: 20px;
@@ -35,10 +39,13 @@
         .commit-item {
             display: flex;
             gap: 12px;
-            padding: 12px;
+            padding: 6px 12px;
             border-bottom: 1px solid #333;
             transition: background 0.2s;
             cursor: pointer;
+            min-height: var(--commit-row-height);
+            height: var(--commit-row-height);
+            align-items: center;
         }
         .commit-item:hover {
             background: rgba(255, 255, 255, 0.02);
@@ -274,8 +281,30 @@
             border: 1px solid #1f2937;
             border-radius: 8px;
             background: #0b1220;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
             position: relative;
+        }
+        .graph-svg {
+            display: block;
+        }
+        .graph-inner {
+            position: relative;
+            width: 100%;
+        }
+        .graph-overlay {
+            position: absolute;
+            inset: 0;
+        }
+        .graph-overlay-row {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: var(--graph-row-height);
+            cursor: pointer;
+        }
+        .graph-overlay-row:hover {
+            background: rgba(255, 255, 255, 0.03);
         }
         .tabs-panel {
             margin-top: 18px;
@@ -477,8 +506,11 @@
                             <div class="commit-info">
                                 <div class="commit-message">
                                     <span x-text="commit.message"></span>
-                                    <template x-if="commit.branch && index === 0">
-                                        <span class="branch-tag" x-text="commit.branch"></span>
+                                    <template x-for="ref in refTags(commit.refs)" :key="ref">
+                                        <span class="branch-tag" x-text="ref"></span>
+                                    </template>
+                                    <template x-if="refOverflow(commit.refs) > 0">
+                                        <span class="branch-tag" x-text="'+' + refOverflow(commit.refs)"></span>
                                     </template>
                                 </div>
                                 <div class="commit-meta">
@@ -778,7 +810,6 @@
     </div>
 
     {{template "scripts" .}}
-    <script src="/static/js/vis-network.min.js"></script>
     <script>
         function gitPage() {
             return {
@@ -788,9 +819,12 @@
                 commits: [],
                 branches: [],
                 graphNodes: [],
-                graphNetwork: null,
+                graphLayout: null,
                 graphLimit: 150,
-                commitLimit: 150,
+                graphRowHeight: 48,
+                graphLaneWidth: 14,
+                scrollSyncing: false,
+                scrollBound: false,
                 selectedCommitHash: '',
                 selectedBranch: '',
                 commitDetail: null,
@@ -830,7 +864,7 @@
                     this.loadRigs();
                     this.loadAll();
                     this.loadGraph(true);
-                    setInterval(() => this.loadCommits(), 30000);
+                    setInterval(() => this.loadGraph(true), 30000);
                 },
 
                 async loadRigs() {
@@ -844,31 +878,12 @@
                 },
 
                 loadAll() {
-                    this.loadCommits();
+                    this.loadGraph(true);
                     this.loadBranches();
                 },
 
                 async loadCommits() {
-                    this.loading.commits = true;
-                    try {
-                        const params = new URLSearchParams();
-                        params.set('count', this.commitLimit);
-                        if (this.selectedRig) params.set('rig', this.selectedRig);
-                        const url = '/api/git/commits?' + params.toString();
-                        const res = await fetch(url);
-                        const data = await res.json();
-                        this.commits = data.commits || [];
-                        this.stats.commits = this.commits.length;
-                        if (this.commits.length > 0 && this.commits[0].branch) {
-                            this.currentBranch = this.commits[0].branch;
-                        }
-                        if (this.commits.length > 0 && !this.selectedCommitHash) {
-                            this.selectCommit(this.commits[0]);
-                        }
-                    } catch (e) {
-                        console.error('Failed to load commits:', e);
-                    }
-                    this.loading.commits = false;
+                    await this.loadGraph(true);
                 },
 
                 async loadBranches() {
@@ -900,10 +915,7 @@
 
                 async loadGraph(force) {
                     if (!force && this.graphNodes.length > 0) return;
-                    if (this.graphLimit !== this.commitLimit) {
-                        this.commitLimit = this.graphLimit;
-                        this.loadCommits();
-                    }
+                    this.loading.commits = true;
                     try {
                         const params = new URLSearchParams();
                         params.set('count', this.graphLimit);
@@ -911,100 +923,226 @@
                         const res = await fetch('/api/git/graph?' + params.toString());
                         const data = await res.json();
                         this.graphNodes = data.nodes || [];
+                        this.commits = this.graphNodes;
+                        this.stats.commits = this.commits.length;
+                        if (this.commits.length > 0 && !this.selectedCommitHash) {
+                            this.selectCommit(this.commits[0]);
+                        }
                         this.buildGraph();
                     } catch (e) {
                         console.error('Failed to load graph:', e);
                     }
+                    this.loading.commits = false;
                 },
 
                 buildGraph() {
-                    if (!this.graphNodes.length || typeof vis === 'undefined') return;
-                    const container = document.getElementById('git-graph');
-                    if (!container) return;
-                    const isMobile = window.matchMedia('(max-width: 768px)').matches;
-                    const height = isMobile ? 360 : 520;
-                    container.style.height = height + 'px';
-                    container.style.minHeight = height + 'px';
-                    container.style.maxHeight = height + 'px';
-
-                    const nodes = [];
-                    const edges = [];
-                    const index = new Set();
-
-                    this.graphNodes.forEach((node) => {
-                        if (!node.hash) return;
-                        index.add(node.hash);
-                        const isMerge = node.parents && node.parents.length > 1;
-                        nodes.push({
-                            id: node.hash,
-                            label: node.short_hash,
-                            shape: 'dot',
-                            size: isMerge ? 10 : 8,
-                            color: isMerge ? { background: '#4ade80', border: '#166534' } : { background: '#60a5fa', border: '#1d4ed8' },
-                            font: { color: '#e2e8f0', size: 12 },
-                            title: node.message || node.hash
-                        });
-                    });
-
-                    this.graphNodes.forEach((node) => {
-                        if (!node.hash || !node.parents) return;
-                        node.parents.forEach((parent) => {
-                            if (!index.has(parent)) return;
-                            edges.push({
-                                from: node.hash,
-                                to: parent,
-                                arrows: '',
-                                color: { color: '#3b82f6', opacity: 0.5 }
-                            });
-                        });
-                    });
-
-                    if (this.graphNetwork) {
-                        this.graphNetwork.destroy();
+                    if (!this.graphNodes.length) {
+                        this.clearGraph();
+                        return;
                     }
+                    this.graphLayout = this.computeGraphLayout(this.graphNodes);
+                    this.renderGraph(this.graphLayout);
+                    this.setupScrollSync();
+                },
 
-                    const data = {
-                        nodes: new vis.DataSet(nodes),
-                        edges: new vis.DataSet(edges)
-                    };
+                computeGraphLayout(nodes) {
+                    const lanes = [];
+                    const rows = [];
+                    let maxLanes = 0;
 
-                    const options = {
-                        layout: {
-                            hierarchical: {
-                                enabled: true,
-                                direction: 'UD',
-                                sortMethod: 'directed',
-                                levelSeparation: 50,
-                                nodeSpacing: 120,
-                                treeSpacing: 140,
-                                blockShifting: true,
-                                edgeMinimization: true
+                    nodes.forEach((node) => {
+                        let laneIndex = lanes.indexOf(node.hash);
+                        if (laneIndex === -1) {
+                            lanes.unshift(node.hash);
+                            laneIndex = 0;
+                        }
+
+                        const lanesBefore = lanes.slice();
+                        const parents = (node.parents || []).filter(Boolean);
+                        let lanesAfter = lanes.slice();
+                        lanesAfter.splice(laneIndex, 1);
+
+                        if (parents.length > 0) {
+                            const uniqueParents = [];
+                            parents.forEach((parent) => {
+                                if (!uniqueParents.includes(parent)) {
+                                    uniqueParents.push(parent);
+                                }
+                            });
+                            uniqueParents.forEach((parent) => {
+                                const idx = lanesAfter.indexOf(parent);
+                                if (idx !== -1) {
+                                    lanesAfter.splice(idx, 1);
+                                }
+                            });
+                            lanesAfter.splice(laneIndex, 0, uniqueParents[0]);
+                            for (let i = 1; i < uniqueParents.length; i += 1) {
+                                lanesAfter.splice(laneIndex + i, 0, uniqueParents[i]);
                             }
-                        },
-                        physics: false,
-                        interaction: {
-                            dragNodes: false,
-                            hover: true,
-                            dragView: true,
-                            zoomView: true
                         }
+
+                        maxLanes = Math.max(maxLanes, lanesBefore.length, lanesAfter.length);
+                        rows.push({
+                            node,
+                            laneIndex,
+                            parents,
+                            lanesBefore,
+                            lanesAfter
+                        });
+                        lanes.splice(0, lanes.length, ...lanesAfter);
+                    });
+
+                    return { rows, maxLanes };
+                },
+
+                renderGraph(layout) {
+                    const viewport = this.getGraphViewport();
+                    if (!viewport) return;
+                    const savedScroll = viewport.scrollTop;
+
+                    const rowHeight = this.graphRowHeight;
+                    const laneWidth = this.graphLaneWidth;
+                    const paddingX = 10;
+                    const rowsCount = layout.rows.length;
+                    const svgHeight = rowsCount * rowHeight;
+                    const svgWidth = Math.max(1, layout.maxLanes) * laneWidth + paddingX * 2;
+                    const palette = this.graphPalette();
+
+                    viewport.innerHTML = '';
+
+                    const inner = document.createElement('div');
+                    inner.className = 'graph-inner';
+                    inner.style.height = svgHeight + 'px';
+                    inner.style.minHeight = svgHeight + 'px';
+                    inner.style.width = svgWidth + 'px';
+
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('class', 'graph-svg');
+                    svg.setAttribute('width', svgWidth);
+                    svg.setAttribute('height', svgHeight);
+                    svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+
+                    const overlay = document.createElement('div');
+                    overlay.className = 'graph-overlay';
+                    overlay.style.height = svgHeight + 'px';
+                    overlay.style.width = '100%';
+
+                    const laneX = (index) => paddingX + index * laneWidth;
+                    const laneColor = (index) => palette[index % palette.length];
+
+                    layout.rows.forEach((row, idx) => {
+                        const y0 = idx * rowHeight + rowHeight / 2;
+                        const y1 = (idx + 1) * rowHeight + rowHeight / 2;
+                        const beforeMap = this.laneIndexMap(row.lanesBefore);
+                        const afterMap = this.laneIndexMap(row.lanesAfter);
+
+                        if (idx < layout.rows.length - 1) {
+                            beforeMap.forEach((beforeIndex, hash) => {
+                                if (hash === row.node.hash) return;
+                                if (!afterMap.has(hash)) return;
+                                const afterIndex = afterMap.get(hash);
+                                this.drawSvgLine(svg, laneX(beforeIndex), y0, laneX(afterIndex), y1, laneColor(beforeIndex));
+                            });
+
+                            row.parents.forEach((parent) => {
+                                if (!afterMap.has(parent)) return;
+                                const parentIndex = afterMap.get(parent);
+                                this.drawSvgLine(svg, laneX(row.laneIndex), y0, laneX(parentIndex), y1, laneColor(row.laneIndex));
+                            });
+                        }
+
+                        const nodeRadius = row.node.hash === this.selectedCommitHash ? 5 : 4;
+                        this.drawSvgCircle(svg, laneX(row.laneIndex), y0, nodeRadius, laneColor(row.laneIndex));
+
+                        const rowDiv = document.createElement('div');
+                        rowDiv.className = 'graph-overlay-row';
+                        rowDiv.style.top = `${idx * rowHeight}px`;
+                        rowDiv.dataset.hash = row.node.hash;
+                        rowDiv.addEventListener('click', () => this.selectCommitByHash(row.node.hash, true));
+                        overlay.appendChild(rowDiv);
+                    });
+
+                    inner.appendChild(svg);
+                    inner.appendChild(overlay);
+                    viewport.appendChild(inner);
+                    viewport.scrollTop = savedScroll;
+                },
+
+                graphPalette() {
+                    return ['#f97316', '#22c55e', '#3b82f6', '#a855f7', '#eab308', '#ef4444', '#14b8a6'];
+                },
+
+                laneIndexMap(lanes) {
+                    const map = new Map();
+                    lanes.forEach((hash, idx) => {
+                        if (!map.has(hash)) {
+                            map.set(hash, idx);
+                        }
+                    });
+                    return map;
+                },
+
+                drawSvgLine(svg, x1, y1, x2, y2, color) {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', x2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('stroke', color);
+                    line.setAttribute('stroke-width', '2');
+                    line.setAttribute('stroke-linecap', 'round');
+                    svg.appendChild(line);
+                },
+
+                drawSvgCircle(svg, cx, cy, r, color) {
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', cx);
+                    circle.setAttribute('cy', cy);
+                    circle.setAttribute('r', r);
+                    circle.setAttribute('fill', color);
+                    circle.setAttribute('stroke', '#0b1220');
+                    circle.setAttribute('stroke-width', '1');
+                    svg.appendChild(circle);
+                },
+
+                getGraphViewport() {
+                    return document.getElementById('git-graph');
+                },
+
+                clearGraph() {
+                    const viewport = this.getGraphViewport();
+                    if (viewport) {
+                        viewport.innerHTML = '';
+                    }
+                    this.graphLayout = null;
+                    this.scrollBound = false;
+                },
+
+                setupScrollSync() {
+                    if (this.scrollBound) return;
+                    const commitList = this.$refs.commitList;
+                    const graphViewport = this.getGraphViewport();
+                    if (!commitList || !graphViewport) return;
+
+                    const sync = (source, target) => {
+                        if (this.scrollSyncing) return;
+                        this.scrollSyncing = true;
+                        target.scrollTop = source.scrollTop;
+                        this.scrollSyncing = false;
                     };
 
-                    this.graphNetwork = new vis.Network(container, data, options);
-                    this.graphNetwork.on('click', (params) => {
-                        if (params.nodes && params.nodes.length) {
-                            this.selectCommitByHash(params.nodes[0], true);
-                        }
-                    });
-                    this.graphNetwork.once('stabilized', () => {
-                        this.graphNetwork.fit({ animation: { duration: 200, easingFunction: 'easeInOutQuad' } });
-                    });
+                    commitList.addEventListener('scroll', () => sync(commitList, graphViewport));
+                    graphViewport.addEventListener('scroll', () => sync(graphViewport, commitList));
+                    this.scrollBound = true;
                 },
 
                 async selectCommit(commit) {
                     if (!commit || !commit.hash) return;
                     this.selectedCommitHash = commit.hash;
                     this.selectedBranch = '';
+                    if (this.graphLayout) {
+                        this.renderGraph(this.graphLayout);
+                    }
                     this.commitDetail = null;
                     this.commitDiff = null;
                     this.showDiff = false;
@@ -1022,6 +1160,9 @@
                         await this.selectCommit(commit);
                     } else {
                         this.selectedCommitHash = hash;
+                        if (this.graphLayout) {
+                            this.renderGraph(this.graphLayout);
+                        }
                         await this.loadCommitDetail(hash);
                         await this.loadCommitDiff(hash);
                         this.focusGraphNode(hash);
@@ -1090,10 +1231,7 @@
                     this.searchCommits = [];
                     this.searchFiles = [];
                     this.graphNodes = [];
-                    if (this.graphNetwork) {
-                        this.graphNetwork.destroy();
-                        this.graphNetwork = null;
-                    }
+                    this.clearGraph();
                 },
 
                 async loadFiles() {
@@ -1188,6 +1326,19 @@
                     return file.status + ' +' + add + ' -' + del;
                 },
 
+                refTags(refs) {
+                    if (!refs) return [];
+                    const tags = refs.split(',').map((ref) => ref.trim()).filter(Boolean);
+                    const cleaned = tags.map((ref) => ref.replace('HEAD -> ', ''));
+                    return cleaned.slice(0, 2);
+                },
+
+                refOverflow(refs) {
+                    if (!refs) return 0;
+                    const tags = refs.split(',').map((ref) => ref.trim()).filter(Boolean);
+                    return Math.max(0, tags.length - 2);
+                },
+
                 async loadCompare() {
                     if (!this.compareBase || !this.compareHead) return;
                     this.loading.compare = true;
@@ -1213,12 +1364,19 @@
                 },
 
                 focusGraphNode(hash) {
-                    if (!this.graphNetwork || !hash) return;
-                    this.graphNetwork.selectNodes([hash]);
-                    this.graphNetwork.focus(hash, {
-                        scale: 1.1,
-                        animation: { duration: 400, easingFunction: 'easeInOutQuad' }
-                    });
+                    if (!hash) return;
+                    const index = this.graphNodes.findIndex((node) => node.hash === hash);
+                    if (index === -1) return;
+                    this.scrollGraphToIndex(index);
+                },
+
+                scrollGraphToIndex(index) {
+                    const viewport = this.getGraphViewport();
+                    if (!viewport) return;
+                    const rowHeight = this.graphRowHeight;
+                    const offset = index * rowHeight - (viewport.clientHeight / 2 - rowHeight / 2);
+                    const target = Math.max(0, offset);
+                    viewport.scrollTo({ top: target, behavior: 'smooth' });
                 },
 
                 scrollCommitIntoView(hash) {
