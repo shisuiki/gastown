@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -192,6 +193,25 @@ type GitDiffFile struct {
 	Additions int    `json:"additions,omitempty"`
 	Deletions int    `json:"deletions,omitempty"`
 	Binary    bool   `json:"binary,omitempty"`
+}
+
+// GitTreeEntry represents a file or directory in a git tree listing.
+type GitTreeEntry struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Type string `json:"type"`
+	Mode string `json:"mode"`
+	Hash string `json:"hash"`
+	Size int64  `json:"size"`
+}
+
+// GitBlob represents file content for a git blob.
+type GitBlob struct {
+	Path      string `json:"path"`
+	Content   string `json:"content,omitempty"`
+	Binary    bool   `json:"binary,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
+	Size      int    `json:"size,omitempty"`
 }
 
 // GitGraphRow represents a line in the git graph output.
@@ -613,6 +633,64 @@ func (h *GUIHandler) handleAPIGitCommitDiff(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+// handleAPIGitTree returns a tree listing for a ref/path.
+func (h *GUIHandler) handleAPIGitTree(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rig := r.URL.Query().Get("rig")
+	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	path := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
+	if ref == "" {
+		ref = "HEAD"
+	}
+
+	dir := getRigRepoDir(rig)
+	entries, err := gitTreeEntries(dir, ref, path)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entries": entries,
+		"ref":     ref,
+		"path":    path,
+	})
+}
+
+// handleAPIGitBlob returns file content for a ref/path.
+func (h *GUIHandler) handleAPIGitBlob(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rig := r.URL.Query().Get("rig")
+	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	path := strings.TrimPrefix(r.URL.Query().Get("path"), "/")
+	if ref == "" {
+		ref = "HEAD"
+	}
+	if path == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "missing path",
+		})
+		return
+	}
+
+	dir := getRigRepoDir(rig)
+	blob, err := gitBlob(dir, ref, path)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"blob": blob,
+	})
+}
+
 func parseGitGraphRows(output, graphSep string) []GitGraphRow {
 	if output == "" {
 		return nil
@@ -814,6 +892,88 @@ func gitCommitPatch(dir, hash string) (string, bool, error) {
 	}
 
 	return patch, false, nil
+}
+
+func gitTreeEntries(dir, ref, path string) ([]GitTreeEntry, error) {
+	args := []string{"ls-tree", "-z", "-l", ref}
+	if path != "" {
+		args = append(args, path)
+	}
+	cmd, cancel := command("git", args...)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []GitTreeEntry
+	for _, line := range strings.Split(string(output), "\x00") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		meta := strings.Fields(parts[0])
+		if len(meta) < 3 {
+			continue
+		}
+		name := parts[1]
+		entryPath := name
+		if path != "" {
+			entryPath = path + "/" + name
+		}
+
+		entry := GitTreeEntry{
+			Mode: meta[0],
+			Type: meta[1],
+			Hash: meta[2],
+			Name: name,
+			Path: entryPath,
+		}
+		if len(meta) > 3 {
+			if size, err := strconv.ParseInt(meta[3], 10, 64); err == nil {
+				entry.Size = size
+			}
+		}
+
+		entries = append(entries, entry)
+	}
+
+	return entries, nil
+}
+
+func gitBlob(dir, ref, path string) (*GitBlob, error) {
+	const maxBlobBytes = 200000
+
+	cmd, cancel := longCommand("git", "show", ref+":"+path)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	blob := &GitBlob{
+		Path: path,
+		Size: len(output),
+	}
+
+	if bytes.Contains(output, []byte{0}) {
+		blob.Binary = true
+		return blob, nil
+	}
+
+	if len(output) > maxBlobBytes {
+		blob.Content = string(output[:maxBlobBytes]) + "\n... (file truncated)\n"
+		blob.Truncated = true
+		return blob, nil
+	}
+
+	blob.Content = string(output)
+	return blob, nil
 }
 
 // ClaudeUsage represents Claude Code usage statistics from ccusage.

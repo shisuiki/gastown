@@ -134,6 +134,78 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 0.8rem;
         }
+        .file-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .file-toolbar input {
+            padding: 6px 10px;
+            background: #0f172a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.85rem;
+        }
+        .file-panel {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 16px;
+        }
+        .file-list {
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 8px 0;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+        .file-entry {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+        .file-entry:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+        .file-entry.active {
+            background: rgba(96, 165, 250, 0.08);
+        }
+        .file-name {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            color: #e2e8f0;
+            word-break: break-all;
+        }
+        .file-meta {
+            font-size: 0.75rem;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .file-view {
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.4);
+            max-height: 420px;
+            overflow-y: auto;
+        }
+        .file-breadcrumbs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+        .file-breadcrumbs button {
+            background: none;
+            border: none;
+            color: #60a5fa;
+            cursor: pointer;
+            padding: 0;
+        }
         .branch-tag {
             display: inline-block;
             background: #166534;
@@ -257,6 +329,9 @@
             .commit-panel {
                 grid-template-columns: 1fr;
             }
+            .file-panel {
+                grid-template-columns: 1fr;
+            }
             .graph-text {
                 min-width: 60px;
             }
@@ -305,6 +380,9 @@
                 </button>
                 <button class="tab-btn" :class="{ active: activeTab === 'branches' }" @click="activeTab = 'branches'">
                     Branches
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; loadFiles()">
+                    Files
                 </button>
             </div>
 
@@ -470,6 +548,73 @@
                     </template>
                 </div>
             </div>
+
+            <!-- Files Tab -->
+            <div x-show="activeTab === 'files'">
+                <div class="file-toolbar">
+                    <label class="text-muted">Ref:</label>
+                    <input type="text" x-model="fileRef" placeholder="HEAD" @keydown.enter="loadFiles()">
+                    <button class="tab-btn" style="border-radius: 6px;" @click="loadFiles()">Load</button>
+                </div>
+                <template x-if="loading.tree">
+                    <p class="text-muted">Loading tree...</p>
+                </template>
+                <template x-if="!loading.tree && treeEntries.length === 0">
+                    <p class="text-muted">No files found</p>
+                </template>
+                <div class="file-panel" x-show="!loading.tree && treeEntries.length > 0">
+                    <div>
+                        <div class="file-breadcrumbs">
+                            <button @click="loadTree('')">root</button>
+                            <template x-for="crumb in breadcrumbParts()" :key="crumb.path">
+                                <span>
+                                    /
+                                    <button @click="loadTree(crumb.path)" x-text="crumb.name"></button>
+                                </span>
+                            </template>
+                        </div>
+                        <div class="file-list">
+                            <template x-if="treePath">
+                                <div class="file-entry" @click="loadTree(parentPath())">
+                                    <span class="file-name">..</span>
+                                    <span class="file-meta">up</span>
+                                </div>
+                            </template>
+                            <template x-for="entry in treeEntries" :key="entry.path">
+                                <div class="file-entry" :class="{ active: blob && blob.path === entry.path }" @click="openEntry(entry)">
+                                    <span class="file-name" x-text="entry.name"></span>
+                                    <span class="file-meta" x-text="entry.type === 'tree' ? 'dir' : formatFileSize(entry.size)"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="file-view">
+                        <template x-if="loading.blob">
+                            <p class="text-muted">Loading file...</p>
+                        </template>
+                        <template x-if="!loading.blob && !blob">
+                            <p class="text-muted">Select a file to preview.</p>
+                        </template>
+                        <template x-if="!loading.blob && blob">
+                            <div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Path</span>
+                                    <span x-text="blob.path"></span>
+                                </div>
+                                <template x-if="blob.binary">
+                                    <p class="text-muted">Binary file - preview not available.</p>
+                                </template>
+                                <template x-if="!blob.binary">
+                                    <pre class="diff-patch" style="max-height: 300px;" x-text="blob.content"></pre>
+                                </template>
+                                <template x-if="blob.truncated">
+                                    <p class="text-muted">File truncated for size.</p>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -487,6 +632,10 @@
                 commitDetail: null,
                 commitDiff: null,
                 showDiff: false,
+                fileRef: '',
+                treePath: '',
+                treeEntries: [],
+                blob: null,
                 currentBranch: '',
                 stats: {
                     commits: '-',
@@ -497,7 +646,9 @@
                     branches: true,
                     graph: false,
                     detail: false,
-                    diff: false
+                    diff: false,
+                    tree: false,
+                    blob: false
                 },
 
                 init() {
@@ -554,6 +705,9 @@
                         const current = this.branches.find(b => b.is_current);
                         if (current) {
                             this.currentBranch = current.name;
+                            if (!this.fileRef) {
+                                this.fileRef = current.name;
+                            }
                         }
                     } catch (e) {
                         console.error('Failed to load branches:', e);
@@ -620,6 +774,10 @@
                     this.commitDetail = null;
                     this.commitDiff = null;
                     this.showDiff = false;
+                    this.fileRef = '';
+                    this.treePath = '';
+                    this.treeEntries = [];
+                    this.blob = null;
                 },
 
                 toggleDiff() {
@@ -640,6 +798,82 @@
                     const add = file.additions || 0;
                     const del = file.deletions || 0;
                     return file.status + ' +' + add + ' -' + del;
+                },
+
+                async loadFiles() {
+                    await this.loadTree(this.treePath || '');
+                },
+
+                async loadTree(path) {
+                    this.loading.tree = true;
+                    this.treePath = path || '';
+                    this.blob = null;
+                    try {
+                        const ref = this.fileRef || this.currentBranch || 'HEAD';
+                        const params = new URLSearchParams();
+                        params.set('ref', ref);
+                        if (path) params.set('path', path);
+                        if (this.selectedRig) params.set('rig', this.selectedRig);
+                        const res = await fetch('/api/git/tree?' + params.toString());
+                        const data = await res.json();
+                        this.treeEntries = data.entries || [];
+                    } catch (e) {
+                        console.error('Failed to load tree:', e);
+                    }
+                    this.loading.tree = false;
+                },
+
+                async openEntry(entry) {
+                    if (!entry) return;
+                    if (entry.type === 'tree') {
+                        await this.loadTree(entry.path);
+                        return;
+                    }
+                    await this.loadBlob(entry.path);
+                },
+
+                async loadBlob(path) {
+                    this.loading.blob = true;
+                    this.blob = null;
+                    try {
+                        const ref = this.fileRef || this.currentBranch || 'HEAD';
+                        const params = new URLSearchParams();
+                        params.set('ref', ref);
+                        params.set('path', path);
+                        if (this.selectedRig) params.set('rig', this.selectedRig);
+                        const res = await fetch('/api/git/blob?' + params.toString());
+                        const data = await res.json();
+                        this.blob = data.blob || null;
+                    } catch (e) {
+                        console.error('Failed to load blob:', e);
+                    }
+                    this.loading.blob = false;
+                },
+
+                breadcrumbParts() {
+                    if (!this.treePath) return [];
+                    const parts = this.treePath.split('/');
+                    const crumbs = [];
+                    let current = '';
+                    for (const part of parts) {
+                        current = current ? current + '/' + part : part;
+                        crumbs.push({ name: part, path: current });
+                    }
+                    return crumbs;
+                },
+
+                parentPath() {
+                    if (!this.treePath) return '';
+                    const parts = this.treePath.split('/');
+                    parts.pop();
+                    return parts.join('/');
+                },
+
+                formatFileSize(size) {
+                    if (!size && size !== 0) return '';
+                    if (size < 1024) return size + ' B';
+                    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+                    return (size / (1024 * 1024)).toFixed(1) + ' MB';
                 }
             };
         }

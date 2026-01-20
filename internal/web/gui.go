@@ -147,6 +147,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/git/graph", h.handleAPIGitGraph)
 	h.mux.HandleFunc("/api/git/commit", h.handleAPIGitCommit)
 	h.mux.HandleFunc("/api/git/commit/diff", h.handleAPIGitCommitDiff)
+	h.mux.HandleFunc("/api/git/tree", h.handleAPIGitTree)
+	h.mux.HandleFunc("/api/git/blob", h.handleAPIGitBlob)
 	h.mux.HandleFunc("/api/docs/tree", h.handleAPIDocsTree)
 	h.mux.HandleFunc("/api/docs/file", h.handleAPIDocsFile)
 
