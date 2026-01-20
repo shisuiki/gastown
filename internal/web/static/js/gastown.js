@@ -596,7 +596,7 @@ async function loadSystemInfo(elementId) {
 }
 
 // ============================================================================
-// Claude Usage Monitoring
+// CLI Usage Monitoring
 // ============================================================================
 
 /**
@@ -622,88 +622,132 @@ function formatCost(cost) {
     return '$' + cost.toFixed(2);
 }
 
-/**
- * Shorten model name for display
- * @param {string} model - Full model name
- * @returns {string} Short model name
- */
-function shortModelName(model) {
-    return model
-        .replace('claude-', '')
-        .replace('deepseek-', 'ds-')
-        .replace('-20251101', '')
-        .replace('-20250929', '')
-        .replace('-20251001', '');
+function formatUsageValue(row) {
+    const parts = [];
+    if (row.tokens !== null && row.tokens !== undefined) {
+        parts.push(formatTokens(Math.round(row.tokens)) + ' tok');
+    }
+    if (row.cost !== null && row.cost !== undefined) {
+        parts.push(formatCost(row.cost));
+    }
+    if (parts.length === 0) {
+        return '-';
+    }
+    return parts.join(' · ');
 }
 
 /**
- * Render Claude usage info card content
- * @param {object} usage - Usage info from /api/claude/usage
+ * Render CLI usage info card content
+ * @param {object} summary - Usage info from /api/cli/usage
  * @returns {string} HTML content
  */
-function renderClaudeUsage(usage) {
-    if (!usage || usage.error) {
-        return '<p class="text-muted">' + escapeHtml(usage?.error || 'Unable to load Claude usage') + '</p>';
+function renderCLIUsage(summary) {
+    if (!summary || !summary.providers) {
+        return '<p class="text-muted">Unable to load CLI usage</p>';
     }
 
     let html = '<div class="system-stats">';
+    for (const provider of summary.providers) {
+        html += '<div class="sys-section"><span class="sys-label">' +
+            escapeHtml(provider.provider || 'Unknown') + '</span><span class="sys-value"></span></div>';
 
-    // Today's usage
-    if (usage.today) {
-        html += '<div class="sys-row"><span class="sys-label">Today</span><span class="sys-value">' +
-            formatCost(usage.today.total_cost) + '</span></div>';
-        html += '<div class="sys-row"><span class="sys-label">Tokens</span><span class="sys-value">' +
-            formatTokens(usage.today.total_tokens) + '</span></div>';
+        if (provider.error) {
+            html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">Status</span><span class="sys-value">' +
+                escapeHtml(provider.error) + '</span></div>';
+            continue;
+        }
 
-        // Model breakdown for today
-        if (usage.today.models && usage.today.models.length > 0) {
-            for (const m of usage.today.models) {
-                if (m.cost > 0.01) {  // Only show models with >$0.01 usage
-                    html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">' +
-                        shortModelName(m.model) + '</span><span class="sys-value">' +
-                        formatCost(m.cost) + '</span></div>';
-                }
-            }
+        if (!provider.rows || provider.rows.length === 0) {
+            html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">Status</span><span class="sys-value">No data</span></div>';
+            continue;
+        }
+
+        for (const row of provider.rows) {
+            html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">' +
+                escapeHtml(row.label || 'Usage') + '</span><span class="sys-value">' +
+                formatUsageValue(row) + '</span></div>';
         }
     }
-
-    // Active billing block
-    if (usage.active_block) {
-        html += '<div class="sys-section" style="margin-top:8px;padding-top:8px;border-top:1px solid #333">' +
-            '<span class="sys-label">Current Block</span><span class="sys-value">' +
-            formatCost(usage.active_block.total_cost) + '</span></div>';
-        if (usage.active_block.burn_rate > 0) {
-            html += '<div class="sys-row"><span class="sys-label">Burn Rate</span><span class="sys-value">' +
-                formatCost(usage.active_block.burn_rate) + '/hr</span></div>';
-        }
-        if (usage.active_block.projected_cost > 0) {
-            html += '<div class="sys-row"><span class="sys-label">Projected</span><span class="sys-value">' +
-                formatCost(usage.active_block.projected_cost) + '</span></div>';
-        }
-    }
-
-    // Total usage
-    if (usage.totals) {
-        html += '<div class="sys-section" style="margin-top:8px;padding-top:8px;border-top:1px solid #333">' +
-            '<span class="sys-label">All Time</span><span class="sys-value">' +
-            formatCost(usage.totals.total_cost) + '</span></div>';
-    }
-
     html += '</div>';
     return html;
 }
 
 /**
- * Fetch and update Claude usage display
+ * Fetch and update CLI usage display
  * @param {string} elementId - ID of element to update
  */
-async function loadClaudeUsage(elementId) {
+async function loadCLIUsage(elementId) {
     try {
-        const res = await fetch('/api/claude/usage');
+        const res = await fetch('/api/cli/usage');
         const data = await res.json();
         const el = document.getElementById(elementId);
         if (el) {
-            el.innerHTML = renderClaudeUsage(data);
+            el.innerHTML = renderCLIUsage(data);
+        }
+    } catch (e) {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = '<p class="text-danger">Error: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+}
+
+function progressClass(percent) {
+    if (percent >= 90) return 'danger';
+    if (percent >= 75) return 'warning';
+    return '';
+}
+
+function renderCLILimits(limits) {
+    if (!limits || !limits.providers) {
+        return '<p class="text-muted">Unable to load limits</p>';
+    }
+
+    let html = '<div class="system-stats">';
+    for (const provider of limits.providers) {
+        const period = provider.period || 'weekly';
+        const label = provider.provider ? (provider.provider + ' (' + period + ')') : 'Unknown';
+        let percent = provider.percent;
+        if ((percent === null || percent === undefined) && provider.used !== null && provider.used !== undefined &&
+            provider.limit !== null && provider.limit !== undefined && provider.limit > 0) {
+            percent = (provider.used / provider.limit) * 100;
+        }
+
+        const percentValue = percent !== null && percent !== undefined ? Math.min(Math.max(percent, 0), 100) : null;
+        const percentLabel = percentValue !== null ? percentValue.toFixed(1) + '%' : '-';
+        html += '<div class="sys-section"><span class="sys-label">' + escapeHtml(label) + '</span>' +
+            '<span class="sys-value">' + percentLabel + '</span></div>';
+
+        if (provider.error) {
+            html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">Status</span><span class="sys-value">' +
+                escapeHtml(provider.error) + '</span></div>';
+            continue;
+        }
+
+        if (provider.used !== null && provider.used !== undefined &&
+            provider.limit !== null && provider.limit !== undefined && provider.limit > 0) {
+            const unit = provider.unit ? (' ' + provider.unit) : '';
+            html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">Used</span><span class="sys-value">' +
+                provider.used + ' / ' + provider.limit + unit + '</span></div>';
+        }
+
+        if (percentValue !== null) {
+            const fillClass = progressClass(percentValue);
+            html += '<div class="progress-bar"><div class="progress-fill ' + fillClass + '" style="width: ' +
+                percentValue.toFixed(1) + '%;"></div></div>';
+        }
+    }
+    html += '</div>';
+    return html;
+}
+
+async function loadCLILimits(elementId) {
+    try {
+        const res = await fetch('/api/cli/limits');
+        const data = await res.json();
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.innerHTML = renderCLILimits(data);
         }
     } catch (e) {
         const el = document.getElementById(elementId);

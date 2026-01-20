@@ -13,19 +13,25 @@
             <span id="status-time" class="text-muted" style="font-size: 0.8rem;">Loading...</span>
         </div>
 
-        <div class="card" style="margin-bottom: 20px;">
-            <h2>⚡ Quick Actions</h2>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                <button class="btn btn-success" @click="runAction('daemon-status')">Daemon Status</button>
-                <button class="btn" @click="runAction('bd-sync')">Sync Beads</button>
-                <button class="btn" @click="runAction('bd-ready')">Show Ready</button>
-                <button class="btn btn-info" @click="showConvoyModal = true">+ Convoy</button>
-                <button class="btn btn-info" @click="showIssueModal = true">+ Issue</button>
+        <div class="dashboard-top">
+            <div class="card">
+                <h2>⚡ Quick Actions</h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                    <button class="btn btn-success" @click="runAction('daemon-status')">Daemon Status</button>
+                    <button class="btn" @click="runAction('bd-sync')">Sync Beads</button>
+                    <button class="btn" @click="runAction('bd-ready')">Show Ready</button>
+                    <button class="btn btn-info" @click="showConvoyModal = true">+ Convoy</button>
+                    <button class="btn btn-info" @click="showIssueModal = true">+ Issue</button>
+                </div>
+                <pre x-show="actionOutput" x-text="actionOutput" class="terminal-output" style="margin-top: 15px; max-height: 200px;"></pre>
             </div>
-            <pre x-show="actionOutput" x-text="actionOutput" class="terminal-output" style="margin-top: 15px; max-height: 200px;"></pre>
+            <div class="card">
+                <h2>📈 Weekly Limits</h2>
+                <div class="card-content" id="cli-limits">Loading...</div>
+            </div>
         </div>
 
-        <div class="grid">
+        <div class="dashboard-grid">
             <div class="card">
                 <h2>📊 Rigs</h2>
                 <div class="card-content" id="rigs-list">Loading...</div>
@@ -57,8 +63,8 @@
             </div>
 
             <div class="card">
-                <h2>🤖 Claude Usage</h2>
-                <div class="card-content" id="claude-usage">Loading...</div>
+                <h2>🤖 Token Usage</h2>
+                <div class="card-content" id="cli-usage">Loading...</div>
             </div>
 
             <div class="card" style="grid-column: 1 / -1;">
@@ -300,12 +306,14 @@
         loadIssues();
         loadRoleBeads();
         loadSystemInfo('system-info');
-        loadClaudeUsage('claude-usage');
+        loadCLIUsage('cli-usage');
+        loadCLILimits('cli-limits');
         setInterval(loadActivity, 30000);
         setInterval(loadIssues, 30000);
         setInterval(loadRoleBeads, 30000);
         setInterval(() => loadSystemInfo('system-info'), 60000);
-        setInterval(() => loadClaudeUsage('claude-usage'), 60000);
+        setInterval(() => loadCLIUsage('cli-usage'), 60000);
+        setInterval(() => loadCLILimits('cli-limits'), 60000);
         connectStatusSocket();
     </script>
 </body>

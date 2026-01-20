@@ -19,6 +19,18 @@ body {
    ================================================================ */
 .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+.dashboard-top {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: stretch;
+}
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(280px, 1fr));
+    gap: 15px;
+}
 
 /* ================================================================
    Navigation
@@ -311,9 +323,16 @@ code { font-family: "Menlo", "Monaco", "Consolas", monospace; }
 /* ================================================================
    Mobile Responsive
    ================================================================ */
+@media (max-width: 1200px) {
+    .dashboard-top { grid-template-columns: 1fr; }
+    .dashboard-grid { grid-template-columns: repeat(2, minmax(280px, 1fr)); }
+}
+
 @media (max-width: 768px) {
     .container { padding: 12px; }
     .grid { grid-template-columns: 1fr; gap: 12px; }
+    .dashboard-top { grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+    .dashboard-grid { grid-template-columns: 1fr; gap: 12px; }
     .card { padding: 15px; }
     .nav-toggle { display: block; }
     .nav-links {

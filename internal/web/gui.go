@@ -146,6 +146,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/version", h.handleAPIVersion)
 	h.mux.HandleFunc("/api/system", h.handleAPISystem)
 	h.mux.HandleFunc("/api/claude/usage", h.handleAPIClaudeUsage)
+	h.mux.HandleFunc("/api/cli/usage", h.handleAPICLIUsage)
+	h.mux.HandleFunc("/api/cli/limits", h.handleAPICLILimits)
 	h.mux.HandleFunc("/api/git/rigs", h.handleAPIGitRigs)
 	h.mux.HandleFunc("/api/git/commits", h.handleAPIGitCommits)
 	h.mux.HandleFunc("/api/git/branches", h.handleAPIGitBranches)

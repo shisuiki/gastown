@@ -329,6 +329,12 @@ const (
 
 	// ClaudeUsageCacheTTL for Claude usage data (expensive to fetch).
 	ClaudeUsageCacheTTL = 120 * time.Second
+
+	// CLIUsageCacheTTL for CLI usage summaries.
+	CLIUsageCacheTTL = 120 * time.Second
+
+	// CLILimitsCacheTTL for CLI weekly limit data.
+	CLILimitsCacheTTL = 120 * time.Second
 )
 
 // Preload triggers background refresh of common cache keys.
