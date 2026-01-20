@@ -40,7 +40,10 @@ func (e *bdError) ContainsError(substr string) bool {
 // extraEnv contains additional environment variables to set (e.g., "BD_IDENTITY=...").
 // Returns stdout bytes on success, or a *bdError on failure.
 func runBdCommand(args []string, workDir, beadsDir string, extraEnv ...string) ([]byte, error) {
-	cmd := exec.Command("bd", args...) //nolint:gosec // G204: bd is a trusted internal tool
+	// Use --no-daemon to avoid hangs when the daemon is unhealthy.
+	// Allow stale to keep mail responsive even when JSONL/db is out of sync.
+	fullArgs := append([]string{"--no-daemon", "--allow-stale"}, args...)
+	cmd := exec.Command("bd", fullArgs...) //nolint:gosec // G204: bd is a trusted internal tool
 	cmd.Dir = workDir
 
 	env := append(cmd.Environ(), "BEADS_DIR="+beadsDir)
