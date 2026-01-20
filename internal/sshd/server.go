@@ -29,6 +29,10 @@ type Server struct {
 	authorizedKeys map[string]bool
 	mu         sync.RWMutex
 	running    bool
+
+	// Security options
+	allowPasswordAuth  bool
+	allowShellCommands bool
 }
 
 // Config holds SSH server configuration.
@@ -39,6 +43,10 @@ type Config struct {
 	WorkDir        string
 	HostKeyPath    string
 	AuthorizedKeys []string
+
+	// Security options - both default to false for security
+	AllowPasswordAuth bool // If true, accept any password (DEV ONLY - insecure)
+	AllowShellCommands bool // If true, enable run/sh/bash commands (DEV ONLY - insecure)
 }
 
 // New creates a new SSH server for an agent.
@@ -50,12 +58,22 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{
-		port:           cfg.Port,
-		agentName:      cfg.AgentName,
-		agentRole:      cfg.AgentRole,
-		workDir:        cfg.WorkDir,
-		hostKey:        hostKey,
-		authorizedKeys: make(map[string]bool),
+		port:               cfg.Port,
+		agentName:          cfg.AgentName,
+		agentRole:          cfg.AgentRole,
+		workDir:            cfg.WorkDir,
+		hostKey:            hostKey,
+		authorizedKeys:     make(map[string]bool),
+		allowPasswordAuth:  cfg.AllowPasswordAuth,
+		allowShellCommands: cfg.AllowShellCommands,
+	}
+
+	// Log warnings when insecure modes are enabled
+	if cfg.AllowPasswordAuth {
+		log.Printf("WARNING: SSH password authentication enabled for %s - DEV MODE ONLY, accepts any password", cfg.AgentName)
+	}
+	if cfg.AllowShellCommands {
+		log.Printf("WARNING: SSH shell commands (run/sh/bash) enabled for %s - DEV MODE ONLY, allows arbitrary command execution", cfg.AgentName)
 	}
 
 	// Parse authorized keys
@@ -340,16 +358,16 @@ func (s *Server) executeCommand(command string) string {
 		return s.runCmd("git", args...)
 
 	case "run", "sh", "bash":
-		// SECURITY: Shell execution is gated by GT_SSH_ALLOW_SHELL env var.
-		// This prevents arbitrary command execution unless explicitly enabled.
-		if os.Getenv("GT_SSH_ALLOW_SHELL") != "1" {
-			return "Shell commands disabled. Set GT_SSH_ALLOW_SHELL=1 to enable.\n"
+		// Shell commands are disabled by default for security
+		if !s.allowShellCommands {
+			return "Error: Shell commands (run/sh/bash) are disabled for security.\nContact your administrator to enable AllowShellCommands if needed for development.\n"
 		}
 		// Execute arbitrary shell command via bash -c
 		// This allows full shell syntax including &&, |, ;, etc.
 		if len(args) == 0 {
 			return "Usage: run <command>\nExample: run ls -la && pwd\n"
 		}
+		log.Printf("WARNING: Executing shell command: %s - DEV MODE", strings.Join(args, " "))
 		// Join args back into a single command string
 		shellCmd := strings.Join(args, " ")
 		return s.runShell(shellCmd)
@@ -406,9 +424,9 @@ func (s *Server) runShell(command string) string {
 }
 
 func (s *Server) helpText() string {
-	shellStatus := "disabled"
-	if os.Getenv("GT_SSH_ALLOW_SHELL") == "1" {
-		shellStatus = "enabled"
+	shellStatus := "(disabled - requires AllowShellCommands)"
+	if s.allowShellCommands {
+		shellStatus = "(enabled - DEV MODE)"
 	}
 
 	return fmt.Sprintf(`Gas Town SSH Commands:
@@ -428,8 +446,8 @@ func (s *Server) helpText() string {
   cat <file> - Show file contents
   git <cmd>  - Run git commands
 
-  run <cmd>  - Execute shell command [%s]
-               (requires GT_SSH_ALLOW_SHELL=1)
+  run <cmd>  - Execute shell command %s
+               Example: run ls -la && pwd
                Aliases: sh, bash
 
   help       - Show this help
@@ -452,10 +470,18 @@ func (s *Server) publicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*s
 }
 
 func (s *Server) passwordCallback(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
-	// SECURITY: Password authentication is disabled.
-	// Only public key authentication is allowed.
-	log.Printf("SSH password auth rejected for user %q from %s", conn.User(), conn.RemoteAddr())
-	return nil, fmt.Errorf("password authentication disabled, use public key")
+	// Password auth is disabled by default for security
+	// Only enabled when AllowPasswordAuth is explicitly set (dev mode only)
+	if !s.allowPasswordAuth {
+		return nil, fmt.Errorf("password authentication disabled")
+	}
+
+	log.Printf("WARNING: Accepting password auth from %s (user: %s) - DEV MODE", conn.RemoteAddr(), conn.User())
+	return &ssh.Permissions{
+		Extensions: map[string]string{
+			"user": conn.User(),
+		},
+	}, nil
 }
 
 func loadOrGenerateHostKey(path string) (ssh.Signer, error) {
