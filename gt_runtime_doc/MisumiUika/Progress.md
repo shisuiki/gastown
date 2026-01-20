@@ -8,3 +8,4 @@
 - Added sync-script warnings and deployment docs guidance for the system-level service conflict.
 - Added a web guard script to kill stray `gt gui` processes and switched sync restarts to system-level service.
 - Restarted system-level `gastown-gui.service` and reloaded sync watcher to pick up new script.
+- Fixed docs root resolution to honor `GASTOWN_SRC`/`GT_ROOT`/`GASTOWN_DOCS_ROOT` for laplace repo.
