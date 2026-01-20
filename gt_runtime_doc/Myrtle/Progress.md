@@ -1,5 +1,11 @@
 # Progress Log
 
+## 2026-01-21
+
+### Web UI service doc update
+
+1. Documented current system-level `gastown-gui.service` + user-level `gastown-sync.service` split in `docs/WEBUI-DEPLOY.md`.
+
 ## 2026-01-20
 
 ### P2 Incident: Docs Root Regression
