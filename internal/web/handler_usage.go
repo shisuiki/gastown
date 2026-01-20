@@ -1,10 +1,12 @@
 package web
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -105,7 +107,39 @@ func (h *GUIHandler) fetchClaudeUsageProvider() CLIUsageProvider {
 	}
 
 	usage := h.fetchClaudeUsage()
-	if usage.Today == nil {
+	if usage.Today != nil {
+		tokens := float64(usage.Today.TotalTokens)
+		cost := usage.Today.TotalCost
+		label := "Today"
+		if usage.Today.Date != "" {
+			label = fmt.Sprintf("Today (%s)", usage.Today.Date)
+		}
+		provider.Rows = append(provider.Rows, CLIUsageRow{
+			Label:  label,
+			Tokens: &tokens,
+			Cost:   &cost,
+		})
+
+		if len(usage.Today.Models) > 0 {
+			for _, model := range usage.Today.Models {
+				modelTokens := model.InputTokens + model.OutputTokens + model.CacheCreate + model.CacheRead
+				if modelTokens == 0 && model.Cost == 0 {
+					continue
+				}
+				modelTokenValue := float64(modelTokens)
+				modelCost := model.Cost
+				provider.Rows = append(provider.Rows, CLIUsageRow{
+					Label:  model.Model,
+					Tokens: &modelTokenValue,
+					Cost:   &modelCost,
+				})
+			}
+		}
+		return provider
+	}
+
+	stats, err := loadClaudeStatsCache()
+	if err != nil {
 		if usage.Error != "" {
 			provider.Error = usage.Error
 		} else {
@@ -114,32 +148,42 @@ func (h *GUIHandler) fetchClaudeUsageProvider() CLIUsageProvider {
 		return provider
 	}
 
-	tokens := float64(usage.Today.TotalTokens)
-	cost := usage.Today.TotalCost
+	date, tokensByModel := stats.latestDailyTokens()
+	if len(tokensByModel) == 0 {
+		provider.Error = "No daily token data"
+		return provider
+	}
+
+	totalTokens := 0.0
+	for _, val := range tokensByModel {
+		totalTokens += val
+	}
 	label := "Today"
-	if usage.Today.Date != "" {
-		label = fmt.Sprintf("Today (%s)", usage.Today.Date)
+	if date != "" {
+		label = fmt.Sprintf("Today (%s)", date)
 	}
 	provider.Rows = append(provider.Rows, CLIUsageRow{
 		Label:  label,
-		Tokens: &tokens,
-		Cost:   &cost,
+		Tokens: &totalTokens,
 	})
 
-	if len(usage.Today.Models) > 0 {
-		for _, model := range usage.Today.Models {
-			modelTokens := model.InputTokens + model.OutputTokens + model.CacheCreate + model.CacheRead
-			if modelTokens == 0 && model.Cost == 0 {
-				continue
-			}
-			modelTokenValue := float64(modelTokens)
-			modelCost := model.Cost
-			provider.Rows = append(provider.Rows, CLIUsageRow{
-				Label:  model.Model,
-				Tokens: &modelTokenValue,
-				Cost:   &modelCost,
-			})
-		}
+	type modelRow struct {
+		name   string
+		tokens float64
+	}
+	var models []modelRow
+	for model, tokenCount := range tokensByModel {
+		models = append(models, modelRow{name: model, tokens: tokenCount})
+	}
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].tokens > models[j].tokens
+	})
+	for _, model := range models {
+		value := model.tokens
+		provider.Rows = append(provider.Rows, CLIUsageRow{
+			Label:  model.name,
+			Tokens: &value,
+		})
 	}
 
 	return provider
@@ -149,18 +193,27 @@ func (h *GUIHandler) fetchCodexUsageProvider() CLIUsageProvider {
 	provider := CLIUsageProvider{Provider: "Codex"}
 
 	cmd := strings.TrimSpace(os.Getenv("GT_CODEX_USAGE_CMD"))
-	if cmd == "" {
-		provider.Error = "GT_CODEX_USAGE_CMD not set"
+	if cmd != "" {
+		rows, err := usageRowsFromCommand(cmd)
+		if err != nil {
+			provider.Error = fmt.Sprintf("GT_CODEX_USAGE_CMD: %v", err)
+			return provider
+		}
+		provider.Rows = rows
 		return provider
 	}
 
-	rows, err := usageRowsFromCommand(cmd)
+	tokens, err := fetchCodexDailyTokens()
 	if err != nil {
-		provider.Error = fmt.Sprintf("GT_CODEX_USAGE_CMD: %v", err)
+		provider.Error = err.Error()
 		return provider
 	}
-
-	provider.Rows = rows
+	provider.Rows = []CLIUsageRow{
+		{
+			Label:  "Today",
+			Tokens: &tokens,
+		},
+	}
 	return provider
 }
 
@@ -393,17 +446,23 @@ func (h *GUIHandler) fetchClaudeWeeklyLimitFromEnv(status CLILimitStatus) CLILim
 	limitTokens, hasLimitTokens := parseEnvFloat("GT_CLAUDE_WEEKLY_LIMIT_TOKENS")
 
 	if !hasLimitUSD && !hasLimitTokens {
-		status.Error = "Set GT_CLAUDE_LIMIT_CMD or GT_CLAUDE_WEEKLY_LIMIT_USD/GT_CLAUDE_WEEKLY_LIMIT_TOKENS"
-		return status
-	}
-
-	weeklyTokens, weeklyCost, err := fetchClaudeWeeklyTotals()
-	if err != nil {
-		status.Error = fmt.Sprintf("ccusage: %v", err)
+		weeklyTokens, err := fetchClaudeWeeklyTokensFromStats()
+		if err != nil {
+			status.Error = err.Error()
+			return status
+		}
+		used := float64(weeklyTokens)
+		status.Used = &used
+		status.Unit = "tokens"
 		return status
 	}
 
 	if hasLimitUSD {
+		_, weeklyCost, err := fetchClaudeWeeklyTotals()
+		if err != nil {
+			status.Error = fmt.Sprintf("ccusage: %v", err)
+			return status
+		}
 		used := weeklyCost
 		limit := limitUSD
 		status.Used = &used
@@ -412,6 +471,11 @@ func (h *GUIHandler) fetchClaudeWeeklyLimitFromEnv(status CLILimitStatus) CLILim
 		return status
 	}
 
+	weeklyTokens, err := fetchClaudeWeeklyTokensFromStats()
+	if err != nil {
+		status.Error = err.Error()
+		return status
+	}
 	used := float64(weeklyTokens)
 	limit := limitTokens
 	status.Used = &used
@@ -425,7 +489,17 @@ func (h *GUIHandler) fetchCodexWeeklyLimitFromEnv(status CLILimitStatus) CLILimi
 	limitTokens, hasLimitTokens := parseEnvFloat("GT_CODEX_WEEKLY_LIMIT_TOKENS")
 
 	if !hasLimitUSD && !hasLimitTokens {
-		status.Error = "Set GT_CODEX_LIMIT_CMD or GT_CODEX_WEEKLY_LIMIT_USD/GT_CODEX_WEEKLY_LIMIT_TOKENS"
+		rateLimit, err := fetchCodexRateLimit()
+		if err != nil {
+			status.Error = err.Error()
+			return status
+		}
+		status.Percent = &rateLimit.UsedPercent
+		if rateLimit.WindowMinutes >= 10080 {
+			status.Period = "weekly"
+		} else if rateLimit.WindowMinutes > 0 {
+			status.Period = fmt.Sprintf("%dm", rateLimit.WindowMinutes)
+		}
 		return status
 	}
 
@@ -534,4 +608,251 @@ func parseEnvFloat(envVar string) (float64, bool) {
 		return 0, false
 	}
 	return val, true
+}
+
+type claudeStatsCache struct {
+	DailyModelTokens []struct {
+		Date          string             `json:"date"`
+		TokensByModel map[string]float64 `json:"tokensByModel"`
+	} `json:"dailyModelTokens"`
+}
+
+func loadClaudeStatsCache() (*claudeStatsCache, error) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return nil, fmt.Errorf("HOME not set")
+	}
+	path := filepath.Join(home, ".claude", "stats-cache.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var stats claudeStatsCache
+	if err := json.Unmarshal(data, &stats); err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}
+
+func (c *claudeStatsCache) latestDailyTokens() (string, map[string]float64) {
+	if c == nil || len(c.DailyModelTokens) == 0 {
+		return "", nil
+	}
+	latest := c.DailyModelTokens[0]
+	latestTime, _ := time.Parse("2006-01-02", latest.Date)
+	for _, entry := range c.DailyModelTokens[1:] {
+		entryTime, err := time.Parse("2006-01-02", entry.Date)
+		if err != nil {
+			continue
+		}
+		if entryTime.After(latestTime) {
+			latest = entry
+			latestTime = entryTime
+		}
+	}
+	return latest.Date, latest.TokensByModel
+}
+
+func fetchClaudeWeeklyTokensFromStats() (int64, error) {
+	stats, err := loadClaudeStatsCache()
+	if err != nil {
+		return 0, err
+	}
+	if len(stats.DailyModelTokens) == 0 {
+		return 0, fmt.Errorf("no daily token data")
+	}
+
+	type daily struct {
+		date   time.Time
+		tokens float64
+	}
+	var days []daily
+	for _, entry := range stats.DailyModelTokens {
+		date, err := time.Parse("2006-01-02", entry.Date)
+		if err != nil {
+			continue
+		}
+		total := 0.0
+		for _, val := range entry.TokensByModel {
+			total += val
+		}
+		days = append(days, daily{date: date, tokens: total})
+	}
+	if len(days) == 0 {
+		return 0, fmt.Errorf("no daily token data")
+	}
+
+	sort.Slice(days, func(i, j int) bool {
+		return days[i].date.Before(days[j].date)
+	})
+	start := len(days) - 7
+	if start < 0 {
+		start = 0
+	}
+	sum := 0.0
+	for i := start; i < len(days); i++ {
+		sum += days[i].tokens
+	}
+	return int64(sum), nil
+}
+
+type codexTokenUsage struct {
+	InputTokens       float64 `json:"input_tokens"`
+	CachedInputTokens float64 `json:"cached_input_tokens"`
+	OutputTokens      float64 `json:"output_tokens"`
+	ReasoningTokens   float64 `json:"reasoning_output_tokens"`
+	TotalTokens       float64 `json:"total_tokens"`
+}
+
+type codexRateLimit struct {
+	UsedPercent   float64 `json:"used_percent"`
+	WindowMinutes int     `json:"window_minutes"`
+	ResetsAt      int64   `json:"resets_at"`
+}
+
+type codexTokenCountPayload struct {
+	Type string `json:"type"`
+	Info struct {
+		LastTokenUsage codexTokenUsage `json:"last_token_usage"`
+	} `json:"info"`
+	RateLimits struct {
+		Primary   codexRateLimit `json:"primary"`
+		Secondary codexRateLimit `json:"secondary"`
+	} `json:"rate_limits"`
+}
+
+type codexEvent struct {
+	Type    string                 `json:"type"`
+	Payload codexTokenCountPayload `json:"payload"`
+}
+
+func fetchCodexDailyTokens() (float64, error) {
+	root := codexSessionsRoot()
+	if root == "" {
+		return 0, fmt.Errorf("codex sessions not found")
+	}
+	today := time.Now()
+	dir := filepath.Join(root, today.Format("2006"), today.Format("01"), today.Format("02"))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, fmt.Errorf("codex sessions not found")
+	}
+
+	total := 0.0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(file)
+		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+		for scanner.Scan() {
+			var event codexEvent
+			if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+				continue
+			}
+			if event.Type != "event_msg" || event.Payload.Type != "token_count" {
+				continue
+			}
+			usage := event.Payload.Info.LastTokenUsage
+			if usage.TotalTokens == 0 {
+				usage.TotalTokens = usage.InputTokens + usage.OutputTokens + usage.CachedInputTokens + usage.ReasoningTokens
+			}
+			total += usage.TotalTokens
+		}
+		_ = file.Close()
+	}
+
+	if total == 0 {
+		return 0, fmt.Errorf("no codex token data")
+	}
+	return total, nil
+}
+
+func fetchCodexRateLimit() (codexRateLimit, error) {
+	root := codexSessionsRoot()
+	if root == "" {
+		return codexRateLimit{}, fmt.Errorf("codex sessions not found")
+	}
+	latestPath, err := findLatestCodexSession(root)
+	if err != nil {
+		return codexRateLimit{}, err
+	}
+
+	file, err := os.Open(latestPath)
+	if err != nil {
+		return codexRateLimit{}, err
+	}
+	defer func() { _ = file.Close() }()
+
+	var lastLimit *codexRateLimit
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		var event codexEvent
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			continue
+		}
+		if event.Type != "event_msg" || event.Payload.Type != "token_count" {
+			continue
+		}
+		limit := pickCodexRateLimit(event.Payload.RateLimits.Primary, event.Payload.RateLimits.Secondary)
+		lastLimit = &limit
+	}
+	if lastLimit == nil {
+		return codexRateLimit{}, fmt.Errorf("codex rate limits unavailable")
+	}
+	return *lastLimit, nil
+}
+
+func codexSessionsRoot() string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return ""
+	}
+	root := filepath.Join(home, ".codex", "sessions")
+	if _, err := os.Stat(root); err != nil {
+		return ""
+	}
+	return root
+}
+
+func findLatestCodexSession(root string) (string, error) {
+	var latestPath string
+	var latestMod time.Time
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if latestPath == "" || info.ModTime().After(latestMod) {
+			latestPath = path
+			latestMod = info.ModTime()
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if latestPath == "" {
+		return "", fmt.Errorf("codex sessions not found")
+	}
+	return latestPath, nil
+}
+
+func pickCodexRateLimit(primary, secondary codexRateLimit) codexRateLimit {
+	if secondary.WindowMinutes >= primary.WindowMinutes {
+		return secondary
+	}
+	return primary
 }

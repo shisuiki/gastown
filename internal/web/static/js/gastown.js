@@ -724,13 +724,15 @@ function renderCLILimits(limits) {
             continue;
         }
 
-        if (provider.used !== null && provider.used !== undefined &&
-            provider.limit !== null && provider.limit !== undefined && provider.limit > 0) {
+        if (provider.used !== null && provider.used !== undefined) {
             const unit = provider.unit || '';
             const usedLabel = formatLimitValue(provider.used, unit);
-            const limitLabel = formatLimitValue(provider.limit, unit);
+            let limitLabel = '';
+            if (provider.limit !== null && provider.limit !== undefined && provider.limit > 0) {
+                limitLabel = ' / ' + formatLimitValue(provider.limit, unit);
+            }
             html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">Used</span><span class="sys-value">' +
-                usedLabel + ' / ' + limitLabel + '</span></div>';
+                usedLabel + limitLabel + '</span></div>';
         }
 
         if (percentValue !== null) {
