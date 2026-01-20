@@ -223,7 +223,7 @@ func (d *Daemon) safeHeartbeat(state *State) {
 			// Heartbeat failed but daemon continues - will retry next cycle
 		}
 	}()
-	d.heartbeat(state)
+	d.safeHeartbeat(state)
 }
 
 // heartbeat performs one heartbeat cycle.
@@ -548,24 +548,17 @@ func (d *Daemon) ensureRefineryRunning(rigName string) {
 	}
 	mgr := refinery.NewManager(r)
 
-	err := mgr.Start(false, "")
-	if err != nil && err != refinery.ErrAlreadyRunning {
+	if err := mgr.Start(false, ""); err != nil {
+		if err == refinery.ErrAlreadyRunning {
+			// Already running - this is the expected case when fix is working
+			d.logger.Printf("Refinery for %s already running, skipping spawn", rigName)
+			return
+		}
 		d.logger.Printf("Error starting refinery for %s: %v", rigName, err)
 		return
 	}
-	if err == refinery.ErrAlreadyRunning {
-		d.logger.Printf("Refinery for %s already running", rigName)
-	} else {
-		d.logger.Printf("Refinery session for %s started successfully", rigName)
-	}
 
-	// Ensure patrol molecule attached
-	agentAddr := fmt.Sprintf("%s/refinery", rigName)
-	if attached, attachErr := patrol.EnsurePatrolMoleculeAttached(r.Path, agentAddr); attachErr != nil {
-		d.logger.Printf("Warning: failed to ensure patrol molecule attached to %s: %v", agentAddr, attachErr)
-	} else if attached {
-		d.logger.Printf("Attached patrol molecule to %s", agentAddr)
-	}
+	d.logger.Printf("Refinery session for %s started successfully", rigName)
 }
 
 // getKnownRigs returns list of registered rig names.

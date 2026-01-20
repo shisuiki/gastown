@@ -66,15 +66,8 @@ do_sync() {
             log "Daemon restarted"
         fi
 
-        # Restart web service if managed by systemd (prefer system scope)
-        if systemctl is-active gastown-gui.service &>/dev/null; then
-            log "Restarting system-level gastown-gui.service..."
-            if sudo -n systemctl restart gastown-gui.service; then
-                log "System web service restarted"
-            else
-                log "ERROR: Failed to restart gastown-gui.service (sudo required)."
-            fi
-        elif systemctl --user is-active gastown-web.service &>/dev/null; then
+        # Restart web service if managed by systemd
+        if systemctl --user is-active gastown-web.service &>/dev/null; then
             log "Restarting gastown-web.service..."
             systemctl --user restart gastown-web.service
             log "Web service restarted"

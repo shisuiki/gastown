@@ -26,8 +26,7 @@ http://localhost:8080 (Web UI)
 
 ### 2. Systemd Services
 
-Two user-level systemd services manage the deployment by default. If you prefer
-system-level services, see the optional configuration below.
+Two user-level systemd services manage the deployment:
 
 #### gastown-web.service
 Runs the Web UI server.
@@ -69,19 +68,6 @@ Environment=GASTOWN_SYNC_INTERVAL=60
 
 [Install]
 WantedBy=default.target
-```
-
-#### Optional: gastown-gui.service (system-level)
-If you want the Web UI to run as a system service, use a system-level unit and
-disable the user-level `gastown-web.service`. Ensure the sync script can restart
-the system unit (requires passwordless sudo for `systemctl restart gastown-gui.service`).
-
-The system unit should include a guard to kill stray `gt gui` processes that
-occupy port 8080 before start:
-
-```ini
-ExecStartPre=/home/shisui/gt/scripts/gastown-web-guard.sh
-ExecStart=/home/shisui/go/bin/gt gui --port 8080
 ```
 
 ### 3. Sync Script
@@ -226,10 +212,6 @@ journalctl --user -u gastown-web -n 50
 # - bd not found: ensure PATH includes ~/go/bin
 # - Not in workspace: ensure WorkingDirectory is set to ~/gt
 ```
-
-If a system-level `gastown-gui.service` is still running, it will own port 8080
-and prevent the user service from restarting. Disable the system service or migrate
-fully to user-level services so auto-redeploy can take effect.
 
 ### Sync not working
 
