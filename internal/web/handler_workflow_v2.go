@@ -392,6 +392,7 @@ func (h *GUIHandler) handleAPICreateBeadV2(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	req.Title = strings.TrimSpace(req.Title)
 	if req.Title == "" {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -400,13 +401,15 @@ func (h *GUIHandler) handleAPICreateBeadV2(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	args := []string{"create", req.Title}
+	workDir := webWorkDir()
+	args := webBeadsArgs("create", "--json", "--title="+req.Title)
 
+	issueType := normalizeIssueType(req.Type)
+	if issueType != "" {
+		args = append(args, "--type="+issueType)
+	}
 	if req.Description != "" {
 		args = append(args, "--description="+req.Description)
-	}
-	if req.Type != "" {
-		args = append(args, "--type="+req.Type)
 	}
 	if req.Priority > 0 {
 		args = append(args, "--priority="+strconv.Itoa(req.Priority))
@@ -414,35 +417,36 @@ func (h *GUIHandler) handleAPICreateBeadV2(w http.ResponseWriter, r *http.Reques
 	if req.Assignee != "" {
 		args = append(args, "--assignee="+req.Assignee)
 	}
+
+	labels := make([]string, 0, len(req.Labels))
 	for _, label := range req.Labels {
-		args = append(args, "--label="+label)
+		label = strings.TrimSpace(label)
+		if label != "" {
+			labels = append(labels, label)
+		}
+	}
+	if len(labels) > 0 {
+		args = append(args, "--labels="+strings.Join(labels, ","))
 	}
 
 	cmd, cancel := command("bd", args...)
 	defer cancel()
+	cmd.Dir = workDir
+	cmd.Env = webBeadsEnv(workDir)
 	output, err := cmd.CombinedOutput()
 
-	// Try to extract the created bead ID from output
-	var beadID string
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "Created") || strings.Contains(line, "created") {
-			// Look for ID pattern like "hq-xxx" or "te-xxx"
-			parts := strings.Fields(line)
-			for _, part := range parts {
-				if strings.Contains(part, "-") && len(part) > 3 && len(part) < 20 {
-					beadID = strings.Trim(part, ":")
-					break
-				}
-			}
-		}
-	}
+	outMsg, beadID := parseCreateOutput(output)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": err == nil,
-		"output":  string(output),
+		"output":  outMsg,
 		"bead_id": beadID,
-		"error":   err != nil,
+		"error": func() string {
+			if err == nil {
+				return ""
+			}
+			return err.Error()
+		}(),
 	})
 }
 

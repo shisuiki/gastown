@@ -2,8 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/steveyegge/gastown/internal/beads"
 )
 
 // ActionRequest represents a request to run a GT action.
@@ -111,6 +115,7 @@ func (h *GUIHandler) handleAPICreateConvoy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	req.Title = strings.TrimSpace(req.Title)
 	if req.Title == "" {
 		json.NewEncoder(w).Encode(ActionResponse{
 			Success: false,
@@ -119,14 +124,25 @@ func (h *GUIHandler) handleAPICreateConvoy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Build command: gt convoy create <title> [issues...]
-	args := []string{"convoy", "create", req.Title}
-	if len(req.Issues) > 0 {
-		args = append(args, req.Issues...)
+	workDir := webTownRoot()
+	convoyID := fmt.Sprintf("hq-cv-%s", generateShortID())
+	description := fmt.Sprintf("Convoy tracking %d issues", len(req.Issues))
+
+	args := webBeadsArgs(
+		"create",
+		"--type=convoy",
+		"--id="+convoyID,
+		"--title="+req.Title,
+		"--description="+description,
+	)
+	if beads.NeedsForceForID(convoyID) {
+		args = append(args, "--force")
 	}
 
-	cmd, cancel := command("gt", args...)
+	cmd, cancel := command("bd", args...)
 	defer cancel()
+	cmd.Dir = workDir
+	cmd.Env = webBeadsEnv(workDir)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -138,9 +154,44 @@ func (h *GUIHandler) handleAPICreateConvoy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	trackedCount := 0
+	var depErrors []string
+	for _, issueID := range req.Issues {
+		issueID = strings.TrimSpace(issueID)
+		if issueID == "" {
+			continue
+		}
+		trackedCount++
+		depArgs := webBeadsArgs("dep", "add", convoyID, issueID, "--type=tracks")
+		depCmd, depCancel := command("bd", depArgs...)
+		depCmd.Dir = workDir
+		depCmd.Env = webBeadsEnv(workDir)
+		depOutput, depErr := depCmd.CombinedOutput()
+		depCancel()
+		if depErr != nil {
+			msg := strings.TrimSpace(string(depOutput))
+			if msg == "" {
+				msg = depErr.Error()
+			}
+			depErrors = append(depErrors, fmt.Sprintf("%s: %s", issueID, msg))
+		}
+	}
+
+	outputMsg := fmt.Sprintf("Created convoy %s", convoyID)
+	if trackedCount > 0 {
+		outputMsg = fmt.Sprintf("%s tracking %d issue(s)", outputMsg, trackedCount)
+	}
+	if len(depErrors) > 0 {
+		outputMsg = outputMsg + "\nWarnings:\n" + strings.Join(depErrors, "\n")
+	}
+
+	if outputMsg == "" {
+		outputMsg = strings.TrimSpace(string(output))
+	}
+
 	json.NewEncoder(w).Encode(ActionResponse{
 		Success: true,
-		Output:  string(output),
+		Output:  outputMsg,
 	})
 }
 
@@ -170,6 +221,7 @@ func (h *GUIHandler) handleAPICreateBead(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	req.Title = strings.TrimSpace(req.Title)
 	if req.Title == "" {
 		json.NewEncoder(w).Encode(ActionResponse{
 			Success: false,
@@ -179,10 +231,7 @@ func (h *GUIHandler) handleAPICreateBead(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Default type to task
-	issueType := req.Type
-	if issueType == "" {
-		issueType = "task"
-	}
+	issueType := normalizeIssueType(req.Type)
 
 	// Default priority to 2
 	priority := req.Priority
@@ -190,14 +239,22 @@ func (h *GUIHandler) handleAPICreateBead(w http.ResponseWriter, r *http.Request)
 		priority = 2
 	}
 
-	// Build command: bd create -t <type> "<title>" -p <priority>
-	args := []string{"create", "-t", issueType, req.Title, "-p", string(rune('0' + priority))}
+	workDir := webWorkDir()
+	args := webBeadsArgs(
+		"create",
+		"--json",
+		"--title="+req.Title,
+		"--type="+issueType,
+		"--priority="+strconv.Itoa(priority),
+	)
 	if req.Body != "" {
-		args = append(args, "-b", req.Body)
+		args = append(args, "--description="+req.Body)
 	}
 
 	cmd, cancel := command("bd", args...)
 	defer cancel()
+	cmd.Dir = workDir
+	cmd.Env = webBeadsEnv(workDir)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -209,8 +266,7 @@ func (h *GUIHandler) handleAPICreateBead(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Extract the bead ID from output if possible
-	outStr := strings.TrimSpace(string(output))
+	outStr, _ := parseCreateOutput(output)
 	json.NewEncoder(w).Encode(ActionResponse{
 		Success: true,
 		Output:  outStr,
