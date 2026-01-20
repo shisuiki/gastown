@@ -1,17 +1,17 @@
 # Roadmap
 
 ## Phase 0: Service inventory
-- Inspect user systemd units and deployment scripts.
-- Identify missing or renamed services and broken paths.
+- [x] Inspect user systemd units and deployment scripts.
+- [x] Identify missing or renamed services and broken paths.
 
 ## Phase 1: Restore sync script
-- Ensure `gastown-sync.sh` exists at the path used by systemd.
-- Align webhook script path with docs.
+- [x] Ensure `gastown-sync.sh` exists at the path used by systemd.
+- [x] Align webhook script path with docs.
 
 ## Phase 2: Service compatibility
-- Restore or alias `gastown-gui.service` to the current web service.
-- Reload and restart affected units.
+- [x] Restore or alias `gastown-gui.service` to the current web service.
+- [x] Reload and restart affected units.
 
 ## Phase 3: Verification
-- Confirm sync service can run on restart.
-- Validate web service restart on sync.
+- [x] Confirm sync service can run on restart.
+- [x] Validate web service restart on sync.
