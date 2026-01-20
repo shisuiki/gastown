@@ -54,6 +54,36 @@
                 </div>
             </div>
         </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2>🧾 History</h2>
+            <div class="history-controls">
+                <div class="history-pagination">
+                    <button id="mayor-history-prev" class="btn btn-secondary btn-sm">Prev</button>
+                    <button id="mayor-history-next" class="btn btn-secondary btn-sm">Next</button>
+                    <span id="mayor-history-page" class="text-muted">Page 1 / 1</span>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="text-muted">Rows</span>
+                    <select id="mayor-history-page-size" class="input-field" style="width: 90px;">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Target</th>
+                        <th>Context</th>
+                    </tr>
+                </thead>
+                <tbody id="mayor-history-body"></tbody>
+            </table>
+        </div>
     </div>
 
     {{template "scripts" .}}
@@ -62,6 +92,15 @@
         // ================================================================
         // Mayor Page JavaScript
         // ================================================================
+
+        const history = new ActionHistory({
+            tableBodyEl: '#mayor-history-body',
+            pageInfoEl: '#mayor-history-page',
+            prevBtn: '#mayor-history-prev',
+            nextBtn: '#mayor-history-next',
+            pageSizeSelectEl: '#mayor-history-page-size',
+            storageKey: 'mayor-history'
+        });
 
         // Initialize terminal widget with fixed session (hq-mayor)
         const terminal = new TerminalWidget({
@@ -73,6 +112,9 @@
             sessionId: 'hq-mayor',
             streamUrl: '/api/mayor/terminal',
             sendUrl: '/api/terminal/send',
+            targetLabel: 'Mayor (hq-mayor)',
+            onSend: (entry) => history.addEntry(entry),
+            onSendKey: (entry) => history.addEntry(entry),
         });
 
         async function sendMailToMayor() {

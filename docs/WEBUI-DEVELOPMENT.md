@@ -37,6 +37,7 @@ This document tracks WebUI development conventions and current architecture.
 - Shared styles: `internal/web/static/css/gastown.css`.
 - Shared JS utilities: `internal/web/static/js/gastown.js`.
 - Terminals use SSE streaming via `internal/web/static/js/terminal.js`.
+- Terminal/Major history uses `ActionHistory` in `internal/web/static/js/terminal.js` with localStorage-backed state.
 
 ## Data Layer Modernization (Plan)
 

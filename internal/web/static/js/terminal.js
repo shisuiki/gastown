@@ -28,6 +28,10 @@ class TerminalWidget {
             sendUrl: '/api/terminal/send',
             showInput: true,
             showSessionInfo: true,
+            sendEnter: true,
+            onSend: null,
+            onSendKey: null,
+            targetLabel: null,
         }, options);
 
         // Get DOM elements
@@ -44,6 +48,8 @@ class TerminalWidget {
         this.connected = false;
         this.sessionId = this.options.sessionId || null;
         this.lastPing = 0;
+        this.onSend = this.options.onSend;
+        this.onSendKey = this.options.onSendKey;
 
         // Bind methods
         this.toggle = this.toggle.bind(this);
@@ -90,6 +96,22 @@ class TerminalWidget {
             return this.sessionSelectEl.value;
         }
         return this.sessionId;
+    }
+
+    /**
+     * Get human-friendly target label for history.
+     */
+    getTargetLabel() {
+        if (this.sessionSelectEl && this.sessionSelectEl.selectedIndex >= 0) {
+            const option = this.sessionSelectEl.options[this.sessionSelectEl.selectedIndex];
+            if (option && option.textContent) {
+                return option.textContent;
+            }
+        }
+        if (this.options.targetLabel) {
+            return this.options.targetLabel;
+        }
+        return this.sessionId || this.getSessionId() || 'unknown';
     }
 
     /**
@@ -194,17 +216,24 @@ class TerminalWidget {
         if (!text) return;
 
         try {
+            const enter = this.options.sendEnter !== false;
             const res = await fetch(this.options.sendUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     session: this.sessionId,
                     text: text,
-                    enter: true
+                    enter: enter
                 })
             });
             if (res.ok) {
                 this.inputEl.value = '';
+                if (typeof this.onSend === 'function') {
+                    this.onSend({
+                        target: this.getTargetLabel(),
+                        context: 'Text: ' + text
+                    });
+                }
             } else {
                 console.error('Failed to send input:', await res.text());
             }
@@ -229,6 +258,12 @@ class TerminalWidget {
                     key: key
                 })
             });
+            if (typeof this.onSendKey === 'function') {
+                this.onSendKey({
+                    target: this.getTargetLabel(),
+                    context: 'Key: ' + key
+                });
+            }
         } catch (e) {
             console.error('Error sending key:', e);
         }
@@ -335,3 +370,154 @@ class TerminalWidget {
 
 // Export for use in other scripts
 window.TerminalWidget = TerminalWidget;
+
+// ================================================================
+// Action History (Terminal/Major)
+// ================================================================
+class ActionHistory {
+    constructor(options) {
+        this.options = Object.assign({
+            tableBodyEl: null,
+            pageInfoEl: null,
+            prevBtn: null,
+            nextBtn: null,
+            pageSizeSelectEl: null,
+            storageKey: 'terminal-history',
+            maxEntries: 500,
+            defaultPageSize: 25,
+        }, options);
+
+        this.tableBody = document.querySelector(this.options.tableBodyEl);
+        this.pageInfoEl = document.querySelector(this.options.pageInfoEl);
+        this.prevBtn = document.querySelector(this.options.prevBtn);
+        this.nextBtn = document.querySelector(this.options.nextBtn);
+        this.pageSizeSelectEl = document.querySelector(this.options.pageSizeSelectEl);
+
+        this.entries = [];
+        this.page = 1;
+        this.pageSize = this.options.defaultPageSize;
+
+        this.load();
+        this.bind();
+        this.render();
+    }
+
+    bind() {
+        if (this.prevBtn) {
+            this.prevBtn.addEventListener('click', () => this.setPage(this.page - 1));
+        }
+        if (this.nextBtn) {
+            this.nextBtn.addEventListener('click', () => this.setPage(this.page + 1));
+        }
+        if (this.pageSizeSelectEl) {
+            this.pageSizeSelectEl.addEventListener('change', () => {
+                const value = parseInt(this.pageSizeSelectEl.value, 10);
+                if (!Number.isNaN(value)) {
+                    this.setPageSize(value);
+                }
+            });
+        }
+    }
+
+    load() {
+        try {
+            const raw = localStorage.getItem(this.options.storageKey);
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (Array.isArray(data.entries)) {
+                    this.entries = data.entries;
+                }
+                if (typeof data.pageSize === 'number' && data.pageSize > 0) {
+                    this.pageSize = data.pageSize;
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load history:', e);
+        }
+    }
+
+    save() {
+        try {
+            localStorage.setItem(this.options.storageKey, JSON.stringify({
+                entries: this.entries,
+                pageSize: this.pageSize
+            }));
+        } catch (e) {
+            console.warn('Failed to save history:', e);
+        }
+    }
+
+    addEntry(entry) {
+        const ts = Date.now();
+        const time = new Date(ts).toLocaleString();
+        const record = {
+            timestamp: ts,
+            time: time,
+            target: entry.target || 'unknown',
+            context: entry.context || ''
+        };
+        this.entries.unshift(record);
+        if (this.entries.length > this.options.maxEntries) {
+            this.entries = this.entries.slice(0, this.options.maxEntries);
+        }
+        this.page = 1;
+        this.save();
+        this.render();
+    }
+
+    setPage(page) {
+        const totalPages = this.totalPages();
+        if (page < 1 || page > totalPages) {
+            return;
+        }
+        this.page = page;
+        this.render();
+    }
+
+    setPageSize(size) {
+        this.pageSize = size;
+        this.page = 1;
+        this.save();
+        this.render();
+    }
+
+    totalPages() {
+        if (this.entries.length === 0) {
+            return 1;
+        }
+        return Math.ceil(this.entries.length / this.pageSize);
+    }
+
+    render() {
+        if (!this.tableBody) {
+            return;
+        }
+        const totalPages = this.totalPages();
+        const start = (this.page - 1) * this.pageSize;
+        const pageEntries = this.entries.slice(start, start + this.pageSize);
+
+        if (this.pageSizeSelectEl) {
+            this.pageSizeSelectEl.value = String(this.pageSize);
+        }
+
+        this.tableBody.innerHTML = pageEntries.map(entry => {
+            return '<tr>' +
+                '<td>' + escapeHtml(entry.time) + '</td>' +
+                '<td>' + escapeHtml(entry.target) + '</td>' +
+                '<td class="history-context">' + escapeHtml(entry.context) + '</td>' +
+                '</tr>';
+        }).join('');
+
+        if (this.pageInfoEl) {
+            this.pageInfoEl.textContent = 'Page ' + this.page + ' / ' + totalPages + ' · ' + this.entries.length + ' entries';
+        }
+        if (this.prevBtn) {
+            this.prevBtn.disabled = this.page <= 1;
+        }
+        if (this.nextBtn) {
+            this.nextBtn.disabled = this.page >= totalPages;
+        }
+    }
+}
+
+window.ActionHistory = ActionHistory;
