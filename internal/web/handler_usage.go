@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // CLIUsageSummary represents token usage for CLI providers.
@@ -102,7 +105,7 @@ func (h *GUIHandler) fetchClaudeUsageProvider() CLIUsageProvider {
 	}
 
 	usage := h.fetchClaudeUsage()
-	if usage.Today == nil && usage.ActiveBlock == nil {
+	if usage.Today == nil {
 		if usage.Error != "" {
 			provider.Error = usage.Error
 		} else {
@@ -111,24 +114,32 @@ func (h *GUIHandler) fetchClaudeUsageProvider() CLIUsageProvider {
 		return provider
 	}
 
-	if usage.Today != nil {
-		tokens := float64(usage.Today.TotalTokens)
-		cost := usage.Today.TotalCost
-		provider.Rows = append(provider.Rows, CLIUsageRow{
-			Label:  "Today",
-			Tokens: &tokens,
-			Cost:   &cost,
-		})
+	tokens := float64(usage.Today.TotalTokens)
+	cost := usage.Today.TotalCost
+	label := "Today"
+	if usage.Today.Date != "" {
+		label = fmt.Sprintf("Today (%s)", usage.Today.Date)
 	}
+	provider.Rows = append(provider.Rows, CLIUsageRow{
+		Label:  label,
+		Tokens: &tokens,
+		Cost:   &cost,
+	})
 
-	if usage.ActiveBlock != nil {
-		tokens := float64(usage.ActiveBlock.TotalTokens)
-		cost := usage.ActiveBlock.TotalCost
-		provider.Rows = append(provider.Rows, CLIUsageRow{
-			Label:  "Block",
-			Tokens: &tokens,
-			Cost:   &cost,
-		})
+	if len(usage.Today.Models) > 0 {
+		for _, model := range usage.Today.Models {
+			modelTokens := model.InputTokens + model.OutputTokens + model.CacheCreate + model.CacheRead
+			if modelTokens == 0 && model.Cost == 0 {
+				continue
+			}
+			modelTokenValue := float64(modelTokens)
+			modelCost := model.Cost
+			provider.Rows = append(provider.Rows, CLIUsageRow{
+				Label:  model.Model,
+				Tokens: &modelTokenValue,
+				Cost:   &modelCost,
+			})
+		}
 	}
 
 	return provider
@@ -167,8 +178,15 @@ func (h *GUIHandler) fetchLimitProvider(name, envVar string) CLILimitStatus {
 
 	cmd := strings.TrimSpace(os.Getenv(envVar))
 	if cmd == "" {
-		status.Error = envVar + " not set"
-		return status
+		switch name {
+		case "Claude":
+			return h.fetchClaudeWeeklyLimitFromEnv(status)
+		case "Codex":
+			return h.fetchCodexWeeklyLimitFromEnv(status)
+		default:
+			status.Error = envVar + " not set"
+			return status
+		}
 	}
 
 	data, err := runJSONCommand(cmd)
@@ -312,4 +330,208 @@ func runJSONCommand(cmdLine string) ([]byte, error) {
 		return nil, fmt.Errorf("command returned empty output")
 	}
 	return output, nil
+}
+
+type claudeDailyReport struct {
+	Daily []struct {
+		Date                string  `json:"date"`
+		InputTokens         int64   `json:"inputTokens"`
+		OutputTokens        int64   `json:"outputTokens"`
+		CacheCreationTokens int64   `json:"cacheCreationTokens"`
+		CacheReadTokens     int64   `json:"cacheReadTokens"`
+		TotalTokens         int64   `json:"totalTokens"`
+		TotalCost           float64 `json:"totalCost"`
+	} `json:"daily"`
+}
+
+func fetchClaudeWeeklyTotals() (tokens int64, cost float64, err error) {
+	dailyCmd, dailyCancel := longCommand("npx", "ccusage@latest", "daily", "--json")
+	defer dailyCancel()
+	dailyOutput, err := dailyCmd.Output()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var report claudeDailyReport
+	if err := json.Unmarshal(dailyOutput, &report); err != nil {
+		return 0, 0, err
+	}
+	if len(report.Daily) == 0 {
+		return 0, 0, fmt.Errorf("no daily usage data")
+	}
+
+	sort.Slice(report.Daily, func(i, j int) bool {
+		di := report.Daily[i].Date
+		dj := report.Daily[j].Date
+		ti, err1 := time.Parse("2006-01-02", di)
+		tj, err2 := time.Parse("2006-01-02", dj)
+		if err1 != nil || err2 != nil {
+			return di < dj
+		}
+		return ti.Before(tj)
+	})
+
+	start := len(report.Daily) - 7
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(report.Daily); i++ {
+		entry := report.Daily[i]
+		entryTokens := entry.TotalTokens
+		if entryTokens == 0 {
+			entryTokens = entry.InputTokens + entry.OutputTokens + entry.CacheCreationTokens + entry.CacheReadTokens
+		}
+		tokens += entryTokens
+		cost += entry.TotalCost
+	}
+
+	return tokens, cost, nil
+}
+
+func (h *GUIHandler) fetchClaudeWeeklyLimitFromEnv(status CLILimitStatus) CLILimitStatus {
+	limitUSD, hasLimitUSD := parseEnvFloat("GT_CLAUDE_WEEKLY_LIMIT_USD")
+	limitTokens, hasLimitTokens := parseEnvFloat("GT_CLAUDE_WEEKLY_LIMIT_TOKENS")
+
+	if !hasLimitUSD && !hasLimitTokens {
+		status.Error = "Set GT_CLAUDE_LIMIT_CMD or GT_CLAUDE_WEEKLY_LIMIT_USD/GT_CLAUDE_WEEKLY_LIMIT_TOKENS"
+		return status
+	}
+
+	weeklyTokens, weeklyCost, err := fetchClaudeWeeklyTotals()
+	if err != nil {
+		status.Error = fmt.Sprintf("ccusage: %v", err)
+		return status
+	}
+
+	if hasLimitUSD {
+		used := weeklyCost
+		limit := limitUSD
+		status.Used = &used
+		status.Limit = &limit
+		status.Unit = "USD"
+		return status
+	}
+
+	used := float64(weeklyTokens)
+	limit := limitTokens
+	status.Used = &used
+	status.Limit = &limit
+	status.Unit = "tokens"
+	return status
+}
+
+func (h *GUIHandler) fetchCodexWeeklyLimitFromEnv(status CLILimitStatus) CLILimitStatus {
+	limitUSD, hasLimitUSD := parseEnvFloat("GT_CODEX_WEEKLY_LIMIT_USD")
+	limitTokens, hasLimitTokens := parseEnvFloat("GT_CODEX_WEEKLY_LIMIT_TOKENS")
+
+	if !hasLimitUSD && !hasLimitTokens {
+		status.Error = "Set GT_CODEX_LIMIT_CMD or GT_CODEX_WEEKLY_LIMIT_USD/GT_CODEX_WEEKLY_LIMIT_TOKENS"
+		return status
+	}
+
+	weeklyTokens, weeklyCost, err := fetchCodexWeeklyUsageTotals()
+	if err != nil {
+		status.Error = err.Error()
+		return status
+	}
+
+	if hasLimitUSD && weeklyCost != nil {
+		used := *weeklyCost
+		limit := limitUSD
+		status.Used = &used
+		status.Limit = &limit
+		status.Unit = "USD"
+		return status
+	}
+
+	if hasLimitTokens && weeklyTokens != nil {
+		used := *weeklyTokens
+		limit := limitTokens
+		status.Used = &used
+		status.Limit = &limit
+		status.Unit = "tokens"
+		return status
+	}
+
+	status.Error = "weekly usage data missing"
+	return status
+}
+
+func fetchCodexWeeklyUsageTotals() (*float64, *float64, error) {
+	cmd := strings.TrimSpace(os.Getenv("GT_CODEX_WEEKLY_USAGE_CMD"))
+	if cmd == "" {
+		return nil, nil, fmt.Errorf("GT_CODEX_WEEKLY_USAGE_CMD not set")
+	}
+
+	data, err := runJSONCommand(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tokens, cost, err := parseUsageTotals(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return tokens, cost, nil
+}
+
+func parseUsageTotals(data []byte) (*float64, *float64, error) {
+	var payload struct {
+		Tokens       *float64 `json:"tokens"`
+		TotalTokens  *float64 `json:"total_tokens"`
+		InputTokens  *float64 `json:"input_tokens"`
+		OutputTokens *float64 `json:"output_tokens"`
+		CacheCreate  *float64 `json:"cache_create"`
+		CacheRead    *float64 `json:"cache_read"`
+		Cost         *float64 `json:"cost"`
+		TotalCost    *float64 `json:"total_cost"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, nil, err
+	}
+
+	tokens := payload.Tokens
+	if tokens == nil {
+		tokens = payload.TotalTokens
+	}
+	if tokens == nil && (payload.InputTokens != nil || payload.OutputTokens != nil ||
+		payload.CacheCreate != nil || payload.CacheRead != nil) {
+		sum := 0.0
+		if payload.InputTokens != nil {
+			sum += *payload.InputTokens
+		}
+		if payload.OutputTokens != nil {
+			sum += *payload.OutputTokens
+		}
+		if payload.CacheCreate != nil {
+			sum += *payload.CacheCreate
+		}
+		if payload.CacheRead != nil {
+			sum += *payload.CacheRead
+		}
+		tokens = &sum
+	}
+
+	cost := payload.Cost
+	if cost == nil {
+		cost = payload.TotalCost
+	}
+
+	if tokens == nil && cost == nil {
+		return nil, nil, fmt.Errorf("no usage totals found")
+	}
+
+	return tokens, cost, nil
+}
+
+func parseEnvFloat(envVar string) (float64, bool) {
+	raw := strings.TrimSpace(os.Getenv(envVar))
+	if raw == "" {
+		return 0, false
+	}
+	val, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, false
+	}
+	return val, true
 }

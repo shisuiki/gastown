@@ -726,9 +726,11 @@ function renderCLILimits(limits) {
 
         if (provider.used !== null && provider.used !== undefined &&
             provider.limit !== null && provider.limit !== undefined && provider.limit > 0) {
-            const unit = provider.unit ? (' ' + provider.unit) : '';
+            const unit = provider.unit || '';
+            const usedLabel = formatLimitValue(provider.used, unit);
+            const limitLabel = formatLimitValue(provider.limit, unit);
             html += '<div class="sys-row"><span class="sys-label" style="padding-left:10px">Used</span><span class="sys-value">' +
-                provider.used + ' / ' + provider.limit + unit + '</span></div>';
+                usedLabel + ' / ' + limitLabel + '</span></div>';
         }
 
         if (percentValue !== null) {
@@ -739,6 +741,19 @@ function renderCLILimits(limits) {
     }
     html += '</div>';
     return html;
+}
+
+function formatLimitValue(value, unit) {
+    if (value === null || value === undefined) {
+        return '-';
+    }
+    if (unit.toLowerCase() === 'usd') {
+        return formatCost(value);
+    }
+    if (unit.toLowerCase() === 'tokens') {
+        return formatTokens(Math.round(value)) + ' tok';
+    }
+    return value.toFixed(2) + (unit ? (' ' + unit) : '');
 }
 
 async function loadCLILimits(elementId) {
