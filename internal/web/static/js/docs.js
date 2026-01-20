@@ -19,6 +19,7 @@
             "'": '&#39;',
         }[c]));
 
+    const storageKey = 'gastown.docs.lastPath';
     let tree = null;
     let allFiles = [];
     let nodes = new Map();
@@ -53,6 +54,34 @@
         if (window.location.hash !== next) {
             history.replaceState(null, '', next);
         }
+    }
+
+    function normalizePath(path) {
+        const parts = [];
+        path.split('/').forEach((part) => {
+            if (!part || part === '.') {
+                return;
+            }
+            if (part === '..') {
+                parts.pop();
+                return;
+            }
+            parts.push(part);
+        });
+        return parts.join('/');
+    }
+
+    function resolveDocLink(basePath, href) {
+        if (!href || !basePath) return '';
+        if (href.startsWith('http://') || href.startsWith('https://')) return '';
+        const filePath = href.split('#')[0];
+        if (!filePath || !filePath.endsWith('.md')) return '';
+        if (filePath.startsWith('/')) {
+            return normalizePath(filePath.slice(1));
+        }
+        const baseDir = basePath.split('/').slice(0, -1).join('/');
+        const combined = baseDir ? baseDir + '/' + filePath : filePath;
+        return normalizePath(combined);
     }
 
     function buildTree(paths) {
@@ -125,14 +154,19 @@
             const fromHash = decodeHash();
             if (fromHash && nodes.has(fromHash)) {
                 loadDoc(fromHash);
-            } else if (allFiles.length > 0) {
-                const first = allFiles[0];
-                loadDoc(first);
-                if (tree && nodes.has(first)) {
-                    tree.select(first);
-                }
             } else {
-                setStatus('No markdown files found.', false);
+                const cached = window.localStorage ? window.localStorage.getItem(storageKey) : '';
+                if (cached && nodes.has(cached)) {
+                    loadDoc(cached);
+                } else if (allFiles.length > 0) {
+                    const first = allFiles[0];
+                    loadDoc(first);
+                    if (tree && nodes.has(first)) {
+                        tree.select(first);
+                    }
+                } else {
+                    setStatus('No markdown files found.', false);
+                }
             }
         } catch (err) {
             setStatus('Failed to load docs tree: ' + err.message, true);
@@ -154,6 +188,13 @@
             pathEl.textContent = path;
         }
         setHash(path);
+        try {
+            if (window.localStorage) {
+                window.localStorage.setItem(storageKey, path);
+            }
+        } catch (err) {
+            // Ignore storage errors.
+        }
         renderEl.innerHTML = '<p class="text-muted">Loading...</p>';
         try {
             const res = await fetch('/api/docs/file?path=' + encodeURIComponent(path));
@@ -195,6 +236,20 @@
         const fromHash = decodeHash();
         if (fromHash && nodes.has(fromHash)) {
             loadDoc(fromHash);
+        }
+    });
+
+    renderEl.addEventListener('click', (event) => {
+        const link = event.target.closest('a');
+        if (!link) return;
+        const resolved = resolveDocLink(selectedPath, link.getAttribute('href'));
+        if (!resolved) return;
+        if (nodes.has(resolved)) {
+            event.preventDefault();
+            loadDoc(resolved);
+            if (tree) {
+                tree.select(resolved);
+            }
         }
     });
 
