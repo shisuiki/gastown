@@ -203,16 +203,12 @@ func sendTmuxKey(session, key string) error {
 
 // sendTmuxText sends text to a tmux session.
 func sendTmuxText(session, text string, enter bool) error {
-	// Use send-keys with literal text
+	if enter {
+		text += "\r"
+	}
+	// Use send-keys with literal text (including optional newline)
 	args := []string{"send-keys", "-t", session, "-l", text}
 	cmd, cancel := command("tmux", args...)
 	defer cancel()
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	if enter {
-		return sendTmuxKey(session, "Enter")
-	}
-	return nil
+	return cmd.Run()
 }
