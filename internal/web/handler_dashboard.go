@@ -200,7 +200,7 @@ func (h *GUIHandler) getMailStatus() MailStatus {
 		return MailStatus{}
 	}
 
-	total, unread, err := mailbox.Count()
+	total, unread, err := mailbox.CountByStatus("open")
 	if err != nil {
 		return MailStatus{}
 	}

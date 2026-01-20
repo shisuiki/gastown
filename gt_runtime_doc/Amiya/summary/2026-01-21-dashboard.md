@@ -1,0 +1,3 @@
+- Added dashboard mail count to ignore hooked messages (open only).
+- Fixed workflow board/list ordering and all-types filter to show full bead set.
+- Tightened dashboard table overflow handling to prevent agent rows from spilling.

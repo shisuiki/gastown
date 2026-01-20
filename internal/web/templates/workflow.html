@@ -833,23 +833,68 @@
 
                 async loadBeads() {
                     try {
-                        let url = '/api/beads?limit=100';
-                        if (this.filterType) url += '&type=' + this.filterType;
+                        let url = '/api/beads?limit=-1';
+                        if (this.filterType) {
+                            url += '&type=' + this.filterType;
+                        } else {
+                            url += '&include_system=true';
+                        }
                         if (this.filterStatus) url += '&status=' + this.filterStatus;
                         const res = await fetch(url);
                         const data = await res.json();
                         this.beads = data.beads || [];
+                        this.sortBeads();
                         this.groupBeadsByStatus();
                     } catch (e) {
                         console.error('Failed to load beads:', e);
                     }
                 },
 
+                statusRank(status) {
+                    switch (status) {
+                        case 'open':
+                            return 0;
+                        case 'in_progress':
+                            return 1;
+                        case 'closed':
+                            return 2;
+                        default:
+                            return 3;
+                    }
+                },
+
+                priorityRank(bead) {
+                    const value = parseInt(bead.priority, 10);
+                    return Number.isFinite(value) ? value : 2;
+                },
+
+                sortBeads() {
+                    this.beads = (this.beads || []).slice().sort((a, b) => {
+                        const statusOrder = this.statusRank(a.status) - this.statusRank(b.status);
+                        if (statusOrder !== 0) return statusOrder;
+                        const priorityOrder = this.priorityRank(a) - this.priorityRank(b);
+                        if (priorityOrder !== 0) return priorityOrder;
+                        const aId = a.id || a.ID || '';
+                        const bId = b.id || b.ID || '';
+                        return aId.localeCompare(bId);
+                    });
+                },
+
+                sortBeadsByPriority(list) {
+                    return (list || []).slice().sort((a, b) => {
+                        const priorityOrder = this.priorityRank(a) - this.priorityRank(b);
+                        if (priorityOrder !== 0) return priorityOrder;
+                        const aId = a.id || a.ID || '';
+                        const bId = b.id || b.ID || '';
+                        return aId.localeCompare(bId);
+                    });
+                },
+
                 groupBeadsByStatus() {
                     this.beadsByStatus = {
-                        open: this.beads.filter(b => b.status === 'open'),
-                        in_progress: this.beads.filter(b => b.status === 'in_progress'),
-                        closed: this.beads.filter(b => b.status === 'closed')
+                        open: this.sortBeadsByPriority(this.beads.filter(b => b.status === 'open')),
+                        in_progress: this.sortBeadsByPriority(this.beads.filter(b => b.status === 'in_progress')),
+                        closed: this.sortBeadsByPriority(this.beads.filter(b => b.status === 'closed'))
                     };
                 },
 
@@ -913,6 +958,7 @@
                         const res = await fetch('/api/beads/search?q=' + encodeURIComponent(this.searchQuery));
                         const data = await res.json();
                         this.beads = data.beads || [];
+                        this.sortBeads();
                         this.groupBeadsByStatus();
                     } catch (e) {
                         console.error('Failed to search:', e);

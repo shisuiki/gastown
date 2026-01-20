@@ -94,7 +94,7 @@ func (m *Mailbox) List() ([]*Message, error) {
 func (m *Mailbox) listBeads() ([]*Message, error) {
 	// Single query to beads - returns both persistent and wisp messages
 	// Wisps are stored in same DB with wisp=true flag, filtered from JSONL export
-	messages, err := m.listFromDir(m.beadsDir)
+	messages, err := m.listFromDirWithStatuses(m.beadsDir, []string{"open", "hooked"})
 	if err != nil {
 		return nil, err
 	}
@@ -107,11 +107,11 @@ func (m *Mailbox) listBeads() ([]*Message, error) {
 	return messages, nil
 }
 
-// listFromDir queries messages from a beads directory.
+// listFromDirWithStatuses queries messages from a beads directory.
 // Returns messages where identity is the assignee OR a CC recipient.
-// Includes both open and hooked messages (hooked = auto-assigned handoff mail).
+// Includes only the requested statuses (e.g., open, hooked).
 // If all queries fail, returns the last error encountered.
-func (m *Mailbox) listFromDir(beadsDir string) ([]*Message, error) {
+func (m *Mailbox) listFromDirWithStatuses(beadsDir string, statuses []string) ([]*Message, error) {
 	seen := make(map[string]bool)
 	var messages []*Message
 	var lastErr error
@@ -122,7 +122,7 @@ func (m *Mailbox) listFromDir(beadsDir string) ([]*Message, error) {
 
 	// Query for each identity variant in both open and hooked statuses
 	for _, identity := range identities {
-		for _, status := range []string{"open", "hooked"} {
+		for _, status := range statuses {
 			msgs, err := m.queryMessages(beadsDir, "--assignee", identity, status)
 			if err != nil {
 				lastErr = err
@@ -747,6 +747,33 @@ func (m *Mailbox) Count() (total, unread int, err error) {
 	return total, unread, nil
 }
 
+// CountByStatus returns total and unread counts for specific statuses.
+// If statuses is empty, defaults to open + hooked (same as Count()).
+// Legacy mailboxes ignore status filtering.
+func (m *Mailbox) CountByStatus(statuses ...string) (total, unread int, err error) {
+	if m.legacy {
+		return m.Count()
+	}
+
+	if len(statuses) == 0 {
+		return m.Count()
+	}
+
+	messages, err := m.listFromDirWithStatuses(m.beadsDir, statuses)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	total = len(messages)
+	for _, msg := range messages {
+		if !msg.Read {
+			unread++
+		}
+	}
+
+	return total, unread, nil
+}
+
 // Append adds a message to the mailbox (legacy mode only).
 // For beads mode, use Router.Send() instead.
 func (m *Mailbox) Append(msg *Message) error {
@@ -796,8 +823,8 @@ func (m *Mailbox) rewriteLegacy(messages []*Message) error {
 	for _, msg := range messages {
 		data, err := json.Marshal(msg)
 		if err != nil {
-			_ = file.Close()         // best-effort cleanup
-			_ = os.Remove(tmpPath)   // best-effort cleanup
+			_ = file.Close()       // best-effort cleanup
+			_ = os.Remove(tmpPath) // best-effort cleanup
 			return err
 		}
 		_, _ = file.WriteString(string(data) + "\n") // non-fatal: partial write is acceptable

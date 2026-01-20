@@ -68,6 +68,22 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: 10px; text-align: left; border-bottom: 1px solid #333; }
 th { color: #64748b; font-weight: 500; }
 
+/* Dashboard-specific table constraints */
+.dashboard-page .card-content { overflow-x: auto; }
+.dashboard-page .card-content table { table-layout: fixed; }
+.dashboard-page .card-content th,
+.dashboard-page .card-content td {
+    word-break: break-word;
+    vertical-align: top;
+}
+.dashboard-page .card-content td a {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* ================================================================
    History Tables
    ================================================================ */
