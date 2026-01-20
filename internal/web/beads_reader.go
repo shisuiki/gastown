@@ -374,7 +374,7 @@ func (r *BeadsReader) GetConvoyTrackedIssues(convoyID string) ([]Bead, error) {
 			Priority       int    `json:"priority"`
 			Type           string `json:"issue_type"`
 			DependencyType string `json:"dependency_type"`
-		} `json:"dependents"`
+		} `json:"dependencies"`
 	}
 
 	if err := json.Unmarshal(output, &results); err != nil {
@@ -569,7 +569,7 @@ func (r *BeadsReader) GetBeadDependencies(beadID string) ([]BeadDependency, erro
 		Dependents []struct {
 			ID             string `json:"id"`
 			DependencyType string `json:"dependency_type"`
-		} `json:"dependents"`
+		} `json:"dependencies"`
 	}
 
 	if err := json.Unmarshal(output, &results); err != nil {

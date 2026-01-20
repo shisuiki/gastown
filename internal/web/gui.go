@@ -113,7 +113,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/terminal/send", h.handleAPITerminalSend)
 
 	// Workflow API routes
-	h.mux.HandleFunc("/api/activity", h.handleAPIActivity)        // Legacy: git commits
+	h.mux.HandleFunc("/api/activity", h.handleAPIActivity) // Legacy: git commits
 	h.mux.HandleFunc("/api/workflow/hook", h.handleAPIWorkflowHook)
 	h.mux.HandleFunc("/api/workflow/ready", h.handleAPIWorkflowReady)
 

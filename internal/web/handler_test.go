@@ -751,7 +751,7 @@ func TestE2E_Server_MergeQueueEmpty(t *testing.T) {
 	mock := &MockConvoyFetcher{
 		Convoys:    []ConvoyRow{},
 		MergeQueue: []MergeQueueRow{},
-		Agents: []AgentRow{},
+		Agents:     []AgentRow{},
 	}
 
 	handler, err := NewConvoyHandler(mock)

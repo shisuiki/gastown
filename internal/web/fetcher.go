@@ -243,7 +243,7 @@ func (f *LiveConvoyFetcher) getTrackedIssues(convoyID string) []trackedIssueInfo
 			Assignee       string    `json:"assignee"`
 			UpdatedAt      time.Time `json:"updated_at"`
 			DependencyType string    `json:"dependency_type"`
-		} `json:"dependents"`
+		} `json:"dependencies"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil {
 		return nil

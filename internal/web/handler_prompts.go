@@ -14,18 +14,18 @@ import (
 
 // PromptResponse represents the API response for a prompt.
 type PromptResponse struct {
-	Role       string `json:"role"`
-	Rig        string `json:"rig,omitempty"`
-	Source     string `json:"source"` // "inline", "file", "builtin"
-	Content    string `json:"content"`
-	FilePath   string `json:"file_path,omitempty"`
+	Role         string `json:"role"`
+	Rig          string `json:"rig,omitempty"`
+	Source       string `json:"source"` // "inline", "file", "builtin"
+	Content      string `json:"content"`
+	FilePath     string `json:"file_path,omitempty"`
 	ResolvedFrom string `json:"resolved_from,omitempty"` // "rig", "town", "builtin"
 }
 
 // PromptRequest represents the API request for updating a prompt.
 type PromptRequest struct {
 	Content  string `json:"content"`
-	Source   string `json:"source,omitempty"` // "inline" or "file"
+	Source   string `json:"source,omitempty"`    // "inline" or "file"
 	FilePath string `json:"file_path,omitempty"` // required if source="file"
 }
 

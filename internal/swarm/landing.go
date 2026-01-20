@@ -26,9 +26,9 @@ type LandingConfig struct {
 
 // LandingResult contains the result of a landing operation.
 type LandingResult struct {
-	SwarmID       string
-	Success       bool
-	Error         string
+	SwarmID         string
+	Success         bool
+	Error           string
 	SessionsStopped int
 	BranchesCleaned int
 	PolecatsAtRisk  []string
@@ -36,14 +36,14 @@ type LandingResult struct {
 
 // GitAuditResult contains the result of a git safety audit.
 type GitAuditResult struct {
-	Worker          string
-	ClonePath       string
-	HasUncommitted  bool
-	HasUnpushed     bool
-	HasStashes      bool
-	BeadsOnly       bool // True if changes are only in .beads/
-	CodeAtRisk      bool
-	Details         string
+	Worker         string
+	ClonePath      string
+	HasUncommitted bool
+	HasUnpushed    bool
+	HasStashes     bool
+	BeadsOnly      bool // True if changes are only in .beads/
+	CodeAtRisk     bool
+	Details        string
 }
 
 // ExecuteLanding performs the witness landing protocol for a swarm.
@@ -198,8 +198,8 @@ func (m *Manager) gitRunOutput(dir string, args ...string) (string, error) {
 func (m *Manager) notifyMayorCodeAtRisk(_, swarmID string, workers []string) { // townRoot unused: router uses gitDir
 	router := mail.NewRouter(m.gitDir)
 	msg := &mail.Message{
-		From: fmt.Sprintf("%s/refinery", m.rig.Name),
-		To:   "mayor/",
+		From:    fmt.Sprintf("%s/refinery", m.rig.Name),
+		To:      "mayor/",
 		Subject: fmt.Sprintf("Code at risk in swarm %s", swarmID),
 		Body: fmt.Sprintf(`Landing blocked for swarm %s.
 
@@ -217,8 +217,8 @@ Manual intervention required.`,
 func (m *Manager) notifyMayorLanded(_ string, swarm *Swarm, result *LandingResult) { // townRoot unused: router uses gitDir
 	router := mail.NewRouter(m.gitDir)
 	msg := &mail.Message{
-		From: fmt.Sprintf("%s/refinery", m.rig.Name),
-		To:   "mayor/",
+		From:    fmt.Sprintf("%s/refinery", m.rig.Name),
+		To:      "mayor/",
 		Subject: fmt.Sprintf("Swarm %s landed", swarm.ID),
 		Body: fmt.Sprintf(`Swarm landing complete.
 
