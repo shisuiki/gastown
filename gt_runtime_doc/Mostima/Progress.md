@@ -12,3 +12,4 @@
 - Added gt sling audit logging + allow-missing flag gate; updated sling tests and ran targeted go test.
 - Disabled tmux nudges for cmd package tests via GT_TEST_NO_NUDGE in TestMain.
 - Closed hq-w2c5 after confirming prefix mismatch comes from tombstones and advising skip/compact/rename workarounds to mayor.
+- Switched gt sling to default skip-busy with --force-busy override and clearer busy-skip messaging.

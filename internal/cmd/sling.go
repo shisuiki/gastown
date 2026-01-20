@@ -89,8 +89,9 @@ var (
 	slingOnTarget string   // --on flag: target bead when slinging a formula
 	slingVars     []string // --var flag: formula variables (key=value)
 	slingArgs     string   // --args flag: natural language instructions for executor
-	slingIdle     time.Duration
-	slingSkipBusy bool
+	slingIdle       time.Duration
+	slingSkipBusy   bool // Deprecated: skip busy targets (now default)
+	slingForceBusy  bool // Allow slinging to busy targets
 	slingAllowMissing bool // --allow-missing: allow slinging bead-like IDs that fail verification
 
 	// Flags migrated for polecat spawning (used by sling for work assignment)
@@ -108,8 +109,11 @@ func init() {
 	slingCmd.Flags().StringVar(&slingOnTarget, "on", "", "Apply formula to existing bead (implies wisp scaffolding)")
 	slingCmd.Flags().StringArrayVar(&slingVars, "var", nil, "Formula variable (key=value), can be repeated")
 	slingCmd.Flags().StringVarP(&slingArgs, "args", "a", "", "Natural language instructions for the executor (e.g., 'patch release')")
-	slingCmd.Flags().DurationVar(&slingIdle, "idle", 2*time.Minute, "Minimum idle time before interrupting a running target (used with --skip-busy)")
-	slingCmd.Flags().BoolVar(&slingSkipBusy, "skip-busy", false, "Skip slinging to running targets with recent activity (uses --idle threshold)")
+	slingCmd.Flags().DurationVar(&slingIdle, "idle", 2*time.Minute, "Minimum idle time before interrupting a running target (default skip busy; use --force-busy to override)")
+	slingCmd.Flags().BoolVar(&slingSkipBusy, "skip-busy", true, "Deprecated: skip busy targets (now default)")
+	slingCmd.Flags().BoolVar(&slingForceBusy, "force-busy", false, "Allow slinging to busy targets (overrides default skip)")
+	_ = slingCmd.Flags().MarkDeprecated("skip-busy", "skip-busy is now the default; use --force-busy to override")
+	_ = slingCmd.Flags().MarkHidden("skip-busy")
 	slingCmd.Flags().BoolVar(&slingAllowMissing, "allow-missing", false, "Allow slinging bead-like IDs that fail verification")
 
 	// Flags for polecat spawning (when target is a rig)
@@ -320,29 +324,15 @@ func runSling(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	skipBusyRequested := slingSkipBusy
+	skipBusyRequested := slingSkipBusy && !slingForceBusy
 	if cmd != nil && cmd.Flags().Changed("idle") {
+		if slingForceBusy {
+			return fmt.Errorf("--idle cannot be used with --force-busy")
+		}
 		skipBusyRequested = true
 	}
-	if skipBusyRequested && skipBusyEligible {
-		idleThreshold := slingIdle
-		if idleThreshold <= 0 {
-			idleThreshold = 2 * time.Minute
-		}
-		sessionName := getSessionFromPane(targetPane)
-		if sessionName == "" {
-			fmt.Printf("%s Skip busy: could not determine session for target %s\n", style.Dim.Render("○"), targetAgent)
-			return nil
-		}
-		idleFor, err := sessionIdleDuration(sessionName)
-		if err != nil {
-			fmt.Printf("%s Skip busy: could not read activity for %s (%v)\n", style.Dim.Render("○"), sessionName, err)
-			return nil
-		}
-		if idleFor < idleThreshold {
-			fmt.Printf("%s Skip busy: %s active %s ago (threshold %s)\n", style.Dim.Render("○"), sessionName, idleFor.Round(time.Second), idleThreshold)
-			return nil
-		}
+	if os.Getenv("GT_TEST_NO_NUDGE") != "" {
+		skipBusyRequested = false
 	}
 
 	// Display what we're doing
@@ -357,6 +347,7 @@ func runSling(cmd *cobra.Command, args []string) error {
 		"cli_args": args,
 	}
 	extra["skip_busy"] = skipBusyRequested
+	extra["force_busy"] = slingForceBusy
 	if skipBusyRequested {
 		extra["idle_threshold"] = slingIdle.String()
 	}
@@ -365,6 +356,33 @@ func runSling(cmd *cobra.Command, args []string) error {
 		extra["formula"] = formulaName
 		extra["base_bead"] = beadID
 	}
+
+	if skipBusyRequested && skipBusyEligible && !slingDryRun {
+		idleThreshold := slingIdle
+		if idleThreshold <= 0 {
+			idleThreshold = 2 * time.Minute
+		}
+		if targetPane == "" {
+			fmt.Printf("%s Skip busy: no target pane for %s; continuing\n", style.Dim.Render("○"), targetAgent)
+		} else {
+			sessionName := getSessionFromPane(targetPane)
+			if sessionName == "" {
+				fmt.Printf("%s Skip busy: could not determine session for %s; continuing\n", style.Dim.Render("○"), targetAgent)
+			} else {
+				idleFor, err := sessionIdleDuration(sessionName)
+				if err != nil {
+					fmt.Printf("%s Skip busy: could not read activity for %s (%v); continuing\n", style.Dim.Render("○"), sessionName, err)
+				} else if idleFor < idleThreshold {
+					extra["skip_busy_result"] = "skipped"
+					extra["idle_for"] = idleFor.String()
+					logSlingAudit(mode, beadID, targetAgent, targetPane, hookWorkDir, extra)
+					fmt.Printf("%s Skip busy: %s active %s ago (threshold %s). No sling performed. Use --force-busy to override.\n", style.Dim.Render("○"), sessionName, idleFor.Round(time.Second), idleThreshold)
+					return nil
+				}
+			}
+		}
+	}
+
 	logSlingAudit(mode, beadID, targetAgent, targetPane, hookWorkDir, extra)
 
 	// Check if bead is already pinned (guard against accidental re-sling)
