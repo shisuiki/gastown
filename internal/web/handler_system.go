@@ -218,6 +218,15 @@ type GitBlob struct {
 	Size      int    `json:"size,omitempty"`
 }
 
+// GitCompareCommit represents a commit entry in compare view.
+type GitCompareCommit struct {
+	Hash      string `json:"hash"`
+	ShortHash string `json:"short_hash"`
+	Author    string `json:"author"`
+	Date      string `json:"date"`
+	Message   string `json:"message"`
+}
+
 // GitGraphRow represents a line in the git graph output.
 type GitGraphRow struct {
 	Graph     string   `json:"graph"`
@@ -684,6 +693,54 @@ func (h *GUIHandler) handleAPIGitBlob(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleAPIGitCompare returns commit list + diff for a ref range.
+func (h *GUIHandler) handleAPIGitCompare(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rig := r.URL.Query().Get("rig")
+	base := strings.TrimSpace(r.URL.Query().Get("base"))
+	head := strings.TrimSpace(r.URL.Query().Get("head"))
+	if base == "" || head == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "missing base or head",
+		})
+		return
+	}
+
+	dir := getRigRepoDir(rig)
+
+	commits, err := gitCompareCommits(dir, base, head)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	files, err := gitRangeFiles(dir, base, head)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	patch, truncated, err := gitRangePatch(dir, base, head)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"commits":   commits,
+		"files":     files,
+		"patch":     patch,
+		"truncated": truncated,
+	})
+}
+
 func parseGitGraphRows(output, graphSep string) []GitGraphRow {
 	if output == "" {
 		return nil
@@ -872,6 +929,161 @@ func gitCommitPatch(dir, hash string) (string, bool, error) {
 	const maxDiffBytes = 200000
 
 	cmd, cancel := longCommand("git", "show", "--format=", "--patch", hash)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return "", false, err
+	}
+
+	patch := string(output)
+	if len(patch) > maxDiffBytes {
+		return patch[:maxDiffBytes] + "\n... (diff truncated)\n", true, nil
+	}
+
+	return patch, false, nil
+}
+
+func gitCompareCommits(dir, base, head string) ([]GitCompareCommit, error) {
+	fieldSep := "\x1f"
+	format := strings.Join([]string{
+		"%H",
+		"%h",
+		"%an",
+		"%ar",
+		"%s",
+	}, fieldSep)
+
+	cmd, cancel := command("git", "log", "--date=relative", "--format="+format, base+".."+head)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var commits []GitCompareCommit
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, fieldSep)
+		if len(parts) < 5 {
+			continue
+		}
+		commits = append(commits, GitCompareCommit{
+			Hash:      parts[0],
+			ShortHash: parts[1],
+			Author:    parts[2],
+			Date:      parts[3],
+			Message:   parts[4],
+		})
+	}
+
+	return commits, nil
+}
+
+func gitRangeFiles(dir, base, head string) ([]GitDiffFile, error) {
+	nameStatus, err := gitRangeNameStatus(dir, base, head)
+	if err != nil {
+		return nil, err
+	}
+
+	numstats, err := gitRangeNumStats(dir, base, head)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range nameStatus {
+		if stat, ok := numstats[nameStatus[i].Path]; ok {
+			nameStatus[i].Additions = stat.Additions
+			nameStatus[i].Deletions = stat.Deletions
+			nameStatus[i].Binary = stat.Binary
+		}
+	}
+
+	return nameStatus, nil
+}
+
+func gitRangeNameStatus(dir, base, head string) ([]GitDiffFile, error) {
+	cmd, cancel := command("git", "diff", "--name-status", base+".."+head)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []GitDiffFile
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			continue
+		}
+		status := parts[0]
+		file := GitDiffFile{Status: status}
+
+		switch {
+		case strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C"):
+			if len(parts) >= 3 {
+				file.OldPath = parts[1]
+				file.Path = parts[2]
+			}
+		default:
+			file.Path = parts[1]
+		}
+
+		if file.Path == "" && len(parts) > 1 {
+			file.Path = parts[len(parts)-1]
+		}
+		files = append(files, file)
+	}
+
+	return files, nil
+}
+
+func gitRangeNumStats(dir, base, head string) (map[string]GitDiffFile, error) {
+	cmd, cancel := command("git", "diff", "--numstat", base+".."+head)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]GitDiffFile)
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+		additions, additionsBinary := parseGitNumStat(parts[0])
+		deletions, deletionsBinary := parseGitNumStat(parts[1])
+		path := parts[2]
+		if len(parts) >= 4 {
+			path = parts[3]
+		}
+		stats[path] = GitDiffFile{
+			Path:      path,
+			Additions: additions,
+			Deletions: deletions,
+			Binary:    additionsBinary || deletionsBinary,
+		}
+	}
+
+	return stats, nil
+}
+
+func gitRangePatch(dir, base, head string) (string, bool, error) {
+	const maxDiffBytes = 200000
+
+	cmd, cancel := longCommand("git", "diff", base+".."+head)
 	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()

@@ -388,6 +388,9 @@
                 <button class="tab-btn" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; loadFiles()">
                     Files
                 </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'compare' }" @click="activeTab = 'compare'; loadCompare()">
+                    Compare
+                </button>
             </div>
 
             <!-- Commits Tab -->
@@ -628,6 +631,66 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Compare Tab -->
+            <div x-show="activeTab === 'compare'">
+                <div class="file-toolbar">
+                    <label class="text-muted">Base:</label>
+                    <input type="text" x-model="compareBase" placeholder="origin/main">
+                    <label class="text-muted">Head:</label>
+                    <input type="text" x-model="compareHead" placeholder="feature-branch">
+                    <button class="tab-btn" style="border-radius: 6px;" @click="loadCompare()">Compare</button>
+                </div>
+                <template x-if="loading.compare">
+                    <p class="text-muted">Loading compare...</p>
+                </template>
+                <template x-if="!loading.compare && compareCommits.length === 0">
+                    <p class="text-muted">No commits in range.</p>
+                </template>
+                <div class="commit-panel" x-show="!loading.compare && compareCommits.length > 0">
+                    <div class="commit-list">
+                        <template x-for="commit in compareCommits" :key="commit.hash">
+                            <div class="commit-item">
+                                <span class="commit-hash" x-text="commit.short_hash"></span>
+                                <div class="commit-info">
+                                    <div class="commit-message">
+                                        <span x-text="commit.message"></span>
+                                    </div>
+                                    <div class="commit-meta">
+                                        <span class="commit-author" x-text="commit.author"></span>
+                                        <span> · </span>
+                                        <span x-text="commit.date"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="detail-card">
+                        <strong>Diff</strong>
+                        <template x-if="compareDiff">
+                            <div>
+                                <div class="diff-files">
+                                    <template x-if="compareDiff.files.length === 0">
+                                        <p class="text-muted">No file changes</p>
+                                    </template>
+                                    <template x-for="file in compareDiff.files" :key="file.path">
+                                        <div class="diff-file">
+                                            <span class="diff-file-path" x-text="formatFilePath(file)"></span>
+                                            <span class="diff-file-stats" x-text="formatFileStats(file)"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                                <template x-if="compareDiff.patch">
+                                    <pre class="diff-patch" x-text="compareDiff.patch"></pre>
+                                </template>
+                                <template x-if="compareDiff.truncated">
+                                    <p class="text-muted">Diff truncated for size.</p>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -649,6 +712,10 @@
                 treePath: '',
                 treeEntries: [],
                 blob: null,
+                compareBase: 'origin/main',
+                compareHead: '',
+                compareCommits: [],
+                compareDiff: null,
                 currentBranch: '',
                 stats: {
                     commits: '-',
@@ -661,7 +728,8 @@
                     detail: false,
                     diff: false,
                     tree: false,
-                    blob: false
+                    blob: false,
+                    compare: false
                 },
 
                 init() {
@@ -720,6 +788,9 @@
                             this.currentBranch = current.name;
                             if (!this.fileRef) {
                                 this.fileRef = current.name;
+                            }
+                            if (!this.compareHead) {
+                                this.compareHead = current.name;
                             }
                         }
                     } catch (e) {
@@ -791,6 +862,8 @@
                     this.treePath = '';
                     this.treeEntries = [];
                     this.blob = null;
+                    this.compareCommits = [];
+                    this.compareDiff = null;
                 },
 
                 toggleDiff() {
@@ -887,6 +960,30 @@
                     if (size < 1024) return size + ' B';
                     if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
                     return (size / (1024 * 1024)).toFixed(1) + ' MB';
+                },
+
+                async loadCompare() {
+                    if (!this.compareBase || !this.compareHead) return;
+                    this.loading.compare = true;
+                    this.compareCommits = [];
+                    this.compareDiff = null;
+                    try {
+                        const params = new URLSearchParams();
+                        params.set('base', this.compareBase);
+                        params.set('head', this.compareHead);
+                        if (this.selectedRig) params.set('rig', this.selectedRig);
+                        const res = await fetch('/api/git/compare?' + params.toString());
+                        const data = await res.json();
+                        this.compareCommits = data.commits || [];
+                        this.compareDiff = {
+                            files: data.files || [],
+                            patch: data.patch || '',
+                            truncated: data.truncated || false
+                        };
+                    } catch (e) {
+                        console.error('Failed to load compare:', e);
+                    }
+                    this.loading.compare = false;
                 }
             };
         }

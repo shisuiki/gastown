@@ -6,3 +6,4 @@
 - Added Git commit detail + diff APIs and wired commit selection/detail/diff panel in the Git Web UI.
 - Added Git tree/blob APIs and a Files tab with tree navigation and file preview.
 - Enhanced branch listing with upstream and ahead/behind metadata plus remote markers in UI.
+- Added compare API and Compare tab to review commit range + diff between refs.
