@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>Crew - Gas Town</title>
+    <style>
+        .crew-table td { vertical-align: top; }
+        .crew-meta { display: flex; flex-direction: column; gap: 4px; }
+        .crew-path { font-size: 0.75rem; color: #64748b; font-family: "Menlo", "Monaco", "Consolas", monospace; }
+        .crew-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+        .crew-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+        }
+        .crew-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .crew-dot.running { background: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.6); }
+        .crew-dot.stopped { background: #64748b; }
+        .crew-alert { color: #fbbf24; font-size: 0.8rem; }
+        .crew-help { font-size: 0.8rem; color: #94a3b8; }
+        .crew-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+    </style>
+</head>
+<body x-data="crewPage()" x-init="init()">
+    {{template "nav" .}}
+
+    <div class="container">
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>👷 Crew Control</h2>
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                <div class="form-group">
+                    <label>Rig</label>
+                    <select x-model="filters.rig" @change="loadCrew()">
+                        <option value="">All rigs</option>
+                        <template x-for="rig in rigs" :key="rig.name">
+                            <option :value="rig.name" x-text="rig.name"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Search</label>
+                    <input type="text" class="input-field" placeholder="Filter by crew name" x-model="filters.search">
+                </div>
+                <div class="form-group">
+                    <label>Account (optional)</label>
+                    <input type="text" class="input-field" placeholder="Account handle" x-model="options.account">
+                    <div class="crew-help">Used for start/restart actions.</div>
+                </div>
+                <div class="form-group">
+                    <label>Agent Override (optional)</label>
+                    <input type="text" class="input-field" placeholder="Runtime agent alias" x-model="options.agentOverride">
+                </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-success" @click="openAddModal()">+ Add Crew</button>
+                <button class="btn" @click="loadCrew()">Refresh List</button>
+                <button class="btn btn-primary" @click="runBatch('start')" :disabled="!filters.rig">Start All</button>
+                <button class="btn btn-warning" @click="runBatch('restart')">Restart All</button>
+                <button class="btn btn-danger" @click="runBatch('stop')">Stop All</button>
+                <button class="btn btn-secondary" @click="runBatch('pristine')" :disabled="!filters.rig">Pristine All</button>
+            </div>
+            <pre x-show="actionOutput" x-text="actionOutput" class="terminal-output" style="margin-top: 15px; max-height: 200px;"></pre>
+        </div>
+
+        <div class="card">
+            <h2>🗂️ Crew Workspaces</h2>
+            <div class="text-muted" x-show="loading">Loading...</div>
+            <template x-if="errors.length">
+                <div class="crew-alert" style="margin-bottom: 12px;" x-text="errors.join(' | ')"></div>
+            </template>
+            <template x-if="!loading && filteredCrew().length === 0">
+                <p class="text-muted">No crew workspaces found.</p>
+            </template>
+            <table class="crew-table" x-show="filteredCrew().length > 0">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Crew</th>
+                        <th>Branch</th>
+                        <th>Git</th>
+                        <th>Mail</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="item in filteredCrew()" :key="item.rig + '/' + item.name">
+                        <tr>
+                            <td>
+                                <span class="crew-status">
+                                    <span class="crew-dot" :class="item.has_session ? 'running' : 'stopped'"></span>
+                                    <span x-text="item.has_session ? 'Running' : 'Stopped'"></span>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="crew-meta">
+                                    <strong x-text="item.rig + '/' + item.name"></strong>
+                                    <span class="crew-path" x-text="item.path"></span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge badge-blue" x-text="item.branch || 'unknown'"></span>
+                            </td>
+                            <td>
+                                <div class="crew-badges">
+                                    <span class="badge" :class="item.git_clean ? 'badge-green' : 'badge-red'"
+                                          x-text="item.git_clean ? 'clean' : 'dirty'"></span>
+                                    <span class="text-muted" x-show="!item.git_clean && item.git_modified.length">
+                                        M: <span x-text="item.git_modified.length"></span>
+                                    </span>
+                                    <span class="text-muted" x-show="!item.git_clean && item.git_untracked.length">
+                                        U: <span x-text="item.git_untracked.length"></span>
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                <span :class="item.mail_unread > 0 ? 'text-warning' : 'text-muted'"
+                                      x-text="item.mail_unread + ' unread / ' + item.mail_total + ' total'"></span>
+                            </td>
+                            <td>
+                                <div class="crew-actions">
+                                    <button class="btn btn-success btn-sm" x-show="!item.has_session" @click="startCrew(item)">Start</button>
+                                    <button class="btn btn-danger btn-sm" x-show="item.has_session" @click="stopCrew(item)">Stop</button>
+                                    <button class="btn btn-warning btn-sm" @click="restartCrew(item)">Restart</button>
+                                    <button class="btn btn-secondary btn-sm" @click="openRefreshModal(item)">Refresh</button>
+                                    <button class="btn btn-secondary btn-sm" @click="pristineCrew(item)">Pristine</button>
+                                    <button class="btn btn-secondary btn-sm" @click="openRenameModal(item)">Rename</button>
+                                    <button class="btn btn-danger btn-sm" @click="openRemoveModal(item)">Remove</button>
+                                    <button class="btn btn-primary btn-sm" x-show="!item.has_session" @click="startAndOpen(item)">Start + Terminal</button>
+                                    <a class="btn btn-primary btn-sm" x-show="item.has_session"
+                                       :href="terminalLink(item)" style="text-decoration: none;">Terminal</a>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add Crew Modal -->
+    <div x-cloak x-show="showAddModal" class="modal-backdrop" @click.self="showAddModal = false">
+        <div class="modal" @click.stop>
+            <h3>➕ Add Crew Workspace</h3>
+            <div class="form-group">
+                <label>Rig</label>
+                <select x-model="addForm.rig">
+                    <option value="">Select rig</option>
+                    <template x-for="rig in rigs" :key="rig.name">
+                        <option :value="rig.name" x-text="rig.name"></option>
+                    </template>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Name(s)</label>
+                <input type="text" class="input-field" placeholder="e.g. dave emma" x-model="addForm.names">
+                <div class="crew-help">Space or comma separated for multiple crew.</div>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" x-model="addForm.branch">
+                    Create feature branch
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" @click="showAddModal = false">Cancel</button>
+                <button class="btn btn-success" @click="submitAddCrew()" :disabled="!addForm.rig || !addForm.names">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div x-cloak x-show="showRenameModal" class="modal-backdrop" @click.self="showRenameModal = false">
+        <div class="modal" @click.stop>
+            <h3>✏️ Rename Crew</h3>
+            <div class="form-group">
+                <label>Current</label>
+                <div class="text-muted" x-text="renameForm.rig + '/' + renameForm.name"></div>
+            </div>
+            <div class="form-group">
+                <label>New name</label>
+                <input type="text" class="input-field" x-model="renameForm.newName" placeholder="New crew name">
+            </div>
+            <div class="modal-actions">
+                <button class="btn" @click="showRenameModal = false">Cancel</button>
+                <button class="btn btn-success" @click="submitRenameCrew()" :disabled="!renameForm.newName">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Modal -->
+    <div x-cloak x-show="showRefreshModal" class="modal-backdrop" @click.self="showRefreshModal = false">
+        <div class="modal" @click.stop>
+            <h3>🔁 Refresh Context</h3>
+            <div class="form-group">
+                <label>Target</label>
+                <div class="text-muted" x-text="refreshForm.rig + '/' + refreshForm.name"></div>
+            </div>
+            <div class="form-group">
+                <label>Handoff message (optional)</label>
+                <textarea class="input-field" rows="4" x-model="refreshForm.message" placeholder="Add a handoff note..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" @click="showRefreshModal = false">Cancel</button>
+                <button class="btn btn-warning" @click="submitRefreshCrew()">Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Remove Modal -->
+    <div x-cloak x-show="showRemoveModal" class="modal-backdrop" @click.self="showRemoveModal = false">
+        <div class="modal" @click.stop>
+            <h3>🗑️ Remove Crew</h3>
+            <div class="form-group">
+                <label>Target</label>
+                <div class="text-muted" x-text="removeForm.rig + '/' + removeForm.name"></div>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" x-model="removeForm.force">
+                    Force remove (ignore uncommitted changes)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" x-model="removeForm.purge">
+                    Purge (delete agent bead and unassign work)
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" @click="showRemoveModal = false">Cancel</button>
+                <button class="btn btn-danger" @click="submitRemoveCrew()">Remove</button>
+            </div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        function crewPage() {
+            return {
+                rigs: [],
+                crew: [],
+                errors: [],
+                loading: false,
+                actionOutput: '',
+                filters: { rig: '', search: '' },
+                options: { account: '', agentOverride: '' },
+                showAddModal: false,
+                showRenameModal: false,
+                showRefreshModal: false,
+                showRemoveModal: false,
+                addForm: { rig: '', names: '', branch: false },
+                renameForm: { rig: '', name: '', newName: '' },
+                refreshForm: { rig: '', name: '', message: '' },
+                removeForm: { rig: '', name: '', force: false, purge: false },
+
+                async init() {
+                    await this.loadRigs();
+                    await this.loadCrew();
+                },
+
+                async loadRigs() {
+                    try {
+                        const res = await fetch('/api/rigs');
+                        this.rigs = await res.json();
+                    } catch (e) {
+                        console.error('Failed to load rigs', e);
+                    }
+                },
+
+                async loadCrew() {
+                    this.loading = true;
+                    this.errors = [];
+                    try {
+                        const rigParam = this.filters.rig ? ('?rig=' + encodeURIComponent(this.filters.rig)) : '';
+                        const res = await fetch('/api/crew/list' + rigParam);
+                        const data = await res.json();
+                        this.crew = data.crew || [];
+                        this.errors = data.errors || [];
+                    } catch (e) {
+                        this.errors = ['Failed to load crew list'];
+                        console.error(e);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                filteredCrew() {
+                    if (!this.filters.search) {
+                        return this.crew;
+                    }
+                    const q = this.filters.search.toLowerCase();
+                    return this.crew.filter(item =>
+                        (item.name || '').toLowerCase().includes(q) ||
+                        (item.rig || '').toLowerCase().includes(q)
+                    );
+                },
+
+                terminalLink(item) {
+                    const session = item.session_id || ('gt-' + item.rig + '-crew-' + item.name);
+                    return '/terminals?session=' + encodeURIComponent(session);
+                },
+
+                async runBatch(action) {
+                    if ((action === 'start' || action === 'pristine') && !this.filters.rig) {
+                        this.actionOutput = 'Select a rig to run this action.';
+                        return;
+                    }
+                    await this.runCrewAction(action, { rig: this.filters.rig, all: true });
+                },
+
+                openAddModal() {
+                    this.addForm = { rig: this.filters.rig || '', names: '', branch: false };
+                    this.showAddModal = true;
+                },
+
+                openRenameModal(item) {
+                    this.renameForm = { rig: item.rig, name: item.name, newName: '' };
+                    this.showRenameModal = true;
+                },
+
+                openRefreshModal(item) {
+                    this.refreshForm = { rig: item.rig, name: item.name, message: '' };
+                    this.showRefreshModal = true;
+                },
+
+                openRemoveModal(item) {
+                    this.removeForm = { rig: item.rig, name: item.name, force: false, purge: false };
+                    this.showRemoveModal = true;
+                },
+
+                async submitAddCrew() {
+                    const names = this.addForm.names
+                        .split(/[,\s]+/)
+                        .map(n => n.trim())
+                        .filter(Boolean);
+                    if (!names.length) {
+                        return;
+                    }
+                    this.showAddModal = false;
+                    await this.runCrewAction('add', {
+                        rig: this.addForm.rig,
+                        names: names,
+                        branch: this.addForm.branch
+                    });
+                },
+
+                async submitRenameCrew() {
+                    this.showRenameModal = false;
+                    await this.runCrewAction('rename', {
+                        rig: this.renameForm.rig,
+                        name: this.renameForm.name,
+                        new_name: this.renameForm.newName
+                    });
+                },
+
+                async submitRefreshCrew() {
+                    this.showRefreshModal = false;
+                    await this.runCrewAction('refresh', {
+                        rig: this.refreshForm.rig,
+                        name: this.refreshForm.name,
+                        message: this.refreshForm.message
+                    });
+                },
+
+                async submitRemoveCrew() {
+                    this.showRemoveModal = false;
+                    await this.runCrewAction('remove', {
+                        rig: this.removeForm.rig,
+                        name: this.removeForm.name,
+                        force: this.removeForm.force,
+                        purge: this.removeForm.purge
+                    });
+                },
+
+                async startCrew(item) {
+                    await this.runCrewAction('start', { rig: item.rig, names: [item.name] });
+                },
+
+                async startAndOpen(item) {
+                    const data = await this.runCrewAction('start', { rig: item.rig, names: [item.name] }, true);
+                    if (data && data.sessions && data.sessions.length > 0) {
+                        window.location.href = '/terminals?session=' + encodeURIComponent(data.sessions[0]);
+                    }
+                },
+
+                async stopCrew(item) {
+                    await this.runCrewAction('stop', { rig: item.rig, names: [item.name] });
+                },
+
+                async restartCrew(item) {
+                    await this.runCrewAction('restart', { rig: item.rig, names: [item.name] });
+                },
+
+                async pristineCrew(item) {
+                    await this.runCrewAction('pristine', { rig: item.rig, names: [item.name] });
+                },
+
+                async runCrewAction(action, payload, returnData) {
+                    this.actionOutput = 'Running ' + action + '...';
+                    try {
+                        const res = await fetch('/api/crew/action', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: action,
+                                account: this.options.account,
+                                agent_override: this.options.agentOverride,
+                                ...payload
+                            })
+                        });
+                        const data = await res.json();
+                        this.actionOutput = data.output || data.error || 'Done';
+                        if (data.success) {
+                            await this.loadCrew();
+                        }
+                        if (returnData) {
+                            return data;
+                        }
+                        return null;
+                    } catch (e) {
+                        this.actionOutput = 'Error: ' + e.message;
+                        return null;
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

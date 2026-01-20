@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -111,6 +112,11 @@ func (c *Cache) saveToDisk(key string, entry *cacheEntry) {
 	os.WriteFile(filepath.Join(c.cacheDir, safeKey+".json"), data, 0644)
 }
 
+// deleteFromDisk removes a cached entry from disk.
+func (c *Cache) deleteFromDisk(key string) {
+	os.Remove(filepath.Join(c.cacheDir, sanitizeKey(key)+".json"))
+}
+
 // sanitizeKey converts a cache key to a safe filename.
 func sanitizeKey(key string) string {
 	// Replace unsafe characters
@@ -168,6 +174,36 @@ func (c *Cache) SetRefreshing(key string, refreshing bool) {
 		delete(c.refresh, key)
 	}
 	c.mu.Unlock()
+}
+
+// Invalidate removes a cache entry immediately.
+func (c *Cache) Invalidate(key string) {
+	c.mu.Lock()
+	delete(c.entries, key)
+	delete(c.refresh, key)
+	c.mu.Unlock()
+
+	c.deleteFromDisk(key)
+}
+
+// InvalidatePrefix removes cache entries with the provided prefix.
+func (c *Cache) InvalidatePrefix(prefix string) {
+	c.mu.Lock()
+	var keys []string
+	for key := range c.entries {
+		if strings.HasPrefix(key, prefix) {
+			keys = append(keys, key)
+		}
+	}
+	for _, key := range keys {
+		delete(c.entries, key)
+		delete(c.refresh, key)
+	}
+	c.mu.Unlock()
+
+	for _, key := range keys {
+		c.deleteFromDisk(key)
+	}
 }
 
 // Set stores a value in cache with TTL. StaleAt is set to 80% of TTL.
@@ -281,6 +317,9 @@ const (
 
 	// IssuesCacheTTL for issue lists.
 	IssuesCacheTTL = 20 * time.Second
+
+	// CrewCacheTTL for crew lists and status.
+	CrewCacheTTL = 10 * time.Second
 
 	// GitCacheTTL for git data.
 	GitCacheTTL = 30 * time.Second
