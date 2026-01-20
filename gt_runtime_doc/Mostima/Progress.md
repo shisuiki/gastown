@@ -10,3 +10,4 @@
 ## 2026-01-21
 - Investigated repeated "Work slung" tmux injections; found gt-wisp-xyz prompts in crew panes, no matching beads, and no sling timers/scripts. Logged incident report and sent findings to mayor.
 - Added gt sling audit logging + allow-missing flag gate; updated sling tests and ran targeted go test.
+- Disabled tmux nudges for cmd package tests via GT_TEST_NO_NUDGE in TestMain.

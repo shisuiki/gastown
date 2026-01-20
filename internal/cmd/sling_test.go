@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	if os.Getenv("GT_TEST_NO_NUDGE") == "" {
+		_ = os.Setenv("GT_TEST_NO_NUDGE", "1")
+	}
+	os.Exit(m.Run())
+}
+
 func TestParseWispIDFromJSON(t *testing.T) {
 	tests := []struct {
 		name    string
