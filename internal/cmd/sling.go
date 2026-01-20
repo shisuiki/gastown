@@ -213,7 +213,8 @@ func runSling(cmd *cobra.Command, args []string) error {
 				targetPane = "<dog-pane>"
 			} else {
 				// Dispatch to dog
-				dispatchInfo, dispatchErr := DispatchToDog(dogName, slingCreate)
+				work := fmt.Sprintf("sling:bead:%s", beadID)
+				dispatchInfo, dispatchErr := DispatchToDog(dogName, slingCreate, work)
 				if dispatchErr != nil {
 					return fmt.Errorf("dispatching to dog: %w", dispatchErr)
 				}
