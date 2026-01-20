@@ -223,7 +223,7 @@ func (d *Daemon) safeHeartbeat(state *State) {
 			// Heartbeat failed but daemon continues - will retry next cycle
 		}
 	}()
-	d.safeHeartbeat(state)
+	d.heartbeat(state)
 }
 
 // heartbeat performs one heartbeat cycle.
