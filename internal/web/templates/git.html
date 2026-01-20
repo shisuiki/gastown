@@ -287,24 +287,89 @@
         }
         .graph-svg {
             display: block;
+            position: absolute;
+            left: 0;
+            top: 0;
         }
         .graph-inner {
             position: relative;
             width: 100%;
         }
-        .graph-overlay {
+        .graph-rows {
             position: absolute;
-            inset: 0;
+            left: 0;
+            right: 0;
+            top: 0;
         }
-        .graph-overlay-row {
+        .graph-row {
             position: absolute;
             left: 0;
             right: 0;
             height: var(--graph-row-height);
             cursor: pointer;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 140px 90px 120px;
+            gap: 12px;
+            align-items: center;
+            padding: 0 12px;
+            box-sizing: border-box;
+            color: #e2e8f0;
         }
-        .graph-overlay-row:hover {
+        .graph-row:hover {
             background: rgba(255, 255, 255, 0.03);
+        }
+        .graph-row.selected {
+            background: rgba(96, 165, 250, 0.12);
+        }
+        .graph-message {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.9rem;
+        }
+        .graph-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            white-space: nowrap;
+        }
+        .graph-author {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #cbd5f5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .graph-author-badge {
+            width: 20px;
+            height: 20px;
+            border-radius: 6px;
+            background: #1d4ed8;
+            color: #e2e8f0;
+            font-size: 0.7rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+        .graph-hash {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.8rem;
+            color: #60a5fa;
+        }
+        .graph-date {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .graph-tags {
+            display: inline-flex;
+            gap: 6px;
+            margin-left: 8px;
         }
         .tabs-panel {
             margin-top: 18px;
@@ -424,6 +489,13 @@
             .graph-canvas {
                 height: 360px;
                 min-height: 360px;
+            }
+            .graph-row {
+                grid-template-columns: 1fr 80px;
+            }
+            .graph-author,
+            .graph-date {
+                display: none;
             }
         }
     </style>
@@ -1014,7 +1086,7 @@
                     inner.className = 'graph-inner';
                     inner.style.height = svgHeight + 'px';
                     inner.style.minHeight = svgHeight + 'px';
-                    inner.style.width = svgWidth + 'px';
+                    inner.style.width = '100%';
 
                     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                     svg.setAttribute('class', 'graph-svg');
@@ -1022,13 +1094,14 @@
                     svg.setAttribute('height', svgHeight);
                     svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
 
-                    const overlay = document.createElement('div');
-                    overlay.className = 'graph-overlay';
-                    overlay.style.height = svgHeight + 'px';
-                    overlay.style.width = '100%';
+                    const rowsWrap = document.createElement('div');
+                    rowsWrap.className = 'graph-rows';
+                    rowsWrap.style.height = svgHeight + 'px';
+                    rowsWrap.style.width = '100%';
 
                     const laneX = (index) => paddingX + index * laneWidth;
                     const laneColor = (index) => palette[index % palette.length];
+                    const laneAreaWidth = svgWidth + 8;
 
                     layout.rows.forEach((row, idx) => {
                         const y0 = idx * rowHeight + rowHeight / 2;
@@ -1055,15 +1128,69 @@
                         this.drawSvgCircle(svg, laneX(row.laneIndex), y0, nodeRadius, laneColor(row.laneIndex));
 
                         const rowDiv = document.createElement('div');
-                        rowDiv.className = 'graph-overlay-row';
+                        rowDiv.className = 'graph-row';
                         rowDiv.style.top = `${idx * rowHeight}px`;
+                        rowDiv.style.height = `${rowHeight}px`;
+                        rowDiv.style.paddingLeft = `${laneAreaWidth}px`;
+                        if (row.node.hash === this.selectedCommitHash) {
+                            rowDiv.classList.add('selected');
+                        }
                         rowDiv.dataset.hash = row.node.hash;
+                        rowDiv.title = row.node.message || row.node.hash;
                         rowDiv.addEventListener('click', () => this.selectCommitByHash(row.node.hash, true));
-                        overlay.appendChild(rowDiv);
+
+                        const message = document.createElement('div');
+                        message.className = 'graph-message';
+                        const messageText = document.createElement('span');
+                        messageText.textContent = row.node.message || '';
+                        message.appendChild(messageText);
+                        const tags = this.refTags(row.node.refs);
+                        if (tags.length > 0) {
+                            const tagWrap = document.createElement('span');
+                            tagWrap.className = 'graph-tags';
+                            tags.forEach((tag) => {
+                                const tagEl = document.createElement('span');
+                                tagEl.className = 'branch-tag';
+                                tagEl.textContent = tag;
+                                tagWrap.appendChild(tagEl);
+                            });
+                            const overflow = this.refOverflow(row.node.refs);
+                            if (overflow > 0) {
+                                const moreEl = document.createElement('span');
+                                moreEl.className = 'branch-tag';
+                                moreEl.textContent = `+${overflow}`;
+                                tagWrap.appendChild(moreEl);
+                            }
+                            message.appendChild(tagWrap);
+                        }
+
+                        const author = document.createElement('div');
+                        author.className = 'graph-author';
+                        const badge = document.createElement('span');
+                        badge.className = 'graph-author-badge';
+                        badge.textContent = this.authorInitials(row.node.author || '');
+                        const authorName = document.createElement('span');
+                        authorName.textContent = row.node.author || '';
+                        author.appendChild(badge);
+                        author.appendChild(authorName);
+
+                        const hash = document.createElement('div');
+                        hash.className = 'graph-hash';
+                        hash.textContent = row.node.short_hash || '';
+
+                        const date = document.createElement('div');
+                        date.className = 'graph-date';
+                        date.textContent = row.node.date || '';
+
+                        rowDiv.appendChild(message);
+                        rowDiv.appendChild(author);
+                        rowDiv.appendChild(hash);
+                        rowDiv.appendChild(date);
+                        rowsWrap.appendChild(rowDiv);
                     });
 
                     inner.appendChild(svg);
-                    inner.appendChild(overlay);
+                    inner.appendChild(rowsWrap);
                     viewport.appendChild(inner);
                     viewport.scrollTop = savedScroll;
                 },
@@ -1337,6 +1464,16 @@
                     if (!refs) return 0;
                     const tags = refs.split(',').map((ref) => ref.trim()).filter(Boolean);
                     return Math.max(0, tags.length - 2);
+                },
+
+                authorInitials(name) {
+                    const trimmed = (name || '').trim();
+                    if (!trimmed) return '?';
+                    const parts = trimmed.split(/\s+/);
+                    if (parts.length === 1) {
+                        return parts[0].slice(0, 2).toUpperCase();
+                    }
+                    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
                 },
 
                 async loadCompare() {
