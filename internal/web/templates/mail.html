@@ -242,8 +242,62 @@
                 '</div>';
         }
 
+        // Track pending operations to prevent rapid toggles
+        const pendingReadOps = new Set();
+
+        // Helper to update unread count in stats without full refresh
+        function updateUnreadCount(delta) {
+            const stats = document.getElementById('mail-stats');
+            if (!stats) return;
+            const unreadEl = stats.querySelector('p:last-child strong');
+            if (unreadEl) {
+                const current = parseInt(unreadEl.textContent, 10) || 0;
+                unreadEl.textContent = Math.max(0, current + delta);
+            }
+        }
+
+        // Helper to update message DOM element for read state
+        function updateMessageReadState(messageEl, isRead) {
+            if (!messageEl) return;
+
+            // Update classes
+            messageEl.classList.toggle('mail-message-unread', !isRead);
+            messageEl.classList.toggle('mail-message-read', isRead);
+
+            // Update indicator
+            const indicator = messageEl.querySelector('.mail-indicator');
+            if (indicator) {
+                indicator.textContent = isRead ? '○' : '●';
+            }
+
+            // Update button styling - Mark Read and Mark Unread buttons
+            const buttons = messageEl.querySelectorAll('.btn-sm');
+            buttons.forEach(btn => {
+                if (btn.textContent === 'Mark Read') {
+                    btn.classList.toggle('btn-primary', !isRead);
+                    btn.classList.toggle('btn-secondary', isRead);
+                } else if (btn.textContent === 'Mark Unread') {
+                    btn.classList.toggle('btn-primary', isRead);
+                    btn.classList.toggle('btn-secondary', !isRead);
+                }
+            });
+        }
+
         async function markAsRead(id) {
+            // Prevent rapid toggles on same message
+            if (pendingReadOps.has(id)) return;
+
             const agent = document.getElementById('mail-agent-select').value;
+            const messageEl = document.querySelector('.mail-message[data-id="' + id + '"]');
+
+            // Check if already read (message may have been removed or state already correct)
+            if (!messageEl || messageEl.classList.contains('mail-message-read')) return;
+
+            // Optimistically update DOM
+            pendingReadOps.add(id);
+            updateMessageReadState(messageEl, true);
+            updateUnreadCount(-1);
+
             try {
                 const res = await fetch('/api/mail/mark-read', {
                     method: 'POST',
@@ -251,18 +305,36 @@
                     body: JSON.stringify({ id, agent })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    loadAgentMail(); // refresh inbox
-                } else {
+                if (!data.success) {
+                    // Revert optimistic update on failure
+                    updateMessageReadState(messageEl, false);
+                    updateUnreadCount(1);
                     alert('Failed to mark as read: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
+                // Revert optimistic update on error, full refresh to recover
+                loadAgentMail();
                 alert('Error: ' + e.message);
+            } finally {
+                pendingReadOps.delete(id);
             }
         }
 
         async function markAsUnread(id) {
+            // Prevent rapid toggles on same message
+            if (pendingReadOps.has(id)) return;
+
             const agent = document.getElementById('mail-agent-select').value;
+            const messageEl = document.querySelector('.mail-message[data-id="' + id + '"]');
+
+            // Check if already unread (message may have been removed or state already correct)
+            if (!messageEl || messageEl.classList.contains('mail-message-unread')) return;
+
+            // Optimistically update DOM
+            pendingReadOps.add(id);
+            updateMessageReadState(messageEl, false);
+            updateUnreadCount(1);
+
             try {
                 const res = await fetch('/api/mail/mark-unread', {
                     method: 'POST',
@@ -270,13 +342,18 @@
                     body: JSON.stringify({ id, agent })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    loadAgentMail(); // refresh inbox
-                } else {
+                if (!data.success) {
+                    // Revert optimistic update on failure
+                    updateMessageReadState(messageEl, true);
+                    updateUnreadCount(-1);
                     alert('Failed to mark as unread: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
+                // Revert optimistic update on error, full refresh to recover
+                loadAgentMail();
                 alert('Error: ' + e.message);
+            } finally {
+                pendingReadOps.delete(id);
             }
         }
 
