@@ -148,6 +148,14 @@
             color: #e2e8f0;
             font-size: 0.85rem;
         }
+        .file-toolbar select {
+            padding: 6px 10px;
+            background: #0f172a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.85rem;
+        }
         .file-panel {
             display: grid;
             grid-template-columns: 1fr 1.2fr;
@@ -390,6 +398,9 @@
                 </button>
                 <button class="tab-btn" :class="{ active: activeTab === 'compare' }" @click="activeTab = 'compare'; loadCompare()">
                     Compare
+                </button>
+                <button class="tab-btn" :class="{ active: activeTab === 'search' }" @click="activeTab = 'search'">
+                    Search
                 </button>
             </div>
 
@@ -691,6 +702,61 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Search Tab -->
+            <div x-show="activeTab === 'search'">
+                <div class="file-toolbar">
+                    <label class="text-muted">Mode:</label>
+                    <select x-model="searchMode">
+                        <option value="commits">Commits</option>
+                        <option value="files">Files</option>
+                    </select>
+                    <input type="text" x-model="searchQuery" placeholder="Search term" @keydown.enter="loadSearch()">
+                    <template x-if="searchMode === 'files'">
+                        <input type="text" x-model="searchPath" placeholder="Path filter (optional)">
+                    </template>
+                    <input type="text" x-model="searchRef" placeholder="Ref (default HEAD)">
+                    <button class="tab-btn" style="border-radius: 6px;" @click="loadSearch()">Search</button>
+                </div>
+                <template x-if="loading.search">
+                    <p class="text-muted">Searching...</p>
+                </template>
+                <template x-if="!loading.search && searchMode === 'commits'">
+                    <div class="commit-list" x-show="searchCommits.length > 0">
+                        <template x-for="commit in searchCommits" :key="commit.hash">
+                            <div class="commit-item">
+                                <span class="commit-hash" x-text="commit.short_hash"></span>
+                                <div class="commit-info">
+                                    <div class="commit-message">
+                                        <span x-text="commit.message"></span>
+                                    </div>
+                                    <div class="commit-meta">
+                                        <span class="commit-author" x-text="commit.author"></span>
+                                        <span> · </span>
+                                        <span x-text="commit.date"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="!loading.search && searchMode === 'files'">
+                    <div class="file-list" x-show="searchFiles.length > 0">
+                        <template x-for="match in searchFiles" :key="match.path + ':' + match.line">
+                            <div class="file-entry">
+                                <span class="file-name" x-text="match.path + ':' + match.line"></span>
+                                <span class="file-meta" x-text="match.content"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="!loading.search && searchMode === 'commits' && searchCommits.length === 0">
+                    <p class="text-muted">No commit matches.</p>
+                </template>
+                <template x-if="!loading.search && searchMode === 'files' && searchFiles.length === 0">
+                    <p class="text-muted">No file matches.</p>
+                </template>
+            </div>
         </div>
     </div>
 
@@ -716,6 +782,12 @@
                 compareHead: '',
                 compareCommits: [],
                 compareDiff: null,
+                searchMode: 'commits',
+                searchQuery: '',
+                searchRef: '',
+                searchPath: '',
+                searchCommits: [],
+                searchFiles: [],
                 currentBranch: '',
                 stats: {
                     commits: '-',
@@ -729,7 +801,8 @@
                     diff: false,
                     tree: false,
                     blob: false,
-                    compare: false
+                    compare: false,
+                    search: false
                 },
 
                 init() {
@@ -791,6 +864,9 @@
                             }
                             if (!this.compareHead) {
                                 this.compareHead = current.name;
+                            }
+                            if (!this.searchRef) {
+                                this.searchRef = current.name;
                             }
                         }
                     } catch (e) {
@@ -864,6 +940,8 @@
                     this.blob = null;
                     this.compareCommits = [];
                     this.compareDiff = null;
+                    this.searchCommits = [];
+                    this.searchFiles = [];
                 },
 
                 toggleDiff() {
@@ -984,6 +1062,31 @@
                         console.error('Failed to load compare:', e);
                     }
                     this.loading.compare = false;
+                },
+
+                async loadSearch() {
+                    if (!this.searchQuery) return;
+                    this.loading.search = true;
+                    this.searchCommits = [];
+                    this.searchFiles = [];
+                    try {
+                        const params = new URLSearchParams();
+                        params.set('q', this.searchQuery);
+                        params.set('mode', this.searchMode);
+                        if (this.searchRef) params.set('ref', this.searchRef);
+                        if (this.searchPath) params.set('path', this.searchPath);
+                        if (this.selectedRig) params.set('rig', this.selectedRig);
+                        const res = await fetch('/api/git/search?' + params.toString());
+                        const data = await res.json();
+                        if (this.searchMode === 'files') {
+                            this.searchFiles = data.files || [];
+                        } else {
+                            this.searchCommits = data.commits || [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to search:', e);
+                    }
+                    this.loading.search = false;
                 }
             };
         }

@@ -227,6 +227,22 @@ type GitCompareCommit struct {
 	Message   string `json:"message"`
 }
 
+// GitSearchCommit represents a commit search hit.
+type GitSearchCommit struct {
+	Hash      string `json:"hash"`
+	ShortHash string `json:"short_hash"`
+	Author    string `json:"author"`
+	Date      string `json:"date"`
+	Message   string `json:"message"`
+}
+
+// GitSearchMatch represents a file search hit.
+type GitSearchMatch struct {
+	Path    string `json:"path"`
+	Line    int    `json:"line"`
+	Content string `json:"content"`
+}
+
 // GitGraphRow represents a line in the git graph output.
 type GitGraphRow struct {
 	Graph     string   `json:"graph"`
@@ -741,6 +757,62 @@ func (h *GUIHandler) handleAPIGitCompare(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// handleAPIGitSearch returns commit or file search results.
+func (h *GUIHandler) handleAPIGitSearch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rig := r.URL.Query().Get("rig")
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	mode := strings.TrimSpace(r.URL.Query().Get("mode"))
+	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if query == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "missing query",
+		})
+		return
+	}
+	if mode == "" {
+		mode = "commits"
+	}
+	if ref == "" {
+		ref = "HEAD"
+	}
+
+	limit := 100
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if n, err := strconv.Atoi(limitStr); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+
+	dir := getRigRepoDir(rig)
+	switch mode {
+	case "files":
+		results, err := gitSearchFiles(dir, ref, path, query, limit)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": err.Error(),
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"files": results,
+		})
+	default:
+		results, err := gitSearchCommits(dir, query, limit)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": err.Error(),
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"commits": results,
+		})
+	}
+}
+
 func parseGitGraphRows(output, graphSep string) []GitGraphRow {
 	if output == "" {
 		return nil
@@ -1097,6 +1169,95 @@ func gitRangePatch(dir, base, head string) (string, bool, error) {
 	}
 
 	return patch, false, nil
+}
+
+func gitSearchCommits(dir, query string, limit int) ([]GitSearchCommit, error) {
+	fieldSep := "\x1f"
+	format := strings.Join([]string{
+		"%H",
+		"%h",
+		"%an",
+		"%ar",
+		"%s",
+	}, fieldSep)
+
+	args := []string{
+		"log",
+		"--all",
+		"--date=relative",
+		"--regexp-ignore-case",
+		"--grep=" + query,
+		"--format=" + format,
+		"--max-count=" + strconv.Itoa(limit),
+	}
+
+	cmd, cancel := command("git", args...)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var commits []GitSearchCommit
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, fieldSep)
+		if len(parts) < 5 {
+			continue
+		}
+		commits = append(commits, GitSearchCommit{
+			Hash:      parts[0],
+			ShortHash: parts[1],
+			Author:    parts[2],
+			Date:      parts[3],
+			Message:   parts[4],
+		})
+	}
+
+	return commits, nil
+}
+
+func gitSearchFiles(dir, ref, path, query string, limit int) ([]GitSearchMatch, error) {
+	args := []string{"grep", "-n", "--full-name", "-e", query, ref}
+	if path != "" {
+		args = append(args, "--", path)
+	}
+	cmd, cancel := command("git", args...)
+	defer cancel()
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		// git grep exits 1 on no matches; return empty result instead of error
+		if strings.Contains(err.Error(), "exit status 1") {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var matches []GitSearchMatch
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		lineNum, _ := strconv.Atoi(parts[1])
+		matches = append(matches, GitSearchMatch{
+			Path:    parts[0],
+			Line:    lineNum,
+			Content: parts[2],
+		})
+		if len(matches) >= limit {
+			break
+		}
+	}
+
+	return matches, nil
 }
 
 func gitLocalBranches(dir string) ([]GitBranch, error) {

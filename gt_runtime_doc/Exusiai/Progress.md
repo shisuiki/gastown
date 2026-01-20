@@ -7,3 +7,4 @@
 - Added Git tree/blob APIs and a Files tab with tree navigation and file preview.
 - Enhanced branch listing with upstream and ahead/behind metadata plus remote markers in UI.
 - Added compare API and Compare tab to review commit range + diff between refs.
+- Added git search API and Search tab for commit and file grep results.
