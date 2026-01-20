@@ -75,6 +75,10 @@ func runBatchSling(beadIDs []string, rigName string, townBeadsDir string) error 
 
 		targetAgent := spawnInfo.AgentID()
 		hookWorkDir := spawnInfo.ClonePath
+		logSlingAudit("batch", beadID, targetAgent, spawnInfo.Pane, hookWorkDir, map[string]interface{}{
+			"rig":      rigName,
+			"cli_args": beadIDs,
+		})
 
 		// Auto-convoy: check if issue is already tracked
 		if !slingNoConvoy {

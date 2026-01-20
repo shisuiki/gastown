@@ -91,6 +91,7 @@ var (
 	slingArgs     string   // --args flag: natural language instructions for executor
 	slingIdle     time.Duration
 	slingSkipBusy bool
+	slingAllowMissing bool // --allow-missing: allow slinging bead-like IDs that fail verification
 
 	// Flags migrated for polecat spawning (used by sling for work assignment)
 	slingCreate   bool   // --create: create polecat if it doesn't exist
@@ -109,6 +110,7 @@ func init() {
 	slingCmd.Flags().StringVarP(&slingArgs, "args", "a", "", "Natural language instructions for the executor (e.g., 'patch release')")
 	slingCmd.Flags().DurationVar(&slingIdle, "idle", 2*time.Minute, "Minimum idle time before interrupting a running target (used with --skip-busy)")
 	slingCmd.Flags().BoolVar(&slingSkipBusy, "skip-busy", false, "Skip slinging to running targets with recent activity (uses --idle threshold)")
+	slingCmd.Flags().BoolVar(&slingAllowMissing, "allow-missing", false, "Allow slinging bead-like IDs that fail verification")
 
 	// Flags for polecat spawning (when target is a rig)
 	slingCmd.Flags().BoolVar(&slingCreate, "create", false, "Create polecat if it doesn't exist")
@@ -178,10 +180,12 @@ func runSling(cmd *cobra.Command, args []string) error {
 				// Standalone formula mode: gt sling <formula> [target]
 				return runSlingFormula(args)
 			}
-			// Not a formula either - check if it looks like a bead ID (routing issue workaround).
-			// Accept it and let the actual bd update fail later if the bead doesn't exist.
-			// This fixes: gt sling bd-ka761 beads/crew/dave failing with 'not a valid bead or formula'
+			// Not a formula either - check if it looks like a bead ID.
+			// Default: reject unverified IDs. Use --allow-missing to override.
 			if looksLikeBeadID(firstArg) {
+				if !slingAllowMissing {
+					return fmt.Errorf("bead '%s' not found (use --allow-missing to sling anyway)", firstArg)
+				}
 				beadID = firstArg
 			} else {
 				// Neither bead nor formula
@@ -293,10 +297,11 @@ func runSling(cmd *cobra.Command, args []string) error {
 				} else {
 					return fmt.Errorf("resolving target: %w", err)
 				}
-			} else {
-				skipBusyEligible = true
 			}
 			// Use target's working directory for bd commands (needed for redirect-based routing)
+			if err == nil {
+				skipBusyEligible = true
+			}
 			if targetWorkDir != "" {
 				hookWorkDir = targetWorkDir
 			}
@@ -315,7 +320,11 @@ func runSling(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if (slingSkipBusy || cmd.Flags().Changed("idle")) && skipBusyEligible {
+	skipBusyRequested := slingSkipBusy
+	if cmd != nil && cmd.Flags().Changed("idle") {
+		skipBusyRequested = true
+	}
+	if skipBusyRequested && skipBusyEligible {
 		idleThreshold := slingIdle
 		if idleThreshold <= 0 {
 			idleThreshold = 2 * time.Minute
@@ -343,12 +352,34 @@ func runSling(cmd *cobra.Command, args []string) error {
 		fmt.Printf("%s Slinging %s to %s...\n", style.Bold.Render("🎯"), beadID, targetAgent)
 	}
 
+	mode := "bead"
+	extra := map[string]interface{}{
+		"cli_args": args,
+	}
+	extra["skip_busy"] = skipBusyRequested
+	if skipBusyRequested {
+		extra["idle_threshold"] = slingIdle.String()
+	}
+	if formulaName != "" {
+		mode = "formula-on-bead"
+		extra["formula"] = formulaName
+		extra["base_bead"] = beadID
+	}
+	logSlingAudit(mode, beadID, targetAgent, targetPane, hookWorkDir, extra)
+
 	// Check if bead is already pinned (guard against accidental re-sling)
 	info, err := getBeadInfo(beadID)
 	if err != nil {
-		return fmt.Errorf("checking bead status: %w", err)
+		if slingAllowMissing && formulaName == "" {
+			fmt.Printf("%s Could not read bead info for %s: %v (continuing because --allow-missing)\n", style.Dim.Render("Warning:"), beadID, err)
+		} else {
+			return fmt.Errorf("checking bead status: %w", err)
+		}
 	}
-	if info.Status == "pinned" && !slingForce {
+	if info == nil && formulaName != "" {
+		return fmt.Errorf("cannot sling formula %s on %s without bead info", formulaName, beadID)
+	}
+	if info != nil && info.Status == "pinned" && !slingForce {
 		assignee := info.Assignee
 		if assignee == "" {
 			assignee = "(unknown)"
@@ -358,7 +389,7 @@ func runSling(cmd *cobra.Command, args []string) error {
 
 	// Auto-convoy: check if issue is already tracked by a convoy
 	// If not, create one for dashboard visibility (unless --no-convoy is set)
-	if !slingNoConvoy && formulaName == "" {
+	if !slingNoConvoy && formulaName == "" && info != nil {
 		existingConvoy := isTrackedByConvoy(beadID)
 		if existingConvoy == "" {
 			if slingDryRun {

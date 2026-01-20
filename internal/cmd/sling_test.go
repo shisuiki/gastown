@@ -652,14 +652,114 @@ exit 0
 	}
 }
 
+func TestSlingRejectsMissingBeadWithoutAllowMissing(t *testing.T) {
+	townRoot := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(townRoot, "mayor", "rig"), 0755); err != nil {
+		t.Fatalf("mkdir mayor/rig: %v", err)
+	}
+
+	binDir := filepath.Join(townRoot, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir binDir: %v", err)
+	}
+	bdPath := filepath.Join(binDir, "bd")
+	bdScript := "#!/bin/sh\nexit 0\n"
+	if err := os.WriteFile(bdPath, []byte(bdScript), 0755); err != nil {
+		t.Fatalf("write bd stub: %v", err)
+	}
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(EnvGTRole, "crew")
+	t.Setenv("GT_CREW", "jv")
+	t.Setenv("GT_POLECAT", "")
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(townRoot); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	prevDryRun := slingDryRun
+	prevNoConvoy := slingNoConvoy
+	prevAllowMissing := slingAllowMissing
+	t.Cleanup(func() {
+		slingDryRun = prevDryRun
+		slingNoConvoy = prevNoConvoy
+		slingAllowMissing = prevAllowMissing
+	})
+
+	slingDryRun = true
+	slingNoConvoy = true
+	slingAllowMissing = false
+
+	err = runSling(nil, []string{"gt-abc123"})
+	if err == nil || !strings.Contains(err.Error(), "use --allow-missing") {
+		t.Fatalf("expected missing bead error with allow-missing hint, got: %v", err)
+	}
+}
+
+func TestSlingAllowMissingSkipsBeadInfo(t *testing.T) {
+	townRoot := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(townRoot, "mayor", "rig"), 0755); err != nil {
+		t.Fatalf("mkdir mayor/rig: %v", err)
+	}
+
+	binDir := filepath.Join(townRoot, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir binDir: %v", err)
+	}
+	bdPath := filepath.Join(binDir, "bd")
+	bdScript := "#!/bin/sh\nexit 0\n"
+	if err := os.WriteFile(bdPath, []byte(bdScript), 0755); err != nil {
+		t.Fatalf("write bd stub: %v", err)
+	}
+
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(EnvGTRole, "crew")
+	t.Setenv("GT_CREW", "jv")
+	t.Setenv("GT_POLECAT", "")
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(townRoot); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	prevDryRun := slingDryRun
+	prevNoConvoy := slingNoConvoy
+	prevAllowMissing := slingAllowMissing
+	t.Cleanup(func() {
+		slingDryRun = prevDryRun
+		slingNoConvoy = prevNoConvoy
+		slingAllowMissing = prevAllowMissing
+	})
+
+	slingDryRun = true
+	slingNoConvoy = true
+	slingAllowMissing = true
+
+	if err := runSling(nil, []string{"gt-abc123"}); err != nil {
+		t.Fatalf("expected allow-missing sling to proceed, got: %v", err)
+	}
+}
+
 // TestLooksLikeBeadID tests the bead ID pattern recognition function.
-// This ensures gt sling accepts bead IDs even when routing-based verification fails.
+// This ensures gt sling accepts bead IDs even when routing-based verification fails
+// (gated behind --allow-missing).
 // Fixes: gt sling bd-ka761 failing with 'not a valid bead or formula'
 //
 // Note: looksLikeBeadID is a fallback check in sling. The actual sling flow is:
 // 1. Try verifyBeadExists (routing-based lookup)
 // 2. Try verifyFormulaExists (formula check)
-// 3. Fall back to looksLikeBeadID pattern match
+// 3. Fall back to looksLikeBeadID pattern match (gated behind --allow-missing)
 // So "mol-release" matches the pattern but won't be treated as bead in practice
 // because it would be caught by formula verification first.
 func TestLooksLikeBeadID(t *testing.T) {

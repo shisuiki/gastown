@@ -168,6 +168,14 @@ func runSlingFormula(args []string) error {
 	}
 
 	fmt.Printf("%s Slinging formula %s to %s...\n", style.Bold.Render("🎯"), formulaName, targetAgent)
+	extra := map[string]interface{}{
+		"cli_args": args,
+		"formula":  formulaName,
+	}
+	if len(slingVars) > 0 {
+		extra["vars"] = slingVars
+	}
+	logSlingAudit("formula", "", targetAgent, targetPane, "", extra)
 
 	if slingDryRun {
 		fmt.Printf("Would cook formula: %s\n", formulaName)

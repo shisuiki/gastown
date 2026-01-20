@@ -11,6 +11,7 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/constants"
+	"github.com/steveyegge/gastown/internal/events"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -250,6 +251,43 @@ func injectStartPrompt(pane, beadID, subject, args string) error {
 	// Use the reliable nudge pattern (same as gt nudge / tmux.NudgeSession)
 	t := tmux.NewTmux()
 	return t.NudgePane(pane, prompt)
+}
+
+func logSlingAudit(mode, beadID, targetAgent, targetPane, hookWorkDir string, extra map[string]interface{}) {
+	payload := events.SlingPayload(beadID, targetAgent)
+	payload["mode"] = mode
+	if slingSubject != "" {
+		payload["subject"] = slingSubject
+	}
+	if slingArgs != "" {
+		payload["args"] = slingArgs
+	}
+	if targetPane != "" {
+		payload["pane"] = targetPane
+		if session := getSessionFromPane(targetPane); session != "" {
+			payload["session"] = session
+		}
+	}
+	if hookWorkDir != "" {
+		payload["hook_work_dir"] = hookWorkDir
+	}
+	payload["dry_run"] = slingDryRun
+	payload["no_convoy"] = slingNoConvoy
+	payload["allow_missing"] = slingAllowMissing
+	payload["pid"] = os.Getpid()
+	if cwd, err := os.Getwd(); err == nil {
+		payload["cwd"] = cwd
+	}
+	if beadsDir := os.Getenv("BEADS_DIR"); beadsDir != "" {
+		payload["beads_dir"] = beadsDir
+	}
+	if beadsDB := os.Getenv("BEADS_DB"); beadsDB != "" {
+		payload["beads_db"] = beadsDB
+	}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	_ = events.LogAudit(events.TypeSling, detectActor(), payload)
 }
 
 // getSessionFromPane extracts session name from a pane target.
