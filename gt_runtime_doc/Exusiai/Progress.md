@@ -17,3 +17,4 @@
 - Graph now renders rich rows (message, refs, author, hash, date) with SVG lanes and fixed-height scroll panel.
 - Locked graph panel height with explicit max-height and runtime sizing to keep it inside its scroll box.
 - Added MERGE_READY validation in refinery handler with issue inference and explicit failure notice for missing issue/MR.
+- Implemented bd create -m alias in beads repo and added test; push blocked due to missing access to steveyegge/beads.
