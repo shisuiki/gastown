@@ -3,6 +3,7 @@
 <head>
     {{template "head" .}}
     <title>Git - Gas Town</title>
+    <link rel="stylesheet" href="/static/css/vis-network.min.css">
     <style>
         .git-stats {
             display: flex;
@@ -28,7 +29,7 @@
             text-transform: uppercase;
         }
         .commit-list {
-            max-height: 400px;
+            max-height: 360px;
             overflow-y: auto;
         }
         .commit-item {
@@ -37,6 +38,7 @@
             padding: 12px;
             border-bottom: 1px solid #333;
             transition: background 0.2s;
+            cursor: pointer;
         }
         .commit-item:hover {
             background: rgba(255, 255, 255, 0.02);
@@ -72,11 +74,6 @@
         }
         .commit-author {
             color: #94a3b8;
-        }
-        .commit-panel {
-            display: grid;
-            grid-template-columns: 1fr 1.1fr;
-            gap: 20px;
         }
         .detail-card {
             border: 1px solid #333;
@@ -129,10 +126,156 @@
             border: 1px solid #1f2937;
             color: #e2e8f0;
             white-space: pre;
-            overflow-x: auto;
+            overflow: auto;
             max-height: 420px;
+            max-width: 100%;
+            box-sizing: border-box;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 0.8rem;
+        }
+        .branch-tag {
+            display: inline-block;
+            background: #166534;
+            color: #4ade80;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 8px;
+        }
+        .branches-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .branch-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #0f172a;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            cursor: pointer;
+        }
+        .branch-item.current {
+            border-color: #4ade80;
+            background: rgba(74, 222, 128, 0.1);
+        }
+        .branch-item.active {
+            border-color: #60a5fa;
+            background: rgba(96, 165, 250, 0.08);
+        }
+        .branch-name {
+            font-family: monospace;
+            color: #eee;
+        }
+        .branch-commit {
+            font-size: 0.75rem;
+            color: #64748b;
+            font-family: monospace;
+        }
+        .branch-meta {
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+        .current-indicator {
+            color: #4ade80;
+            font-size: 0.8rem;
+        }
+        .tab-nav {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        .tab-btn {
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #eee;
+        }
+        .tab-btn.active {
+            background: #3b82f6;
+            color: #fff;
+        }
+        .rig-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .rig-selector select {
+            padding: 8px 12px;
+            background: #0f172a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #eee;
+            font-size: 0.9rem;
+        }
+        .git-grid {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            grid-template-rows: minmax(220px, auto) minmax(260px, auto);
+            gap: 16px;
+        }
+        .panel {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 14px;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .branch-panel {
+            grid-column: 1;
+            grid-row: 1;
+        }
+        .commit-panel {
+            grid-column: 1;
+            grid-row: 2;
+        }
+        .graph-panel {
+            grid-column: 2;
+            grid-row: 1 / span 2;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .panel-scroll {
+            overflow-y: auto;
+        }
+        .branch-list {
+            max-height: 220px;
+        }
+        .graph-canvas {
+            flex: 1;
+            min-height: 520px;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            background: #0b1220;
+        }
+        .tabs-panel {
+            margin-top: 18px;
+        }
+        .tab-content {
+            margin-top: 12px;
         }
         .file-toolbar {
             display: flex;
@@ -214,114 +357,6 @@
             cursor: pointer;
             padding: 0;
         }
-        .branch-tag {
-            display: inline-block;
-            background: #166534;
-            color: #4ade80;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            margin-left: 8px;
-        }
-        .graph-container {
-            position: relative;
-            overflow-x: auto;
-            padding: 20px 0;
-        }
-        .graph-row {
-            display: flex;
-            align-items: flex-start;
-            min-height: 40px;
-            position: relative;
-        }
-        .graph-text {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            white-space: pre;
-            color: #94a3b8;
-            padding-right: 12px;
-            min-width: 80px;
-        }
-        .graph-content {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            min-width: 0;
-        }
-        .branches-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .branch-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: #0f172a;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid #333;
-        }
-        .branch-item.current {
-            border-color: #4ade80;
-            background: rgba(74, 222, 128, 0.1);
-        }
-        .branch-name {
-            font-family: monospace;
-            color: #eee;
-        }
-        .branch-commit {
-            font-size: 0.75rem;
-            color: #64748b;
-            font-family: monospace;
-        }
-        .branch-meta {
-            font-size: 0.7rem;
-            color: #94a3b8;
-        }
-        .current-indicator {
-            color: #4ade80;
-            font-size: 0.8rem;
-        }
-        .tab-nav {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #333;
-            padding-bottom: 10px;
-        }
-        .tab-btn {
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            color: #94a3b8;
-            cursor: pointer;
-            border-radius: 6px 6px 0 0;
-            font-size: 0.9rem;
-            transition: all 0.2s;
-        }
-        .tab-btn:hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: #eee;
-        }
-        .tab-btn.active {
-            background: #3b82f6;
-            color: #fff;
-        }
-        .rig-selector {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        .rig-selector select {
-            padding: 8px 12px;
-            background: #0f172a;
-            border: 1px solid #333;
-            border-radius: 6px;
-            color: #eee;
-            font-size: 0.9rem;
-        }
         @media (max-width: 768px) {
             .git-stats {
                 gap: 10px;
@@ -338,14 +373,21 @@
                 flex-direction: column;
                 gap: 8px;
             }
-            .commit-panel {
-                grid-template-columns: 1fr;
-            }
             .file-panel {
                 grid-template-columns: 1fr;
             }
-            .graph-text {
-                min-width: 60px;
+            .git-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
+            .graph-panel,
+            .branch-panel,
+            .commit-panel {
+                grid-column: 1;
+                grid-row: auto;
+            }
+            .graph-canvas {
+                min-height: 360px;
             }
         }
     </style>
@@ -358,7 +400,7 @@
             <h1 style="font-size: 1.2rem; color: #94a3b8;">Git Repository</h1>
             <div class="rig-selector">
                 <label class="text-muted">Repository:</label>
-                <select x-model="selectedRig" @change="resetSelection(); loadAll(); graphRows = [];">
+                <select x-model="selectedRig" @change="resetSelection(); loadAll(); loadGraph(true);">
                     <option value="">Town Root (~/gt)</option>
                     <template x-for="rig in rigs" :key="rig.name">
                         <option :value="rig.name" x-text="rig.name + ' (' + rig.repo_dir + ')'"></option>
@@ -377,21 +419,87 @@
                 <div class="stat-label">Branches</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value" x-text="currentBranch || '-'"></div>
+                <div class="stat-value" x-text="currentBranch || '-'">-</div>
                 <div class="stat-label">Current Branch</div>
             </div>
         </div>
 
-        <div class="card">
+        <div class="git-grid">
+            <div class="panel branch-panel">
+                <div class="panel-header">Branches</div>
+                <template x-if="loading.branches">
+                    <p class="text-muted">Loading branches...</p>
+                </template>
+                <template x-if="!loading.branches && branches.length === 0">
+                    <p class="text-muted">No branches found</p>
+                </template>
+                <div class="branches-list panel-scroll branch-list" x-show="!loading.branches && branches.length > 0">
+                    <template x-for="branch in branches" :key="branch.name">
+                        <div class="branch-item" :class="{ current: branch.is_current, active: selectedBranch === branch.name }" @click="selectBranch(branch)">
+                            <template x-if="branch.is_current">
+                                <span class="current-indicator">●</span>
+                            </template>
+                            <span class="branch-name" x-text="branch.name"></span>
+                            <span class="branch-commit" x-text="branch.short_commit || branch.last_commit"></span>
+                            <template x-if="branch.is_remote">
+                                <span class="branch-meta">remote</span>
+                            </template>
+                            <template x-if="branch.upstream">
+                                <span class="branch-meta" x-text="'-> ' + branch.upstream"></span>
+                            </template>
+                            <template x-if="branch.ahead || branch.behind">
+                                <span class="branch-meta" x-text="'up ' + (branch.ahead || 0) + ' down ' + (branch.behind || 0)"></span>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="panel commit-panel">
+                <div class="panel-header">Commits</div>
+                <template x-if="loading.commits">
+                    <p class="text-muted">Loading commits...</p>
+                </template>
+                <template x-if="!loading.commits && commits.length === 0">
+                    <p class="text-muted">No commits found</p>
+                </template>
+                <div class="commit-list panel-scroll" x-show="!loading.commits && commits.length > 0" x-ref="commitList">
+                    <template x-for="(commit, index) in commits" :key="commit.hash">
+                        <div class="commit-item" :class="{ selected: selectedCommitHash === commit.hash }" @click="selectCommit(commit)" :data-hash="commit.hash">
+                            <span class="commit-hash" x-text="commit.short_hash"></span>
+                            <div class="commit-info">
+                                <div class="commit-message">
+                                    <span x-text="commit.message"></span>
+                                    <template x-if="commit.branch && index === 0">
+                                        <span class="branch-tag" x-text="commit.branch"></span>
+                                    </template>
+                                </div>
+                                <div class="commit-meta">
+                                    <span class="commit-author" x-text="commit.author"></span>
+                                    <span> · </span>
+                                    <span x-text="commit.date"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div class="panel graph-panel">
+                <div class="panel-header">Graph</div>
+                <div class="file-toolbar">
+                    <label class="text-muted">Graph depth:</label>
+                    <input type="number" min="20" max="400" x-model="graphLimit" style="width: 80px;">
+                    <button class="tab-btn" style="border-radius: 6px;" @click="loadGraph(true)">Refresh</button>
+                </div>
+                <div id="git-graph" class="graph-canvas"></div>
+            </div>
+        </div>
+
+        <div class="panel tabs-panel">
             <div class="tab-nav">
-                <button class="tab-btn" :class="{ active: activeTab === 'commits' }" @click="activeTab = 'commits'">
-                    Commits
-                </button>
-                <button class="tab-btn" :class="{ active: activeTab === 'graph' }" @click="activeTab = 'graph'; loadGraph()">
-                    Graph
-                </button>
-                <button class="tab-btn" :class="{ active: activeTab === 'branches' }" @click="activeTab = 'branches'">
-                    Branches
+                <button class="tab-btn" :class="{ active: activeTab === 'changes' }" @click="activeTab = 'changes'">
+                    Changes
                 </button>
                 <button class="tab-btn" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'; loadFiles()">
                     Files
@@ -404,43 +512,16 @@
                 </button>
             </div>
 
-            <!-- Commits Tab -->
-            <div x-show="activeTab === 'commits'">
-                <template x-if="loading.commits">
-                    <p class="text-muted">Loading commits...</p>
-                </template>
-                <template x-if="!loading.commits && commits.length === 0">
-                    <p class="text-muted">No commits found</p>
-                </template>
-                <div class="commit-panel" x-show="!loading.commits && commits.length > 0">
-                    <div class="commit-list">
-                        <template x-for="(commit, index) in commits" :key="commit.hash">
-                            <div class="commit-item" :class="{ selected: selectedCommitHash === commit.hash }" @click="selectCommit(commit)">
-                                <span class="commit-hash" x-text="commit.short_hash"></span>
-                                <div class="commit-info">
-                                    <div class="commit-message">
-                                        <span x-text="commit.message"></span>
-                                        <template x-if="commit.branch && index === 0">
-                                            <span class="branch-tag" x-text="commit.branch"></span>
-                                        </template>
-                                    </div>
-                                    <div class="commit-meta">
-                                        <span class="commit-author" x-text="commit.author"></span>
-                                        <span> · </span>
-                                        <span x-text="commit.date"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                    <div class="detail-card">
-                        <template x-if="!selectedCommitHash">
-                            <p class="text-muted">Select a commit to view details.</p>
-                        </template>
-                        <template x-if="selectedCommitHash && loading.detail">
-                            <p class="text-muted">Loading commit details...</p>
-                        </template>
-                        <template x-if="selectedCommitHash && !loading.detail && commitDetail">
+            <div class="tab-content">
+                <div x-show="activeTab === 'changes'">
+                    <template x-if="!selectedCommitHash">
+                        <p class="text-muted">Select a commit to view details.</p>
+                    </template>
+                    <template x-if="selectedCommitHash && loading.detail">
+                        <p class="text-muted">Loading commit details...</p>
+                    </template>
+                    <template x-if="selectedCommitHash && !loading.detail && commitDetail">
+                        <div class="detail-card">
                             <div>
                                 <div class="detail-row">
                                     <span class="detail-label">Commit</span>
@@ -477,189 +558,120 @@
                                     </div>
                                 </template>
                             </div>
-                        </template>
 
-                        <div class="diff-files" x-show="selectedCommitHash">
-                            <div style="display:flex; align-items:center; justify-content:space-between;">
-                                <strong>Files</strong>
-                                <button class="tab-btn" style="border-radius: 6px;" @click="toggleDiff()" x-text="showDiff ? 'Hide diff' : 'Show diff'"></button>
-                            </div>
-                            <template x-if="loading.diff">
-                                <p class="text-muted">Loading diff...</p>
-                            </template>
-                            <template x-if="!loading.diff && commitDiff">
-                                <div>
-                                    <template x-if="commitDiff.files.length === 0">
-                                        <p class="text-muted">No file changes</p>
-                                    </template>
-                                    <template x-for="file in commitDiff.files" :key="file.path">
-                                        <div class="diff-file">
-                                            <span class="diff-file-path" x-text="formatFilePath(file)"></span>
-                                            <span class="diff-file-stats" x-text="formatFileStats(file)"></span>
-                                        </div>
-                                    </template>
-                                    <template x-if="showDiff && commitDiff.patch">
-                                        <pre class="diff-patch" x-text="commitDiff.patch"></pre>
-                                    </template>
-                                    <template x-if="showDiff && commitDiff.truncated">
-                                        <p class="text-muted">Diff truncated for size.</p>
-                                    </template>
+                            <div class="diff-files" x-show="selectedCommitHash">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <strong>Files</strong>
+                                    <button class="tab-btn" style="border-radius: 6px;" @click="toggleDiff()" x-text="showDiff ? 'Hide diff' : 'Show diff'"></button>
                                 </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Graph Tab -->
-            <div x-show="activeTab === 'graph'">
-                <template x-if="loading.graph">
-                    <p class="text-muted">Loading graph...</p>
-                </template>
-                <template x-if="!loading.graph && graphRows.length === 0">
-                    <p class="text-muted">No graph data</p>
-                </template>
-                <div class="graph-container" x-show="!loading.graph && graphRows.length > 0">
-                    <template x-for="(row, index) in graphRows" :key="row.hash || 'graph-' + index">
-                        <div class="graph-row">
-                            <span class="graph-text" x-text="row.graph"></span>
-                            <template x-if="!row.graph_only">
-                                <div class="graph-content">
-                                    <span class="commit-hash" x-text="row.short_hash"></span>
-                                    <div class="commit-info">
-                                        <div class="commit-message">
-                                            <span x-text="row.message"></span>
-                                            <template x-if="row.refs">
-                                                <span class="branch-tag" x-text="row.refs"></span>
-                                            </template>
-                                        </div>
-                                        <div class="commit-meta">
-                                            <span class="commit-author" x-text="row.author"></span>
-                                            <span> · </span>
-                                            <span x-text="row.date"></span>
-                                        </div>
+                                <template x-if="loading.diff">
+                                    <p class="text-muted">Loading diff...</p>
+                                </template>
+                                <template x-if="!loading.diff && commitDiff">
+                                    <div>
+                                        <template x-if="commitDiff.files.length === 0">
+                                            <p class="text-muted">No file changes</p>
+                                        </template>
+                                        <template x-for="file in commitDiff.files" :key="file.path">
+                                            <div class="diff-file">
+                                                <span class="diff-file-path" x-text="formatFilePath(file)"></span>
+                                                <span class="diff-file-stats" x-text="formatFileStats(file)"></span>
+                                            </div>
+                                        </template>
+                                        <template x-if="showDiff && commitDiff.patch">
+                                            <pre class="diff-patch" x-text="commitDiff.patch"></pre>
+                                        </template>
+                                        <template x-if="showDiff && commitDiff.truncated">
+                                            <p class="text-muted">Diff truncated for size.</p>
+                                        </template>
                                     </div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-                </div>
-            </div>
-
-            <!-- Branches Tab -->
-            <div x-show="activeTab === 'branches'">
-                <template x-if="loading.branches">
-                    <p class="text-muted">Loading branches...</p>
-                </template>
-                <template x-if="!loading.branches && branches.length === 0">
-                    <p class="text-muted">No branches found</p>
-                </template>
-                <div class="branches-list" x-show="!loading.branches && branches.length > 0">
-                    <template x-for="branch in branches" :key="branch.name">
-                        <div class="branch-item" :class="{ current: branch.is_current }">
-                            <template x-if="branch.is_current">
-                                <span class="current-indicator">●</span>
-                            </template>
-                            <span class="branch-name" x-text="branch.name"></span>
-                            <span class="branch-commit" x-text="branch.last_commit"></span>
-                            <template x-if="branch.is_remote">
-                                <span class="branch-meta">remote</span>
-                            </template>
-                            <template x-if="branch.upstream">
-                                <span class="branch-meta" x-text="'⇢ ' + branch.upstream"></span>
-                            </template>
-                            <template x-if="branch.ahead || branch.behind">
-                                <span class="branch-meta" x-text="'↑' + (branch.ahead || 0) + ' ↓' + (branch.behind || 0)"></span>
-                            </template>
-                        </div>
-                    </template>
-                </div>
-            </div>
-
-            <!-- Files Tab -->
-            <div x-show="activeTab === 'files'">
-                <div class="file-toolbar">
-                    <label class="text-muted">Ref:</label>
-                    <input type="text" x-model="fileRef" placeholder="HEAD" @keydown.enter="loadFiles()">
-                    <button class="tab-btn" style="border-radius: 6px;" @click="loadFiles()">Load</button>
-                </div>
-                <template x-if="loading.tree">
-                    <p class="text-muted">Loading tree...</p>
-                </template>
-                <template x-if="!loading.tree && treeEntries.length === 0">
-                    <p class="text-muted">No files found</p>
-                </template>
-                <div class="file-panel" x-show="!loading.tree && treeEntries.length > 0">
-                    <div>
-                        <div class="file-breadcrumbs">
-                            <button @click="loadTree('')">root</button>
-                            <template x-for="crumb in breadcrumbParts()" :key="crumb.path">
-                                <span>
-                                    /
-                                    <button @click="loadTree(crumb.path)" x-text="crumb.name"></button>
-                                </span>
-                            </template>
-                        </div>
-                        <div class="file-list">
-                            <template x-if="treePath">
-                                <div class="file-entry" @click="loadTree(parentPath())">
-                                    <span class="file-name">..</span>
-                                    <span class="file-meta">up</span>
-                                </div>
-                            </template>
-                            <template x-for="entry in treeEntries" :key="entry.path">
-                                <div class="file-entry" :class="{ active: blob && blob.path === entry.path }" @click="openEntry(entry)">
-                                    <span class="file-name" x-text="entry.name"></span>
-                                    <span class="file-meta" x-text="entry.type === 'tree' ? 'dir' : formatFileSize(entry.size)"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                    <div class="file-view">
-                        <template x-if="loading.blob">
-                            <p class="text-muted">Loading file...</p>
-                        </template>
-                        <template x-if="!loading.blob && !blob">
-                            <p class="text-muted">Select a file to preview.</p>
-                        </template>
-                        <template x-if="!loading.blob && blob">
-                            <div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Path</span>
-                                    <span x-text="blob.path"></span>
-                                </div>
-                                <template x-if="blob.binary">
-                                    <p class="text-muted">Binary file - preview not available.</p>
-                                </template>
-                                <template x-if="!blob.binary">
-                                    <pre class="diff-patch" style="max-height: 300px;" x-text="blob.content"></pre>
-                                </template>
-                                <template x-if="blob.truncated">
-                                    <p class="text-muted">File truncated for size.</p>
                                 </template>
                             </div>
-                        </template>
+                        </div>
+                    </template>
+                </div>
+
+                <div x-show="activeTab === 'files'">
+                    <div class="file-toolbar">
+                        <label class="text-muted">Ref:</label>
+                        <input type="text" x-model="fileRef" placeholder="HEAD" @keydown.enter="loadFiles()">
+                        <button class="tab-btn" style="border-radius: 6px;" @click="loadFiles()">Load</button>
+                    </div>
+                    <template x-if="loading.tree">
+                        <p class="text-muted">Loading tree...</p>
+                    </template>
+                    <template x-if="!loading.tree && treeEntries.length === 0">
+                        <p class="text-muted">No files found</p>
+                    </template>
+                    <div class="file-panel" x-show="!loading.tree && treeEntries.length > 0">
+                        <div>
+                            <div class="file-breadcrumbs">
+                                <button @click="loadTree('')">root</button>
+                                <template x-for="crumb in breadcrumbParts()" :key="crumb.path">
+                                    <span>
+                                        /
+                                        <button @click="loadTree(crumb.path)" x-text="crumb.name"></button>
+                                    </span>
+                                </template>
+                            </div>
+                            <div class="file-list">
+                                <template x-if="treePath">
+                                    <div class="file-entry" @click="loadTree(parentPath())">
+                                        <span class="file-name">..</span>
+                                        <span class="file-meta">up</span>
+                                    </div>
+                                </template>
+                                <template x-for="entry in treeEntries" :key="entry.path">
+                                    <div class="file-entry" :class="{ active: blob && blob.path === entry.path }" @click="openEntry(entry)">
+                                        <span class="file-name" x-text="entry.name"></span>
+                                        <span class="file-meta" x-text="entry.type === 'tree' ? 'dir' : formatFileSize(entry.size)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="file-view">
+                            <template x-if="loading.blob">
+                                <p class="text-muted">Loading file...</p>
+                            </template>
+                            <template x-if="!loading.blob && !blob">
+                                <p class="text-muted">Select a file to preview.</p>
+                            </template>
+                            <template x-if="!loading.blob && blob">
+                                <div>
+                                    <div class="detail-row">
+                                        <span class="detail-label">Path</span>
+                                        <span x-text="blob.path"></span>
+                                    </div>
+                                    <template x-if="blob.binary">
+                                        <p class="text-muted">Binary file - preview not available.</p>
+                                    </template>
+                                    <template x-if="!blob.binary">
+                                        <pre class="diff-patch" style="max-height: 300px;" x-text="blob.content"></pre>
+                                    </template>
+                                    <template x-if="blob.truncated">
+                                        <p class="text-muted">File truncated for size.</p>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Compare Tab -->
-            <div x-show="activeTab === 'compare'">
-                <div class="file-toolbar">
-                    <label class="text-muted">Base:</label>
-                    <input type="text" x-model="compareBase" placeholder="origin/main">
-                    <label class="text-muted">Head:</label>
-                    <input type="text" x-model="compareHead" placeholder="feature-branch">
-                    <button class="tab-btn" style="border-radius: 6px;" @click="loadCompare()">Compare</button>
-                </div>
-                <template x-if="loading.compare">
-                    <p class="text-muted">Loading compare...</p>
-                </template>
-                <template x-if="!loading.compare && compareCommits.length === 0">
-                    <p class="text-muted">No commits in range.</p>
-                </template>
-                <div class="commit-panel" x-show="!loading.compare && compareCommits.length > 0">
-                    <div class="commit-list">
+                <div x-show="activeTab === 'compare'">
+                    <div class="file-toolbar">
+                        <label class="text-muted">Base:</label>
+                        <input type="text" x-model="compareBase" placeholder="origin/main">
+                        <label class="text-muted">Head:</label>
+                        <input type="text" x-model="compareHead" placeholder="feature-branch">
+                        <button class="tab-btn" style="border-radius: 6px;" @click="loadCompare()">Compare</button>
+                    </div>
+                    <template x-if="loading.compare">
+                        <p class="text-muted">Loading compare...</p>
+                    </template>
+                    <template x-if="!loading.compare && compareCommits.length === 0">
+                        <p class="text-muted">No commits in range.</p>
+                    </template>
+                    <div class="commit-list" x-show="!loading.compare && compareCommits.length > 0">
                         <template x-for="commit in compareCommits" :key="commit.hash">
                             <div class="commit-item">
                                 <span class="commit-hash" x-text="commit.short_hash"></span>
@@ -676,101 +688,101 @@
                             </div>
                         </template>
                     </div>
-                    <div class="detail-card">
+                    <div class="detail-card" x-show="compareDiff">
                         <strong>Diff</strong>
-                        <template x-if="compareDiff">
-                            <div>
-                                <div class="diff-files">
-                                    <template x-if="compareDiff.files.length === 0">
-                                        <p class="text-muted">No file changes</p>
-                                    </template>
-                                    <template x-for="file in compareDiff.files" :key="file.path">
-                                        <div class="diff-file">
-                                            <span class="diff-file-path" x-text="formatFilePath(file)"></span>
-                                            <span class="diff-file-stats" x-text="formatFileStats(file)"></span>
-                                        </div>
-                                    </template>
+                        <div class="diff-files">
+                            <template x-if="compareDiff.files.length === 0">
+                                <p class="text-muted">No file changes</p>
+                            </template>
+                            <template x-for="file in compareDiff.files" :key="file.path">
+                                <div class="diff-file">
+                                    <span class="diff-file-path" x-text="formatFilePath(file)"></span>
+                                    <span class="diff-file-stats" x-text="formatFileStats(file)"></span>
                                 </div>
-                                <template x-if="compareDiff.patch">
-                                    <pre class="diff-patch" x-text="compareDiff.patch"></pre>
-                                </template>
-                                <template x-if="compareDiff.truncated">
-                                    <p class="text-muted">Diff truncated for size.</p>
-                                </template>
-                            </div>
+                            </template>
+                        </div>
+                        <template x-if="compareDiff && compareDiff.patch">
+                            <pre class="diff-patch" x-text="compareDiff.patch"></pre>
+                        </template>
+                        <template x-if="compareDiff && compareDiff.truncated">
+                            <p class="text-muted">Diff truncated for size.</p>
                         </template>
                     </div>
                 </div>
-            </div>
 
-            <!-- Search Tab -->
-            <div x-show="activeTab === 'search'">
-                <div class="file-toolbar">
-                    <label class="text-muted">Mode:</label>
-                    <select x-model="searchMode">
-                        <option value="commits">Commits</option>
-                        <option value="files">Files</option>
-                    </select>
-                    <input type="text" x-model="searchQuery" placeholder="Search term" @keydown.enter="loadSearch()">
-                    <template x-if="searchMode === 'files'">
-                        <input type="text" x-model="searchPath" placeholder="Path filter (optional)">
+                <div x-show="activeTab === 'search'">
+                    <div class="file-toolbar">
+                        <label class="text-muted">Mode:</label>
+                        <select x-model="searchMode">
+                            <option value="commits">Commits</option>
+                            <option value="files">Files</option>
+                        </select>
+                        <input type="text" x-model="searchQuery" placeholder="Search term" @keydown.enter="loadSearch()">
+                        <template x-if="searchMode === 'files'">
+                            <input type="text" x-model="searchPath" placeholder="Path filter (optional)">
+                        </template>
+                        <input type="text" x-model="searchRef" placeholder="Ref (default HEAD)">
+                        <button class="tab-btn" style="border-radius: 6px;" @click="loadSearch()">Search</button>
+                    </div>
+                    <template x-if="loading.search">
+                        <p class="text-muted">Searching...</p>
                     </template>
-                    <input type="text" x-model="searchRef" placeholder="Ref (default HEAD)">
-                    <button class="tab-btn" style="border-radius: 6px;" @click="loadSearch()">Search</button>
-                </div>
-                <template x-if="loading.search">
-                    <p class="text-muted">Searching...</p>
-                </template>
-                <template x-if="!loading.search && searchMode === 'commits'">
-                    <div class="commit-list" x-show="searchCommits.length > 0">
-                        <template x-for="commit in searchCommits" :key="commit.hash">
-                            <div class="commit-item">
-                                <span class="commit-hash" x-text="commit.short_hash"></span>
-                                <div class="commit-info">
-                                    <div class="commit-message">
-                                        <span x-text="commit.message"></span>
-                                    </div>
-                                    <div class="commit-meta">
-                                        <span class="commit-author" x-text="commit.author"></span>
-                                        <span> · </span>
-                                        <span x-text="commit.date"></span>
+                    <template x-if="!loading.search && searchMode === 'commits'">
+                        <div class="commit-list" x-show="searchCommits.length > 0">
+                            <template x-for="commit in searchCommits" :key="commit.hash">
+                                <div class="commit-item">
+                                    <span class="commit-hash" x-text="commit.short_hash"></span>
+                                    <div class="commit-info">
+                                        <div class="commit-message">
+                                            <span x-text="commit.message"></span>
+                                        </div>
+                                        <div class="commit-meta">
+                                            <span class="commit-author" x-text="commit.author"></span>
+                                            <span> · </span>
+                                            <span x-text="commit.date"></span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </template>
-                    </div>
-                </template>
-                <template x-if="!loading.search && searchMode === 'files'">
-                    <div class="file-list" x-show="searchFiles.length > 0">
-                        <template x-for="match in searchFiles" :key="match.path + ':' + match.line">
-                            <div class="file-entry">
-                                <span class="file-name" x-text="match.path + ':' + match.line"></span>
-                                <span class="file-meta" x-text="match.content"></span>
-                            </div>
-                        </template>
-                    </div>
-                </template>
-                <template x-if="!loading.search && searchMode === 'commits' && searchCommits.length === 0">
-                    <p class="text-muted">No commit matches.</p>
-                </template>
-                <template x-if="!loading.search && searchMode === 'files' && searchFiles.length === 0">
-                    <p class="text-muted">No file matches.</p>
-                </template>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!loading.search && searchMode === 'files'">
+                        <div class="file-list" x-show="searchFiles.length > 0">
+                            <template x-for="match in searchFiles" :key="match.path + ':' + match.line">
+                                <div class="file-entry">
+                                    <span class="file-name" x-text="match.path + ':' + match.line"></span>
+                                    <span class="file-meta" x-text="match.content"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!loading.search && searchMode === 'commits' && searchCommits.length === 0">
+                        <p class="text-muted">No commit matches.</p>
+                    </template>
+                    <template x-if="!loading.search && searchMode === 'files' && searchFiles.length === 0">
+                        <p class="text-muted">No file matches.</p>
+                    </template>
+                </div>
             </div>
         </div>
     </div>
 
     {{template "scripts" .}}
+    <script src="/static/js/vis-network.min.js"></script>
     <script>
         function gitPage() {
             return {
-                activeTab: 'commits',
+                activeTab: 'changes',
                 selectedRig: '',
                 rigs: [],
                 commits: [],
                 branches: [],
                 graphRows: [],
+                graphNetwork: null,
+                graphLimit: 150,
+                commitLimit: 150,
                 selectedCommitHash: '',
+                selectedBranch: '',
                 commitDetail: null,
                 commitDiff: null,
                 showDiff: false,
@@ -796,7 +808,6 @@
                 loading: {
                     commits: true,
                     branches: true,
-                    graph: false,
                     detail: false,
                     diff: false,
                     tree: false,
@@ -808,7 +819,7 @@
                 init() {
                     this.loadRigs();
                     this.loadAll();
-                    // Auto-refresh commits every 30 seconds
+                    this.loadGraph(true);
                     setInterval(() => this.loadCommits(), 30000);
                 },
 
@@ -816,7 +827,6 @@
                     try {
                         const res = await fetch('/api/git/rigs');
                         const data = await res.json();
-                        // Filter to only show rigs with git repos
                         this.rigs = (data.rigs || []).filter(r => r.has_repo);
                     } catch (e) {
                         console.error('Failed to load rigs:', e);
@@ -831,7 +841,10 @@
                 async loadCommits() {
                     this.loading.commits = true;
                     try {
-                        const url = '/api/git/commits' + (this.selectedRig ? '?rig=' + this.selectedRig : '');
+                        const params = new URLSearchParams();
+                        params.set('count', this.commitLimit);
+                        if (this.selectedRig) params.set('rig', this.selectedRig);
+                        const url = '/api/git/commits?' + params.toString();
                         const res = await fetch(url);
                         const data = await res.json();
                         this.commits = data.commits || [];
@@ -875,28 +888,142 @@
                     this.loading.branches = false;
                 },
 
-                async loadGraph() {
-                    if (this.graphRows.length > 0) return;
-                    this.loading.graph = true;
+                async loadGraph(force) {
+                    if (!force && this.graphRows.length > 0) return;
+                    if (this.graphLimit !== this.commitLimit) {
+                        this.commitLimit = this.graphLimit;
+                        this.loadCommits();
+                    }
                     try {
-                        const url = '/api/git/graph' + (this.selectedRig ? '?rig=' + this.selectedRig : '');
-                        const res = await fetch(url);
+                        const params = new URLSearchParams();
+                        params.set('count', this.graphLimit);
+                        if (this.selectedRig) params.set('rig', this.selectedRig);
+                        const res = await fetch('/api/git/graph?' + params.toString());
                         const data = await res.json();
                         this.graphRows = data.rows || [];
+                        this.buildGraph();
                     } catch (e) {
                         console.error('Failed to load graph:', e);
                     }
-                    this.loading.graph = false;
+                },
+
+                buildGraph() {
+                    if (!this.graphRows.length || typeof vis === 'undefined') return;
+                    const container = document.getElementById('git-graph');
+                    if (!container) return;
+
+                    const nodes = [];
+                    const edges = [];
+                    const index = new Map();
+
+                    this.graphRows.forEach((row, idx) => {
+                        if (!row.hash) return;
+                        index.set(row.hash, idx);
+                        const isMerge = row.parents && row.parents.length > 1;
+                        nodes.push({
+                            id: row.hash,
+                            label: row.short_hash,
+                            level: idx,
+                            shape: 'dot',
+                            size: isMerge ? 10 : 8,
+                            color: isMerge ? { background: '#4ade80', border: '#166534' } : { background: '#60a5fa', border: '#1d4ed8' },
+                            font: { color: '#e2e8f0', size: 12 },
+                            title: row.message || row.hash
+                        });
+                    });
+
+                    this.graphRows.forEach((row) => {
+                        if (!row.hash || !row.parents) return;
+                        row.parents.forEach((parent) => {
+                            if (!index.has(parent)) return;
+                            edges.push({
+                                from: row.hash,
+                                to: parent,
+                                arrows: '',
+                                color: { color: '#3b82f6', opacity: 0.5 }
+                            });
+                        });
+                    });
+
+                    if (this.graphNetwork) {
+                        this.graphNetwork.destroy();
+                    }
+
+                    const data = {
+                        nodes: new vis.DataSet(nodes),
+                        edges: new vis.DataSet(edges)
+                    };
+
+                    const options = {
+                        layout: {
+                            hierarchical: {
+                                enabled: true,
+                                direction: 'UD',
+                                sortMethod: 'directed',
+                                levelSeparation: 70,
+                                nodeSpacing: 140,
+                                treeSpacing: 180
+                            }
+                        },
+                        physics: false,
+                        interaction: {
+                            dragNodes: false,
+                            hover: true
+                        }
+                    };
+
+                    this.graphNetwork = new vis.Network(container, data, options);
+                    this.graphNetwork.on('click', (params) => {
+                        if (params.nodes && params.nodes.length) {
+                            this.selectCommitByHash(params.nodes[0], true);
+                        }
+                    });
                 },
 
                 async selectCommit(commit) {
                     if (!commit || !commit.hash) return;
                     this.selectedCommitHash = commit.hash;
+                    this.selectedBranch = '';
                     this.commitDetail = null;
                     this.commitDiff = null;
                     this.showDiff = false;
                     await this.loadCommitDetail(commit.hash);
                     await this.loadCommitDiff(commit.hash);
+                    this.focusGraphNode(commit.hash);
+                    this.scrollCommitIntoView(commit.hash);
+                    this.activeTab = 'changes';
+                },
+
+                async selectCommitByHash(hash, focusChanges) {
+                    if (!hash) return;
+                    const commit = this.commits.find(c => c.hash === hash);
+                    if (commit) {
+                        await this.selectCommit(commit);
+                    } else {
+                        this.selectedCommitHash = hash;
+                        await this.loadCommitDetail(hash);
+                        await this.loadCommitDiff(hash);
+                        this.focusGraphNode(hash);
+                    }
+                    if (focusChanges) {
+                        this.activeTab = 'changes';
+                    }
+                },
+
+                selectBranch(branch) {
+                    if (!branch) return;
+                    this.selectedBranch = branch.name;
+                    let target = branch.commit || branch.last_commit;
+                    if (!target && branch.short_commit) {
+                        const match = this.graphRows.find(row => row.hash && row.hash.startsWith(branch.short_commit));
+                        if (match) {
+                            target = match.hash;
+                        }
+                    }
+                    if (target) {
+                        this.focusGraphNode(target);
+                        this.scrollCommitIntoView(target);
+                    }
                 },
 
                 async loadCommitDetail(hash) {
@@ -929,8 +1056,13 @@
                     this.loading.diff = false;
                 },
 
+                toggleDiff() {
+                    this.showDiff = !this.showDiff;
+                },
+
                 resetSelection() {
                     this.selectedCommitHash = '';
+                    this.selectedBranch = '';
                     this.commitDetail = null;
                     this.commitDiff = null;
                     this.showDiff = false;
@@ -942,26 +1074,11 @@
                     this.compareDiff = null;
                     this.searchCommits = [];
                     this.searchFiles = [];
-                },
-
-                toggleDiff() {
-                    this.showDiff = !this.showDiff;
-                },
-
-                formatFilePath(file) {
-                    if (file.old_path) {
-                        return file.old_path + ' → ' + file.path;
+                    this.graphRows = [];
+                    if (this.graphNetwork) {
+                        this.graphNetwork.destroy();
+                        this.graphNetwork = null;
                     }
-                    return file.path;
-                },
-
-                formatFileStats(file) {
-                    if (file.binary) {
-                        return file.status + ' (binary)';
-                    }
-                    const add = file.additions || 0;
-                    const del = file.deletions || 0;
-                    return file.status + ' +' + add + ' -' + del;
                 },
 
                 async loadFiles() {
@@ -1040,6 +1157,22 @@
                     return (size / (1024 * 1024)).toFixed(1) + ' MB';
                 },
 
+                formatFilePath(file) {
+                    if (file.old_path) {
+                        return file.old_path + ' -> ' + file.path;
+                    }
+                    return file.path;
+                },
+
+                formatFileStats(file) {
+                    if (file.binary) {
+                        return file.status + ' (binary)';
+                    }
+                    const add = file.additions || 0;
+                    const del = file.deletions || 0;
+                    return file.status + ' +' + add + ' -' + del;
+                },
+
                 async loadCompare() {
                     if (!this.compareBase || !this.compareHead) return;
                     this.loading.compare = true;
@@ -1062,6 +1195,23 @@
                         console.error('Failed to load compare:', e);
                     }
                     this.loading.compare = false;
+                },
+
+                focusGraphNode(hash) {
+                    if (!this.graphNetwork || !hash) return;
+                    this.graphNetwork.selectNodes([hash]);
+                    this.graphNetwork.focus(hash, {
+                        scale: 1.1,
+                        animation: { duration: 400, easingFunction: 'easeInOutQuad' }
+                    });
+                },
+
+                scrollCommitIntoView(hash) {
+                    if (!hash || !this.$refs.commitList) return;
+                    const el = this.$refs.commitList.querySelector('[data-hash="' + hash + '"]');
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
                 },
 
                 async loadSearch() {
