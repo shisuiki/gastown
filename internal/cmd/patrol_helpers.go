@@ -24,6 +24,19 @@ type PatrolConfig struct {
 	CheckInProgress bool   // whether to check in_progress status first (witness/refinery do, deacon doesn't)
 }
 
+// closePatrol closes a patrol molecule by ID.
+func closePatrol(beadsDir, molID string) error {
+	cmd := exec.Command("bd", "--no-daemon", "update", molID, "--status=closed")
+	cmd.Dir = beadsDir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to close patrol %s: %s", molID, stderr.String())
+	}
+	return nil
+}
+
 // findActivePatrol finds an active patrol molecule for the role.
 // Returns the patrol ID, display line, and whether one was found.
 func findActivePatrol(cfg PatrolConfig) (patrolID, patrolLine string, found bool) {
@@ -89,6 +102,14 @@ func findActivePatrol(cfg PatrolConfig) (patrolID, patrolLine string, found bool
 						}
 						if hasOpenChildren {
 							return molID, line, true
+						} else {
+							// Zombie patrol: open with no open/in_progress children
+							if err := closePatrol(cfg.BeadsDir, molID); err != nil {
+								fmt.Fprintf(os.Stderr, "Failed to close zombie patrol %s: %v\n", molID, err)
+							} else {
+								fmt.Fprintf(os.Stderr, "Closed zombie patrol %s\n", molID)
+							}
+							// Continue searching for other patrols
 						}
 					}
 				}
