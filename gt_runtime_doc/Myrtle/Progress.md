@@ -8,6 +8,12 @@
 2. Restored env-first docs root resolution in `internal/web/handler_docs.go`.
 3. Verified `go test ./internal/web/...` after fix.
 
+### Boot triage hook verification
+
+1. Updated degraded Boot triage to check hook status and nudge when patrol hooks are empty.
+2. Switched hook-empty detection to use `gt hook status --json`.
+3. Updated Boot triage formula and Boot role template with hook status checks and idle-but-alive case.
+
 ### Handoff Summary
 
 **WebUI Workflow Page Refactoring - Complete**

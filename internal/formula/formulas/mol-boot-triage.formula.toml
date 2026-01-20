@@ -59,11 +59,11 @@ gt mail inbox deacon 2>/dev/null | head -10
 **Step 5: Check hook status for patrol agents**
 ```bash
 # Check if patrol agents (witness/deacon) have work on their hooks
-gt hook show witness
-gt hook show deacon
+gt hook status --json deacon/
+gt hook status --json <rig>/witness
 ```
 
-Look for "(empty)" output indicating idle-but-alive state. If hook is empty for a patrol agent, intervention may be required (assign work or nudge).
+Look for `"has_work": false` in JSON output indicating idle-but-alive state. If hook is empty for a patrol agent, intervention is required (nudge or attach patrol). Use `gt rig list` to find rig names and check each witness.
 
 Record observations for the decide step:
 - deacon_alive: true/false
@@ -93,11 +93,12 @@ Analyze observations and decide what action to take.
 | Alive, idle 5-15 min | Has mail | NUDGE |
 | Alive, idle > 15 min | Any | WAKE |
 | Alive, stuck (errors) | Any | INTERRUPT |
+| Alive, hook empty (idle-but-alive) | Any | NUDGE |
 
 **Hook Status Considerations**
 
-- If `hook_witness_empty` is true: Witness agent is alive but has no work on hook. Consider nudging Witness to check for pending assignments.
-- If `hook_deacon_empty` is true: Deacon agent is alive but has no work on hook. This may indicate idle-but-alive state. Consider nudging Deacon or assigning work.
+- If `hook_witness_empty` is true: Witness agent is alive but has no work on hook. Treat as idle-but-alive and intervene (nudge or attach patrol).
+- If `hook_deacon_empty` is true: Deacon agent is alive but has no work on hook. Treat as idle-but-alive and intervene (nudge or attach patrol).
 
 **Judgment Guidance**
 

@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/boot"
 	"github.com/steveyegge/gastown/internal/deacon"
+	"github.com/steveyegge/gastown/internal/patrol"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
@@ -309,13 +313,81 @@ func runDegradedTriage(b *boot.Boot) (action, target string, err error) {
 			} else {
 				// Stuck but not critically - try nudging first
 				fmt.Printf("Deacon heartbeat is %s old - nudging session\n", age.Round(time.Minute))
-				_ = tm.NudgeSession(deaconSession, "PATROL_CHECK: run gt hook and report if empty")
+				_ = tm.NudgeSession(deaconSession, "PATROL_CHECK: run gt hook status deacon/ and report if empty")
 				return "nudge", "deacon-stale", nil
 			}
 		}
 	}
 
+	if townRoot != "" {
+		// Idle-but-alive detection: hook empty means patrol isn't running.
+		hookEmpty, hookErr := patrol.IsHookEmpty(townRoot, "deacon/")
+		if hookErr != nil {
+			fmt.Printf("Error checking Deacon hook status: %v\n", hookErr)
+		} else if hookEmpty {
+			fmt.Println("Deacon hook is empty - nudging session")
+			_ = tm.NudgeSession(deaconSession, "PATROL_CHECK: hook empty - run gt hook status deacon/ and attach patrol")
+			return "nudge", "deacon-hook-empty", nil
+		}
+
+		for _, rig := range listRigInfos(townRoot) {
+			witnessAddr := fmt.Sprintf("%s/witness", rig.Name)
+			witnessEmpty, err := patrol.IsHookEmpty(rig.Root, witnessAddr)
+			if err != nil {
+				fmt.Printf("Error checking witness hook status for %s: %v\n", rig.Name, err)
+				continue
+			}
+			if witnessEmpty {
+				fmt.Printf("Witness hook is empty for %s - nudging\n", rig.Name)
+				_ = nudgeAgent(townRoot, witnessAddr, "PATROL_CHECK: hook empty - attach patrol or check inbox")
+				return "nudge", witnessAddr, nil
+			}
+		}
+	}
+
 	return "nothing", "", nil
+}
+
+type rigInfo struct {
+	Name string
+	Root string
+}
+
+func listRigInfos(townRoot string) []rigInfo {
+	beadsDir := filepath.Join(townRoot, ".beads")
+	routes, err := beads.LoadRoutes(beadsDir)
+	if err != nil {
+		return nil
+	}
+
+	rigs := make([]rigInfo, 0, len(routes))
+	seen := make(map[string]struct{})
+	for _, route := range routes {
+		rigPath := filepath.Dir(route.Path)
+		if rigPath == "." || rigPath == string(filepath.Separator) {
+			continue
+		}
+		rigName := filepath.Base(rigPath)
+		if rigName == "." || rigName == "" {
+			continue
+		}
+		if _, ok := seen[rigName]; ok {
+			continue
+		}
+		rigs = append(rigs, rigInfo{
+			Name: rigName,
+			Root: filepath.Join(townRoot, rigPath),
+		})
+		seen[rigName] = struct{}{}
+	}
+
+	return rigs
+}
+
+func nudgeAgent(townRoot, agentAddr, message string) error {
+	cmd := exec.Command("gt", "nudge", agentAddr, message)
+	cmd.Dir = townRoot
+	return cmd.Run()
 }
 
 // formatDurationAgo formats a duration for human display.

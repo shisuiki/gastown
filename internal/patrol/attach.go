@@ -1,6 +1,7 @@
 package patrol
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,18 +13,20 @@ import (
 // rootDir is the town root for deacon, or rig root for witness.
 // agentAddr is the agent address (e.g., "deacon", "gastown/witness").
 func IsHookEmpty(rootDir, agentAddr string) (bool, error) {
-	cmd := exec.Command("gt", "hook", "show", agentAddr)
+	cmd := exec.Command("gt", "hook", "status", "--json", agentAddr)
 	cmd.Dir = rootDir
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to check hook status: %w", err)
 	}
-	// Output format: "agent: (empty)" or "agent: <bead-id> '<title>' [status]"
-	outputStr := strings.TrimSpace(string(output))
-	if strings.Contains(outputStr, ": (empty)") {
-		return true, nil
+
+	var status struct {
+		HasWork bool `json:"has_work"`
 	}
-	return false, nil
+	if err := json.Unmarshal(output, &status); err != nil {
+		return false, fmt.Errorf("parsing hook status: %w", err)
+	}
+	return !status.HasWork, nil
 }
 
 // AttachPatrolMolecule attaches a patrol molecule to the specified agent.
