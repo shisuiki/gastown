@@ -18,35 +18,30 @@
                     </div>
                     <pre class="terminal-output" id="terminal-output" style="min-height: 400px;">Click "Connect" to view Mayor's terminal output.</pre>
                     <div id="terminal-input-area" style="display: none; margin-top: 10px;">
-                        <textarea id="terminal-input" class="input-field" rows="2" style="resize: vertical; min-height: 40px; max-height: 200px;" placeholder="Type command and press Enter..."></textarea>
-                        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: nowrap;">
-                            <button onclick="terminal.sendInput()" class="btn btn-success" style="flex: 1; min-width: 60px; padding: 10px 12px;">Send</button>
-                            <button onclick="terminal.sendKey('Enter')" class="btn" style="flex: 1; min-width: 60px; padding: 10px 12px; background: #6366f1; color: white;">Enter</button>
-                            <button onclick="terminal.sendKey('C-c')" class="btn btn-danger" style="flex: 1; min-width: 60px; padding: 10px 12px;">Ctrl+C</button>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="text" id="terminal-input" class="input-field" style="flex: 1;" placeholder="Type command and press Enter...">
+                            <button onclick="terminal.sendInput()" class="btn btn-success btn-sm">Send</button>
+                            <button onclick="terminal.sendKey('C-c')" class="btn btn-danger btn-sm">Ctrl+C</button>
                         </div>
                     </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div class="text-muted" style="font-size: 0.8rem;">Send Mail to Mayor</div>
+                    <input type="text" id="mayor-mail-subject" placeholder="Subject" class="input-field">
+                    <textarea id="mayor-mail-body" placeholder="Message to Mayor..." rows="8" class="input-field" style="flex: 1;"></textarea>
+                    <button onclick="sendMailToMayor()" class="btn btn-primary">📨 Send to Mayor</button>
+                    <div id="mayor-mail-result" style="font-size: 0.8rem;" class="text-muted"></div>
                 </div>
             </div>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <h2>📊 Mayor Status</h2>
-                <table>
-                    <tr><th>Session</th><td id="session-status">Checking...</td></tr>
-                    <tr><th>Hook Status</th><td id="hook-status">Checking...</td></tr>
-                    <tr><th>Pending Mail</th><td id="mail-count">Checking...</td></tr>
-                </table>
-            </div>
-            <div class="card">
-                <h2>💬 Quick Message</h2>
-                <div class="chat-messages" id="chat-messages"></div>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="chat-input" placeholder="Message to Mayor..." class="input-field" style="flex: 1;">
-                    <button onclick="sendMessage()" class="btn btn-primary">Send</button>
-                </div>
-                <p class="text-muted" style="font-size: 0.75rem; margin-top: 10px;">For detailed messages, use <a href="/mail" class="text-link">Mail Center</a>.</p>
-            </div>
+        <div class="card" style="margin-top: 20px;">
+            <h2>📊 Mayor Status</h2>
+            <table>
+                <tr><th>Session</th><td id="session-status">Checking...</td></tr>
+                <tr><th>Hook Status</th><td id="hook-status">Checking...</td></tr>
+                <tr><th>Pending Mail</th><td id="mail-count">Checking...</td></tr>
+            </table>
         </div>
     </div>
 
@@ -68,6 +63,39 @@
             streamUrl: '/api/mayor/terminal',
             sendUrl: '/api/terminal/send',
         });
+
+        async function sendMailToMayor() {
+            const subject = document.getElementById('mayor-mail-subject').value.trim();
+            const body = document.getElementById('mayor-mail-body').value.trim();
+            const result = document.getElementById('mayor-mail-result');
+
+            if (!subject) {
+                result.innerHTML = '<span class="text-danger">Please enter a subject</span>';
+                return;
+            }
+
+            result.innerHTML = '<span class="text-warning">Sending...</span>';
+
+            try {
+                const res = await fetch('/api/mail/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: 'mayor/', subject, body })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    result.innerHTML = '<span class="text-success">✓ Mail sent to Mayor</span>';
+                    document.getElementById('mayor-mail-subject').value = '';
+                    document.getElementById('mayor-mail-body').value = '';
+                    setTimeout(() => { result.innerHTML = ''; updateMayorStatus(); }, 2000);
+                } else {
+                    result.innerHTML = '<span class="text-danger">Failed: ' + (data.error || 'Unknown error') + '</span>';
+                }
+            } catch (e) {
+                result.innerHTML = '<span class="text-danger">Error: ' + e.message + '</span>';
+            }
+        }
 
         async function updateMayorStatus() {
             try {
@@ -97,41 +125,6 @@
                 console.error('Failed to get mayor status:', e);
             }
         }
-
-        async function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const message = input.value.trim();
-            if (!message) return;
-
-            addMessage(message, 'sent');
-            input.value = '';
-
-            try {
-                const res = await fetch('/api/mail/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: 'mayor/', subject: 'Web GUI Message', body: message })
-                });
-                const data = await res.json();
-                addMessage(data.success ? 'Message sent to Mayor' : 'Error: ' + data.error, 'received');
-            } catch (e) {
-                addMessage('Failed: ' + e.message, 'received');
-            }
-        }
-
-        function addMessage(text, type) {
-            const messages = document.getElementById('chat-messages');
-            const div = document.createElement('div');
-            div.className = 'message ' + type;
-            div.textContent = text;
-            messages.appendChild(div);
-            messages.scrollTop = messages.scrollHeight;
-        }
-
-        // Event listeners
-        document.getElementById('chat-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
 
         // Initialize
         updateMayorStatus();
