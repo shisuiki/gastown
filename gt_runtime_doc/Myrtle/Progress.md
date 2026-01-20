@@ -6,6 +6,10 @@
 
 1. Documented current system-level `gastown-gui.service` + user-level `gastown-sync.service` split in `docs/WEBUI-DEPLOY.md`.
 
+### Terminals auto-connect fix
+
+1. Made `/terminals?session=...` auto-connect run only once to avoid reconnecting after manual disconnect.
+
 ## 2026-01-20
 
 ### P2 Incident: Docs Root Regression

@@ -99,7 +99,8 @@
         let reconnectAttempts = 0;
         const maxReconnectDelay = 30000;
         let statusPoller = null;
-        let autoConnectSession = null;
+        let autoConnectSession;
+        let autoConnectDone = false;
 
         function updateAgentsFromStatus(data) {
             // Update agents list
@@ -143,11 +144,15 @@
 
         // Check URL for session parameter and auto-connect once the session is present.
         function maybeAutoConnect() {
-            if (autoConnectSession === null) {
+            if (autoConnectDone) {
+                return;
+            }
+            if (autoConnectSession === undefined) {
                 const params = new URLSearchParams(window.location.search);
-                autoConnectSession = params.get('session');
+                autoConnectSession = params.get('session') || '';
             }
             if (!autoConnectSession) {
+                autoConnectDone = true;
                 return;
             }
             const select = document.getElementById('terminal-session');
@@ -159,7 +164,7 @@
                 return;
             }
             select.value = autoConnectSession;
-            autoConnectSession = null;
+            autoConnectDone = true;
             terminal.connect();
         }
 
