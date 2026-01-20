@@ -66,11 +66,14 @@ do_sync() {
             log "Daemon restarted"
         fi
 
-        # Restart web service if managed by systemd
+        # Restart web service if managed by systemd (user scope)
         if systemctl --user is-active gastown-web.service &>/dev/null; then
             log "Restarting gastown-web.service..."
             systemctl --user restart gastown-web.service
             log "Web service restarted"
+        elif systemctl is-active gastown-gui.service &>/dev/null; then
+            log "WARNING: system-level gastown-gui.service is active and owns port 8080."
+            log "Disable it or migrate to user-level gastown-web.service to enable auto-redeploy."
         fi
 
         return 0

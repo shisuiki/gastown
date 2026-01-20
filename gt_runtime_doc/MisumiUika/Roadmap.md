@@ -15,3 +15,7 @@
 ## Phase 3: Verification
 - [x] Confirm sync service can run on restart.
 - [x] Validate web service restart on sync.
+
+## Phase 4: Conflict guardrails
+- [x] Add warnings when a system-level service blocks user-level auto-redeploy.
+- [x] Document port ownership conflicts in deployment docs.

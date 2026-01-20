@@ -213,6 +213,10 @@ journalctl --user -u gastown-web -n 50
 # - Not in workspace: ensure WorkingDirectory is set to ~/gt
 ```
 
+If a system-level `gastown-gui.service` is still running, it will own port 8080
+and prevent the user service from restarting. Disable the system service or migrate
+fully to user-level services so auto-redeploy can take effect.
+
 ### Sync not working
 
 ```bash
