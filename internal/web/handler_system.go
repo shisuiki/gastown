@@ -166,13 +166,15 @@ type GitCommit struct {
 
 // GitBranch represents a git branch.
 type GitBranch struct {
-	Name       string `json:"name"`
-	IsCurrent  bool   `json:"is_current"`
-	LastCommit string `json:"last_commit"`
-	Upstream   string `json:"upstream,omitempty"`
-	Ahead      int    `json:"ahead,omitempty"`
-	Behind     int    `json:"behind,omitempty"`
-	IsRemote   bool   `json:"is_remote,omitempty"`
+	Name        string `json:"name"`
+	IsCurrent   bool   `json:"is_current"`
+	LastCommit  string `json:"last_commit"`
+	Commit      string `json:"commit,omitempty"`
+	ShortCommit string `json:"short_commit,omitempty"`
+	Upstream    string `json:"upstream,omitempty"`
+	Ahead       int    `json:"ahead,omitempty"`
+	Behind      int    `json:"behind,omitempty"`
+	IsRemote    bool   `json:"is_remote,omitempty"`
 }
 
 // GitCommitDetail represents detailed git commit metadata.
@@ -1262,7 +1264,7 @@ func gitSearchFiles(dir, ref, path, query string, limit int) ([]GitSearchMatch, 
 
 func gitLocalBranches(dir string) ([]GitBranch, error) {
 	cmd, cancel := command("git", "for-each-ref", "refs/heads",
-		"--format=%(refname:short)|%(HEAD)|%(objectname:short)|%(upstream:short)|%(upstream:track)")
+		"--format=%(refname:short)|%(HEAD)|%(objectname)|%(objectname:short)|%(upstream:short)|%(upstream:track)")
 	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
@@ -1275,20 +1277,22 @@ func gitLocalBranches(dir string) ([]GitBranch, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 5)
-		if len(parts) < 3 {
+		parts := strings.SplitN(line, "|", 6)
+		if len(parts) < 4 {
 			continue
 		}
 		branch := GitBranch{
-			Name:       parts[0],
-			IsCurrent:  parts[1] == "*",
-			LastCommit: parts[2],
-		}
-		if len(parts) > 3 {
-			branch.Upstream = parts[3]
+			Name:        parts[0],
+			IsCurrent:   parts[1] == "*",
+			Commit:      parts[2],
+			ShortCommit: parts[3],
+			LastCommit:  parts[3],
 		}
 		if len(parts) > 4 {
-			branch.Ahead, branch.Behind = parseAheadBehind(parts[4])
+			branch.Upstream = parts[4]
+		}
+		if len(parts) > 5 {
+			branch.Ahead, branch.Behind = parseAheadBehind(parts[5])
 		}
 		branches = append(branches, branch)
 	}
@@ -1298,7 +1302,7 @@ func gitLocalBranches(dir string) ([]GitBranch, error) {
 
 func gitRemoteBranches(dir string) ([]GitBranch, error) {
 	cmd, cancel := command("git", "for-each-ref", "refs/remotes",
-		"--format=%(refname:short)|%(objectname:short)")
+		"--format=%(refname:short)|%(objectname)|%(objectname:short)")
 	defer cancel()
 	cmd.Dir = dir
 	output, err := cmd.Output()
@@ -1311,8 +1315,8 @@ func gitRemoteBranches(dir string) ([]GitBranch, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 2)
-		if len(parts) < 2 {
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) < 3 {
 			continue
 		}
 		name := parts[0]
@@ -1320,9 +1324,11 @@ func gitRemoteBranches(dir string) ([]GitBranch, error) {
 			continue
 		}
 		branches = append(branches, GitBranch{
-			Name:       name,
-			LastCommit: parts[1],
-			IsRemote:   true,
+			Name:        name,
+			Commit:      parts[1],
+			ShortCommit: parts[2],
+			LastCommit:  parts[2],
+			IsRemote:    true,
 		})
 	}
 
