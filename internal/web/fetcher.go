@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -770,6 +771,9 @@ func (f *LiveConvoyFetcher) fetchAgentsUncached() ([]AgentRow, error) {
 					// Regular polecat
 					agentType = "polecat"
 					agentName = agentPart
+					if !f.polecatExists(rig, agentName) {
+						continue
+					}
 				}
 			} else {
 				continue
@@ -889,6 +893,14 @@ func isWorkerSession(polecat string) bool {
 	default:
 		return true
 	}
+}
+
+// polecatExists checks if a polecat directory exists for the given rig and polecat name.
+func (f *LiveConvoyFetcher) polecatExists(rig, polecatName string) bool {
+	townRoot := filepath.Dir(f.townBeads)
+	polecatDir := filepath.Join(townRoot, rig, "polecats", polecatName)
+	_, err := os.Stat(polecatDir)
+	return err == nil
 }
 
 // parseActivityTimestamp parses a Unix timestamp string from tmux.
