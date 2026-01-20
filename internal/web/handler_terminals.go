@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/steveyegge/gastown/internal/constants"
+	"github.com/steveyegge/gastown/internal/tmux"
 )
 
 // TerminalsPageData is the data passed to the terminals template.
@@ -203,12 +206,12 @@ func sendTmuxKey(session, key string) error {
 
 // sendTmuxText sends text to a tmux session.
 func sendTmuxText(session, text string, enter bool) error {
+	t := tmux.NewTmux()
 	if enter {
-		text += "\r"
+		return t.SendKeysDebounced(session, text, constants.DefaultDebounceMs)
 	}
-	// Use send-keys with literal text (including optional newline)
-	args := []string{"send-keys", "-t", session, "-l", text}
-	cmd, cancel := command("tmux", args...)
+
+	cmd, cancel := command("tmux", "send-keys", "-t", session, "-l", text)
 	defer cancel()
 	return cmd.Run()
 }

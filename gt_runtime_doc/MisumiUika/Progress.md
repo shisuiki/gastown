@@ -5,3 +5,4 @@
 - Wired Terminal and Mayor pages to record send/key actions into separate histories.
 - Ensured Send defaults to include Enter and documented behavior as needed.
 - Adjusted terminal send to append carriage return for reliable Enter delivery.
+- Switched terminal send to debounced tmux Enter to trigger prompt submission.
