@@ -20,6 +20,7 @@ var (
 	mailCC            []string // CC recipients
 	mailInboxJSON     bool
 	mailReadJSON      bool
+	mailReadNoMark    bool
 	mailInboxUnread   bool
 	mailInboxIdentity string
 	mailCheckInject   bool
@@ -150,13 +151,13 @@ Examples:
 var mailReadCmd = &cobra.Command{
 	Use:   "read <message-id>",
 	Short: "Read a message",
-	Long: `Read a specific message (does not mark as read).
+	Long: `Read a specific message and mark it as read.
 
 The message ID can be found from 'gt mail inbox'.
-Use 'gt mail mark-read' to mark messages as read.`,
+Use --no-mark-read to view without marking as read.`,
 	Aliases: []string{"show"},
-	Args: cobra.ExactArgs(1),
-	RunE: runMailRead,
+	Args:    cobra.ExactArgs(1),
+	RunE:    runMailRead,
 }
 
 var mailPeekCmd = &cobra.Command{
@@ -438,6 +439,7 @@ func init() {
 
 	// Read flags
 	mailReadCmd.Flags().BoolVar(&mailReadJSON, "json", false, "Output as JSON")
+	mailReadCmd.Flags().BoolVar(&mailReadNoMark, "no-mark-read", false, "Don't mark message as read")
 
 	// Check flags
 	mailCheckCmd.Flags().BoolVar(&mailCheckInject, "inject", false, "Output format for Claude Code hooks")

@@ -121,9 +121,13 @@ func runMailRead(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting message: %w", err)
 	}
 
-	// Note: We intentionally do NOT mark as read/ack on read.
-	// User must explicitly delete/ack the message.
-	// This preserves handoff messages for reference.
+	// Mark as read unless --no-mark-read flag is set
+	if !mailReadNoMark {
+		if err := mailbox.MarkReadOnly(msgID); err != nil {
+			// Non-fatal: log but continue to show the message
+			fmt.Fprintf(os.Stderr, "Warning: failed to mark message as read: %v\n", err)
+		}
+	}
 
 	// JSON output
 	if mailReadJSON {
