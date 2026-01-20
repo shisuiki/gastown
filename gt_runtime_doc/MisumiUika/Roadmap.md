@@ -19,3 +19,7 @@
 ## Phase 4: Conflict guardrails
 - [x] Add warnings when a system-level service blocks user-level auto-redeploy.
 - [x] Document port ownership conflicts in deployment docs.
+
+## Phase 5: System-level stabilization
+- [x] Add guard script to kill stray `gt gui` processes on port 8080.
+- [x] Restart system-level service on sync with sudo.

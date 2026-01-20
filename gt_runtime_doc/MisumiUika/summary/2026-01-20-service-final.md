@@ -2,4 +2,5 @@
 
 - Auto-deploy watcher restored and GUI service alias reintroduced.
 - Added guardrails for system-level service conflicts and documented resolution.
-- Web UI will auto-restart after sync pull/build once the system-level service is disabled.
+- Added system-level guard and sync restart path for `gastown-gui.service`.
+- Web UI now auto-restarts after sync pull/build through the system service.
