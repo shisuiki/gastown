@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/beads"
@@ -88,6 +89,8 @@ var (
 	slingOnTarget string   // --on flag: target bead when slinging a formula
 	slingVars     []string // --var flag: formula variables (key=value)
 	slingArgs     string   // --args flag: natural language instructions for executor
+	slingIdle     time.Duration
+	slingSkipBusy bool
 
 	// Flags migrated for polecat spawning (used by sling for work assignment)
 	slingCreate   bool   // --create: create polecat if it doesn't exist
@@ -104,6 +107,8 @@ func init() {
 	slingCmd.Flags().StringVar(&slingOnTarget, "on", "", "Apply formula to existing bead (implies wisp scaffolding)")
 	slingCmd.Flags().StringArrayVar(&slingVars, "var", nil, "Formula variable (key=value), can be repeated")
 	slingCmd.Flags().StringVarP(&slingArgs, "args", "a", "", "Natural language instructions for the executor (e.g., 'patch release')")
+	slingCmd.Flags().DurationVar(&slingIdle, "idle", 2*time.Minute, "Minimum idle time before interrupting a running target (used with --skip-busy)")
+	slingCmd.Flags().BoolVar(&slingSkipBusy, "skip-busy", false, "Skip slinging to running targets with recent activity (uses --idle threshold)")
 
 	// Flags for polecat spawning (when target is a rig)
 	slingCmd.Flags().BoolVar(&slingCreate, "create", false, "Create polecat if it doesn't exist")
@@ -189,6 +194,7 @@ func runSling(cmd *cobra.Command, args []string) error {
 	var targetAgent string
 	var targetPane string
 	var hookWorkDir string // Working directory for running bd hook commands
+	skipBusyEligible := false
 
 	if len(args) > 1 {
 		target := args[1]
@@ -199,6 +205,7 @@ func runSling(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("resolving self for '.' target: %w", err)
 			}
+			skipBusyEligible = true
 		} else if dogName, isDog := IsDogTarget(target); isDog {
 			if slingDryRun {
 				if dogName == "" {
@@ -286,6 +293,8 @@ func runSling(cmd *cobra.Command, args []string) error {
 				} else {
 					return fmt.Errorf("resolving target: %w", err)
 				}
+			} else {
+				skipBusyEligible = true
 			}
 			// Use target's working directory for bd commands (needed for redirect-based routing)
 			if targetWorkDir != "" {
@@ -299,9 +308,31 @@ func runSling(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		skipBusyEligible = true
 		// Use self's working directory for bd commands
 		if selfWorkDir != "" {
 			hookWorkDir = selfWorkDir
+		}
+	}
+
+	if (slingSkipBusy || cmd.Flags().Changed("idle")) && skipBusyEligible {
+		idleThreshold := slingIdle
+		if idleThreshold <= 0 {
+			idleThreshold = 2 * time.Minute
+		}
+		sessionName := getSessionFromPane(targetPane)
+		if sessionName == "" {
+			fmt.Printf("%s Skip busy: could not determine session for target %s\n", style.Dim.Render("○"), targetAgent)
+			return nil
+		}
+		idleFor, err := sessionIdleDuration(sessionName)
+		if err != nil {
+			fmt.Printf("%s Skip busy: could not read activity for %s (%v)\n", style.Dim.Render("○"), sessionName, err)
+			return nil
+		}
+		if idleFor < idleThreshold {
+			fmt.Printf("%s Skip busy: %s active %s ago (threshold %s)\n", style.Dim.Render("○"), sessionName, idleFor.Round(time.Second), idleThreshold)
+			return nil
 		}
 	}
 
