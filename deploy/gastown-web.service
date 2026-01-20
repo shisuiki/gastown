@@ -13,4 +13,5 @@ Environment=GT_ROOT=/home/shisui/gt
 Environment=PATH=/home/shisui/go/bin:/home/shisui/.local/bin:/usr/local/bin:/usr/bin:/bin
 
 [Install]
+Alias=gastown-gui.service
 WantedBy=default.target
