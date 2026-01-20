@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,6 +109,15 @@ func New(config *Config) (*Daemon, error) {
 func (d *Daemon) Run() error {
 	d.logger.Printf("Daemon starting (PID %d)", os.Getpid())
 
+	// Top-level panic recovery: log panic and return error instead of crashing silently.
+	// This prevents the daemon from dying without any log message (hq-s3fb).
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Printf("FATAL: Daemon panic (recovered): %v", r)
+			d.logger.Printf("Stack trace: %s", string(debug.Stack()))
+		}
+	}()
+
 	// Acquire exclusive lock to prevent multiple daemons from running.
 	// This prevents the TOCTOU race condition where multiple concurrent starts
 	// can all pass the IsRunning() check before any writes the PID file.
@@ -169,7 +179,7 @@ func (d *Daemon) Run() error {
 	}
 
 	// Initial heartbeat
-	d.heartbeat(state)
+	d.safeHeartbeat(state)
 
 	for {
 		select {
@@ -188,7 +198,7 @@ func (d *Daemon) Run() error {
 			}
 
 		case <-timer.C:
-			d.heartbeat(state)
+			d.safeHeartbeat(state)
 
 			// Fixed recovery interval (no activity-based backoff)
 			timer.Reset(recoveryHeartbeatInterval)
@@ -201,6 +211,20 @@ func (d *Daemon) Run() error {
 // The daemon is a safety net for dead sessions, GUPP violations, and orphaned work.
 // 3 minutes is fast enough to detect stuck agents promptly while avoiding excessive overhead.
 const recoveryHeartbeatInterval = 3 * time.Minute
+
+// safeHeartbeat wraps heartbeat with panic recovery.
+// If a heartbeat panics, the daemon survives and logs the error.
+// This prevents silent daemon deaths from individual heartbeat failures (hq-s3fb).
+func (d *Daemon) safeHeartbeat(state *State) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Printf("ERROR: Heartbeat panic (recovered): %v", r)
+			d.logger.Printf("Stack trace: %s", string(debug.Stack()))
+			// Heartbeat failed but daemon continues - will retry next cycle
+		}
+	}()
+	d.safeHeartbeat(state)
+}
 
 // heartbeat performs one heartbeat cycle.
 // The daemon is recovery-focused: it ensures agents are running and detects failures.
