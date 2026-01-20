@@ -1,35 +1,27 @@
 # Roadmap
 
-## Phase 0: Git Web UI requirements and gaps
-- Inventory current Git Web UI functionality, missing interactions, and data gaps.
-- Define the minimum complete Git feature set (graph, commit detail, diff, file tree, branch view, compare, search).
-- Confirm data sources, API shapes, and UX flow for Git operations.
+## Phase 0: UX goals + architecture
+- Replace ASCII graph with visual graph rendering (canvas/SVG via OSS lib).
+- Restructure Git page layout into panels (branch/commit/graph) + bottom tabs.
+- Define interaction contracts: branch/commit/graph scroll sync + selection states.
 
-## Phase 1: Backend Git APIs (data completeness)
-- Commit detail API (metadata, parents, refs, stats).
-- Commit diff API (file list + unified diff).
-- File tree API (tree listing at ref/path) and file content API (blob view).
-- Branch metadata (ahead/behind, last commit, tracking info).
-- Graph API returns real DAG / graph text, not placeholder.
+## Phase 1: Graph rendering
+- Integrate an open-source graph renderer (vis-network) for commit DAG.
+- Adapt `/api/git/graph` output to nodes/edges for the renderer.
+- Provide focus/scroll-to APIs for branch/commit selection.
 
-## Phase 2: Core Git UI (interactive navigation)
-- Commit list with selection state and details panel.
-- Commit diff view with file list + inline patch.
-- File browser (tree + blob viewer) with path breadcrumbs.
-- Branch list with filtering, current branch, tracking status.
+## Phase 2: Layout + interactions
+- Two-column layout: left top branch list, left bottom commit list, right graph.
+- Bottom tabs for changes/files/compare/search with mobile stacking.
+- Click interactions: branch -> graph focus, commit -> graph focus + changes, graph node -> commit scroll.
 
-## Phase 3: Graph + compare + search
-- Real graph visualization (ASCII graph or DAG columns) tied to commits.
-- Compare view (branch/ref/commit range) with diff and stats.
-- Search (commit message/author + path-limited grep) and results list.
-
-## Phase 4: UX polish + performance
-- Pagination/virtualization where needed.
-- Caching and safe limits for git commands.
-- Error states and empty states for every panel.
+## Phase 3: UX polish + constraints
+- Fix diff panel overflow and long-line constraints.
+- Empty/error states, input defaults, and safe limits.
+- Mobile layout verification.
 
 ## Acceptance criteria
-- Users can browse branches, graph, commit details, diffs, and file tree.
-- Users can click commits and inspect changes.
-- Graph reflects actual branch/merge history.
-- Compare and search are usable and stable.
+- Graph is visual (not ASCII) and reflects branch/merge structure.
+- Panel layout matches spec on desktop, stacks on mobile.
+- Clicking branch/commit/graph node scrolls/focuses correctly without page navigation.
+- Diff/patch views stay within bounds.
