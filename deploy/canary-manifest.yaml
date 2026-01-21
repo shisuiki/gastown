@@ -1,0 +1,7 @@
+# Canary release pairing between repos.
+# Update both refs together when promoting builds.
+
+gastown_ref: ""
+env_config:
+  repo: shisuiki/env-config
+  ref: ""

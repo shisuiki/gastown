@@ -6,3 +6,4 @@
 - Tests: `go test ./internal/cmd/...` passes after agent bead fallback fix.
 - Fixed `gt hook`/`gt prime` hook lookup to fall back to town beads from crew worktrees.
 - Tests: `go test ./internal/cmd/...` passes.
+- Created canary branch protections and env-config repo bootstrap; documented canary promotion and pairing manifest.

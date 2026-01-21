@@ -198,6 +198,28 @@ gt convoy create "Auth System" gt-x7k2m gt-p9n4q --notify
 gt convoy list
 ```
 
+## Canary Deploys
+
+Gas Town uses a canary branch plus a separate environment config repo to stage releases.
+
+### Branch Strategy
+
+- `canary` branches from `main` and receives all deployable changes first.
+- `main` is promoted from `canary` only after canary validation completes.
+- Branch protections require PR reviews and CI to pass.
+
+### Promotion Criteria (canary → main)
+
+- CI checks required by branch protection are green on `canary`.
+- Canary deploy runs without regressions or P1/P2 incidents.
+- `deploy/canary-manifest.yaml` updated to the intended gastown + env-config refs.
+
+### Version Pairing
+
+- Config lives in `shisuiki/env-config`.
+- `canary/config.yaml` and `production/config.yaml` set the `service.ref` (gastown SHA or tag).
+- `deploy/canary-manifest.yaml` is the pairing manifest between gastown and env-config refs.
+
 ### Minimal Mode (No Tmux)
 
 Run individual runtime instances manually. Gas Town just tracks state.
