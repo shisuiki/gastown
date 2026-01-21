@@ -21,12 +21,16 @@ Use this checklist when rolling the canary container.
 
 Track canary deploys in beads so they are auditable and visible to the team.
 
-- [ ] Create a bead for the deploy:
+- [ ] Ensure `deploy/canary-deploy.sh` runs with bead recording enabled:
   ```bash
-  bd new -t task -p 1 "Canary deploy $(date +%Y-%m-%d)"
+  export CANARY_RECORD_BEAD=1
+  ./deploy/canary-deploy.sh
   ```
-- [ ] Update the bead with status/notes at each milestone (`bd update <id> --status=...`).
-- [ ] Close the bead after the smoke test passes.
+- [ ] If you did not use the deploy script, record manually:
+  ```bash
+  CANARY_RESULT=success ./scripts/canary-record-bead.sh
+  ```
+- [ ] Confirm the event exists (`bd list --type=event --event-category=canary.deploy --limit 1`).
 
 ## Rollback Criteria
 

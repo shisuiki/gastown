@@ -43,6 +43,10 @@
 
 1. Added canary deploy formula and integrated canary health checks into Deacon patrol (regenerated embedded formulas).
 
+### Canary deploy docs
+
+1. Documented validation, bead recording, and formula usage in canary deploy docs/checklist.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support

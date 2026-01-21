@@ -36,6 +36,7 @@ Required environment variables:
 - `GT_WEB_AUTH_TOKEN`: token for the web UI
 - `GT_ROOT` (optional): defaults to `/home/shisui/gt`
 - `CANARY_PORT` (optional): defaults to `8081`
+- `CANARY_RECORD_BEAD` (optional): set `0` to disable deploy bead recording
 
 The script records metadata at:
 
@@ -47,6 +48,26 @@ The script records metadata at:
 `deploy/canary-deploy.sh` runs `deploy/canary-validate.sh` by default after the
 container reports healthy. Set `VALIDATE_CANARY=0` to skip validation. The
 validation runbook lives in `docs/operations/canary-validation-runbook.md`.
+
+## Beads Tracking
+
+`deploy/canary-deploy.sh` calls `scripts/canary-record-bead.sh` to create a
+deploy event bead (parent epic `hq-vsa3v`) with metadata:
+
+- Timestamp
+- Gastown SHA
+- Env-config SHA
+- Image tag
+- Result (success/failed)
+
+Set `CANARY_RECORD_BEAD=0` to skip bead creation. You can also run the record
+script manually with `CANARY_RESULT=success|failed`.
+
+## Molecule Formula
+
+The canary workflow is captured in
+`.beads/formulas/mol-canary-deploy.formula.toml`. Use `bd formula show` or
+`bd mol wisp mol-canary-deploy` to walk through the steps when running a deploy.
 
 ## GitHub Actions Workflow
 
