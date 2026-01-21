@@ -16,3 +16,6 @@
 - Created missing agent identity beads for TerraNomadicCity, ptst_exp, and lm_preproc rigs (hq-f7uu).
 - Investigated hq-s3u97 deacon instability; found heartbeat written via legacy `date -Iseconds` format, added legacy parse fallback + zero-timestamp guard, and updated mol-deacon-patrol to use `gt deacon heartbeat` (go test ./internal/deacon).
 - Fixed daemon safeHeartbeat recursion causing stack overflow and restarted daemon from tmux (go test ./internal/daemon).
+
+## 2026-01-22
+- Implemented canary env-config injection via read-only worktree mount and deploy manifest tooling; added docs and scripts (hq-h4mur).
