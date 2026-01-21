@@ -380,8 +380,13 @@
         }
 
         async function toggleReadStatus(id, isRead) {
-            // isRead is boolean indicating current read status
-            if (isRead) {
+            // Determine current read state from DOM instead of using passed parameter
+            // (the passed isRead may be stale after optimistic updates)
+            const messageEl = document.querySelector('.mail-message[data-id="' + id + '"]');
+            if (!messageEl) return;
+
+            const currentlyRead = messageEl.classList.contains('mail-message-read');
+            if (currentlyRead) {
                 await markAsUnread(id);
             } else {
                 await markAsRead(id);
