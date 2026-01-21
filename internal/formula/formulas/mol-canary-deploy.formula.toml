@@ -1,0 +1,139 @@
+description = """
+Canary deploy workflow with beads tracking.
+
+This molecule orchestrates a canary deployment and records the result as a bead.
+Use it from the host rig (Nightingale) or locally when performing canary deploys.
+
+## Inputs / Environment
+
+- GT_WEB_AUTH_TOKEN (required)
+- GT_ROOT (defaults to /home/shisui/gt)
+- CANARY_PORT (defaults to 8081)
+- CONTAINER_NAME (defaults to gastown-canary)
+- ENV_CONFIG_DIR / ENV_CONFIG_REF (optional)
+- CANARY_RECORD_BEAD=1 to record deploys in beads (set 0 to disable)
+- CANARY_PARENT_EPIC (defaults to hq-vsa3v)
+
+## Manual Approval
+
+If a manual approval gate is required, pause between build and deploy and get
+explicit confirmation from the Mayor before proceeding.
+"""
+formula = "mol-canary-deploy"
+version = 1
+
+[[steps]]
+id = "prepare"
+title = "Prepare canary metadata"
+description = """
+Collect deployment metadata and verify prerequisites.
+
+```bash
+# Ensure auth token and workspace exist
+[ -n "$GT_WEB_AUTH_TOKEN" ] || { echo "GT_WEB_AUTH_TOKEN required"; exit 1; }
+[ -d "${GT_ROOT:-/home/shisui/gt}" ] || { echo "GT_ROOT missing"; exit 1; }
+
+# Capture refs
+GASTOWN_REF=$(git rev-parse HEAD)
+ENV_CONFIG_REF=${ENV_CONFIG_REF:-}
+if [ -n "${ENV_CONFIG_DIR:-}" ]; then
+  ENV_CONFIG_REF=$(git -C "$ENV_CONFIG_DIR" rev-parse HEAD)
+fi
+
+echo "Gastown ref: $GASTOWN_REF"
+echo "Env-config ref: ${ENV_CONFIG_REF:-unknown}"
+```
+
+**Exit criteria:** prerequisites verified, refs captured.
+"""
+
+[[steps]]
+id = "build"
+title = "Build canary image"
+needs = ["prepare"]
+description = """
+Build the canary image locally (or ensure it is present).
+
+```bash
+GASTOWN_REF=$(git rev-parse HEAD)
+IMAGE_TAG="gastown:canary-${GASTOWN_REF:0:12}"
+
+# Build locally
+sudo docker build -t "$IMAGE_TAG" .
+```
+
+If you plan to use a pre-built image, ensure it exists locally and document the tag.
+
+**Exit criteria:** image tag is available locally.
+"""
+
+[[steps]]
+id = "approval"
+title = "Manual approval (if required)"
+needs = ["build"]
+description = """
+If manual approval is required, pause here and obtain Mayor approval before deploying.
+Record the approval in mail or the deploy bead notes.
+
+If no approval is required, proceed to deploy.
+
+**Exit criteria:** approval obtained or explicitly skipped.
+"""
+
+[[steps]]
+id = "deploy"
+title = "Deploy canary container"
+needs = ["approval"]
+description = """
+Deploy the canary container using the standard script.
+
+```bash
+export GT_WEB_AUTH_TOKEN=...
+export GT_ROOT=${GT_ROOT:-/home/shisui/gt}
+export CANARY_PORT=${CANARY_PORT:-8081}
+export CONTAINER_NAME=${CONTAINER_NAME:-gastown-canary}
+
+./deploy/canary-deploy.sh
+```
+
+**Exit criteria:** container started and health check passes.
+"""
+
+[[steps]]
+id = "validate"
+title = "Validate canary health"
+needs = ["deploy"]
+description = """
+Validate health and basic UI responsiveness.
+
+```bash
+CANARY_PORT=${CANARY_PORT:-8081}
+
+# Container health
+sudo docker inspect --format '{{.State.Health.Status}}' "${CONTAINER_NAME:-gastown-canary}"
+
+# API health
+curl -fsS -H "Authorization: Bearer $GT_WEB_AUTH_TOKEN" \
+  "http://localhost:${CANARY_PORT}/api/version"
+```
+
+**Exit criteria:** container healthy, API responds.
+"""
+
+[[steps]]
+id = "record"
+title = "Record deploy bead"
+needs = ["validate"]
+description = """
+Record the deploy as a bead with metadata.
+
+```bash
+export CANARY_RESULT=success
+export CANARY_RECORD_BEAD=1
+./scripts/canary-record-bead.sh
+```
+
+If the deploy failed or was rolled back, set `CANARY_RESULT=failed` and include notes.
+
+**Exit criteria:** deploy bead created and linked to hq-vsa3v.
+"""

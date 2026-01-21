@@ -39,6 +39,10 @@
 
 1. Added canary deploy bead recorder script and wired `deploy/canary-deploy.sh` to log success/failure.
 
+### Canary workflow formulas
+
+1. Added canary deploy formula and integrated canary health checks into Deacon patrol (regenerated embedded formulas).
+
 ## 2026-01-21
 
 ### Docs UI tmpl support

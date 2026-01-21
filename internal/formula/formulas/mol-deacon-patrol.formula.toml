@@ -420,9 +420,55 @@ gt mail send mayor/ -s "Health: <rig> <component> unresponsive" \\
 Reset unresponsive_cycles to 0 when component responds normally."""
 
 [[steps]]
+id = "canary-health-check"
+title = "Check canary container health"
+needs = ["health-scan"]
+description = """
+Check canary container status and alert if unhealthy.
+
+```bash
+if [ "${CANARY_HEALTH_CHECK:-1}" != "1" ]; then
+  echo "CANARY_HEALTH_CHECK disabled; skipping"
+  exit 0
+fi
+
+CONTAINER_NAME=${CONTAINER_NAME:-${CANARY_CONTAINER:-gastown-canary}}
+DOCKER_CMD="docker"
+if ! docker info >/dev/null 2>&1; then
+  if sudo -n docker info >/dev/null 2>&1; then
+    DOCKER_CMD="sudo docker"
+  else
+    echo "Docker unavailable; skipping"
+    exit 0
+  fi
+fi
+
+if ! $DOCKER_CMD inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+  gt mail send mayor/ -s "Canary missing: $CONTAINER_NAME" \
+    -m "Canary container not found on $(hostname)."
+  exit 0
+fi
+
+status=$($DOCKER_CMD inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "unknown")
+if [ "$status" != "healthy" ]; then
+  gt mail send mayor/ -s "Canary unhealthy: $CONTAINER_NAME" \
+    -m "Health status: $status on $(hostname)."
+
+  if [ "${CANARY_AUTO_RESTART:-0}" = "1" ]; then
+    $DOCKER_CMD restart "$CONTAINER_NAME"
+    sleep 10
+    $DOCKER_CMD inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME" || true
+  fi
+fi
+```
+
+**Exit criteria:** Health checked; alerts sent on missing/unhealthy container.
+"""
+
+[[steps]]
 id = "zombie-scan"
 title = "Detect zombie polecats (NO KILL AUTHORITY)"
-needs = ["health-scan"]
+needs = ["canary-health-check"]
 description = """
 Defense-in-depth DETECTION of zombie polecats that Witness should have cleaned.
 
@@ -502,7 +548,7 @@ Skip this step if ~/gt/plugins/ does not exist or is empty."""
 [[steps]]
 id = "dog-pool-maintenance"
 title = "Maintain dog pool"
-needs = ["health-scan"]
+needs = ["canary-health-check"]
 description = """
 Ensure dog pool has available workers for dispatch.
 
