@@ -1,26 +1,24 @@
 # Roadmap
 
-## Phase 0: Investigation + requirements
-- Confirm where terminal history is stored today (front-end only vs backend).
-- Determine backend storage options (existing store vs new local JSON).
-- Decide minimal API contract for reading/writing history.
+## Phase 0: Requirements + survey
+- Audit current nav layout and entry points for config/dev pages.
+- Inspect account CLI behavior to mirror in WebUI.
+- Decide account API shape and UI flow.
 
-## Phase 1: Backend history storage
-- Add `/api/terminal/history` GET/POST endpoints.
-- Persist history in a local store under the rig runtime dir.
-- Validate keys and cap history size.
+## Phase 1: Account API + page
+- Add Accounts page to WebUI with list/add/default/switch actions.
+- Implement account API endpoints for list/status/add/default/switch.
+- Surface post-add login instructions and switch warnings.
 
-## Phase 2: Frontend integration
-- Load history from API with localStorage fallback.
-- Append new entries to API store; keep UI behavior unchanged.
-- Provide clear handling for missing/empty history.
+## Phase 2: Navigation refactor
+- Replace flat nav with main links + Cfg/Dev dropdowns.
+- Ensure active state highlights and mobile dropdown behavior.
+- Keep existing routes intact.
 
-## Phase 3: UX validation + guardrails
-- Confirm multi-device visibility of history.
-- Ensure scroll performance with large histories.
-- Add minimal constraints to prevent runaway growth.
+## Phase 3: UX validation
+- Confirm account operations reflect `gt account` behavior.
+- Verify nav works on mobile and desktop.
 
 ## Acceptance criteria
-- Terminal history persists across devices.
-- LocalStorage is fallback only; API is primary source.
-- API writes are bounded and safe under concurrent use.
+- WebUI accounts page covers list/add/default/switch.
+- Nav matches requested structure with dropdowns and stays usable on mobile.
