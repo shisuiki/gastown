@@ -12,7 +12,12 @@
 - Run the necessary tests (Go unit tests, linting if applicable) to keep the repo healthy.
 - Capture phase summaries in `gt_runtime_doc/Shu/summary` and finalize the status in `Progress.md`.
 
+## Phase 4: Failure handling and recovery (Step 10)
+- Document the failure scenarios (CI/build/test, Docker daemon, container startup, and test flakiness) plus the standard responses for operators.
+- Implement retry policies with configurable attempt limits and exponential backoff per failure type, then wire these policies into the canary workflow.
+- Formalize automated rollback triggers, a manual rollback runbook, and the alerting channels for when things break.
+
 ## Acceptance criteria
-- There is an operations reference for Step 5 tied to the Docker exec trigger mechanism.
-- The wrapper script runs standardized commands, handles container restarts, enforces timeouts, and returns clear exit codes.
-- The new workflow runs each command in order and triggers the rollback job automatically when a failure occurs.
+- Failure scenarios are documented end-to-end with clear mitigation and escalation guidance.
+- The canary workflow enforces retry policies and exponential backoff, failing only after the configured budget is exhausted.
+- Automated rollback and alert triggers surface context for reruns while the docs describe how to recover manually if automation stalls.
