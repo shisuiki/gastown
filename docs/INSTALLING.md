@@ -155,6 +155,43 @@ gt start --agent codex-low
 gt sling gt-abc12 myproject --agent claude-haiku
 ```
 
+## Containerized Run (Docker)
+
+The container runs the `gt gui` web UI by default. It must be pointed at a Gas Town
+workspace directory that contains `mayor/town.json`.
+
+### Build the Image
+
+```bash
+docker build -t gastown:local .
+```
+
+### Run the Container
+
+```bash
+docker run --rm -it \
+  -p 8080:8080 \
+  -v /path/to/gt-workspace:/gt \
+  -e GT_WEB_AUTH_TOKEN=changeme \
+  -e GT_WEB_ALLOW_REMOTE=1 \
+  gastown:local
+```
+
+### Required Environment Variables
+
+- `GT_WEB_AUTH_TOKEN`: Required for non-localhost access (container traffic is remote).
+- `GT_WEB_ALLOW_REMOTE=1`: Enables remote connections to the web UI.
+
+### Ports and Volumes
+
+- Port `8080` is exposed by default (`gt gui --port 8080`).
+- Mount your workspace at `/gt` (or set `GT_ROOT` to match your mount path).
+
+### Health Checks
+
+- Container health uses `gt version`.
+- For an HTTP check, use: `curl -H "Authorization: Bearer $GT_WEB_AUTH_TOKEN" http://localhost:8080/api/version`
+
 ## Minimal Mode vs Full Stack Mode
 
 Gas Town supports two operational modes:

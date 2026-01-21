@@ -1,5 +1,13 @@
 # Progress Log
 
+## 2026-01-22
+
+### Container build - Dockerfile + docs
+
+1. Added multi-stage `Dockerfile` that builds `gt` and runs `gt gui`.
+2. Documented container run, ports/volumes, and required env vars in `docs/INSTALLING.md`.
+3. Health check uses `gt version` (HTTP health check documented).
+
 ## 2026-01-21
 
 ### Docs UI tmpl support
