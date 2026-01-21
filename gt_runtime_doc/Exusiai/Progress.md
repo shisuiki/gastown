@@ -20,3 +20,4 @@
 - Implemented bd create -m alias in beads repo and added test; push blocked due to missing access to steveyegge/beads.
 - Added "message" to beads custom types to allow gt mail to create message issues.
 - Added mail bd command retry to auto-set beads custom types when message type is missing.
+- Improved gt sling target error when rig prefix is missing (suggests current rig/role path).

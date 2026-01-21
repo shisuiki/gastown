@@ -285,6 +285,32 @@ func resolveRoleToSession(role string) (string, error) {
 func resolvePathToSession(path string) (string, error) {
 	parts := strings.Split(path, "/")
 
+	if len(parts) == 2 {
+		role := strings.ToLower(parts[0])
+		switch role {
+		case "crew", "polecats", "witness", "refinery":
+			rigHint := os.Getenv("GT_RIG")
+			if rigHint == "" {
+				if townRoot := detectTownRootFromCwd(); townRoot != "" {
+					if rigName, _, err := findCurrentRig(townRoot); err == nil {
+						rigHint = rigName
+					}
+				}
+			}
+
+			hint := ""
+			if rigHint != "" {
+				hintTarget := fmt.Sprintf("%s/%s", rigHint, path)
+				if role == "crew" || role == "polecats" {
+					hintTarget = fmt.Sprintf("%s/%s/%s", rigHint, parts[0], parts[1])
+				}
+				hint = fmt.Sprintf(" Did you mean %s?", hintTarget)
+			}
+
+			return "", fmt.Errorf("missing rig prefix in target '%s'.%s Use full rig/role/name path", path, hint)
+		}
+	}
+
 	// Handle <rig>/crew/<name> format
 	if len(parts) == 3 && parts[1] == "crew" {
 		rig := parts[0]
