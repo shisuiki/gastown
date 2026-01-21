@@ -9,6 +9,8 @@ on:
 env:
   CANARY_CONTAINER: gastown-canary
   CANARY_COMMAND_TIMEOUT: '300'
+  CANARY_RETRY_ATTEMPTS: '3'
+  CANARY_RETRY_BACKOFF_SECONDS: '10'
 
 jobs:
   deploy-trigger:
@@ -18,19 +20,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Make helper executable
-        run: chmod +x scripts/canary-docker-exec.sh
+        run: chmod +x scripts/canary-docker-exec.sh scripts/canary-command-retry.sh
 
       - name: Health check
-        run: scripts/canary-docker-exec.sh --command health
+        run: scripts/canary-command-retry.sh --command health --whitelist health,config,migrate,smoke
 
       - name: Config reload
-        run: scripts/canary-docker-exec.sh --command config
+        run: scripts/canary-command-retry.sh --command config --whitelist health,config,migrate,smoke
 
       - name: Migrations
-        run: scripts/canary-docker-exec.sh --command migrate
+        run: scripts/canary-command-retry.sh --command migrate --whitelist health,config,migrate,smoke
 
       - name: Smoke test
-        run: scripts/canary-docker-exec.sh --command smoke
+        run: scripts/canary-command-retry.sh --command smoke --whitelist health,config,migrate,smoke
 
   rollback:
     if: failure()
@@ -44,7 +46,25 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Make helper executable
-        run: chmod +x scripts/canary-docker-exec.sh
+        run: chmod +x scripts/canary-docker-exec.sh scripts/canary-alert.sh
 
       - name: Rollback conduit
         run: scripts/canary-docker-exec.sh --command rollback
+
+  alert-on-failure:
+    needs: rollback
+    if: failure()
+    runs-on: ubuntu-latest
+    env:
+      CANARY_ALERT_EMAIL: guest@example.com
+      CANARY_ALERT_WEBHOOK: https://example.com/hook
+      CANARY_ALERT_SOURCE: Canary Deploy
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Make helper executable
+        run: chmod +x scripts/canary-alert.sh
+
+      - name: Send alert
+        run: scripts/canary-alert.sh
