@@ -23,7 +23,7 @@ Witnesses detect it and escalate to the Mayor.
 The Deacon's agent bead last_activity timestamp is updated during each patrol
 cycle. Witnesses check this timestamp to verify health."""
 formula = "mol-deacon-patrol"
-version = 8
+version = 9
 
 [[steps]]
 id = "inbox-check"
@@ -474,9 +474,39 @@ No action needed - Witness is doing its job.
 investigate why the Witness isn't cleaning up properly."""
 
 [[steps]]
+id = "backlog-dispatch"
+title = "Dispatch ready backlog to idle polecats"
+needs = ["zombie-scan"]
+description = """
+Dispatch ready work items to idle polecats.
+
+This closes the patrol gap where idle polecats sit unused while ready work
+remains unassigned. The command:
+- Finds idle polecats with no active work or hooks
+- Finds ready (unblocked) issues with no assignee
+- Slings work by priority
+- Notifies the Mayor if backlog is exhausted or idle capacity is missing
+
+**Run dispatch:**
+```bash
+gt deacon backlog-dispatch
+```
+
+**Preview only:**
+```bash
+gt deacon backlog-dispatch --dry-run
+```
+
+**If dispatch cannot proceed:**
+The command will notify the Mayor when:
+- Backlog is empty but idle polecats exist
+- Ready work exists but no idle polecats are available
+"""
+
+[[steps]]
 id = "plugin-run"
 title = "Execute registered plugins"
-needs = ["zombie-scan"]
+needs = ["backlog-dispatch"]
 description = """
 Execute registered plugins.
 
