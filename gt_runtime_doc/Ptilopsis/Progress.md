@@ -8,3 +8,4 @@
 - Tests: `go test ./internal/cmd/...` passes.
 - Created canary branch protections and env-config repo bootstrap; documented canary promotion and pairing manifest.
 - Added canary deploy workflow, scripts, and host/rollback docs; recorded env-config pin.
+- Added mayor → crew deploy request/status template and escalation rules.

@@ -215,6 +215,7 @@ Gas Town uses a canary branch plus a separate environment config repo to stage r
 - `deploy/canary-manifest.yaml` updated to the intended gastown + env-config refs.
 
 See `docs/CANARY-DEPLOY.md` for host configuration and rollback steps.
+See `docs/MAYOR-CREW-DEPLOY.md` for the mayor → crew request/status template.
 
 ### Version Pairing
 

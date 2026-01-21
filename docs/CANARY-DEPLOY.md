@@ -23,6 +23,9 @@ If non-sudo Docker access is desired, add the deployment user to the `docker`
 The deploy workflow uses the current `canary` commit for gastown and the pinned
 env-config ref for configuration.
 
+See `docs/MAYOR-CREW-DEPLOY.md` for the standard mayor → crew request and status
+update templates.
+
 ## Deploy Script
 
 `deploy/canary-deploy.sh` builds a Docker image and runs the canary container.
