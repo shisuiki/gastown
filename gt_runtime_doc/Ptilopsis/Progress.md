@@ -7,3 +7,4 @@
 - Fixed `gt hook`/`gt prime` hook lookup to fall back to town beads from crew worktrees.
 - Tests: `go test ./internal/cmd/...` passes.
 - Created canary branch protections and env-config repo bootstrap; documented canary promotion and pairing manifest.
+- Added canary deploy workflow, scripts, and host/rollback docs; recorded env-config pin.

@@ -214,6 +214,8 @@ Gas Town uses a canary branch plus a separate environment config repo to stage r
 - Canary deploy runs without regressions or P1/P2 incidents.
 - `deploy/canary-manifest.yaml` updated to the intended gastown + env-config refs.
 
+See `docs/CANARY-DEPLOY.md` for host configuration and rollback steps.
+
 ### Version Pairing
 
 - Config lives in `shisuiki/env-config`.
