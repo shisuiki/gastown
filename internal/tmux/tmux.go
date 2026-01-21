@@ -455,6 +455,22 @@ func getSessionNudgeLock(session string) *sync.Mutex {
 	return actual.(*sync.Mutex)
 }
 
+// nudgeDebounce returns a debounce duration tuned for message length.
+// Longer messages get a small extra delay to ensure paste completes before Enter.
+func nudgeDebounce(message string) time.Duration {
+	base := time.Duration(constants.DefaultDebounceMs) * time.Millisecond
+	if message == "" {
+		return base
+	}
+
+	extra := time.Duration(len(message)/200) * 100 * time.Millisecond
+	maxExtra := 500 * time.Millisecond
+	if extra > maxExtra {
+		extra = maxExtra
+	}
+	return base + extra
+}
+
 // NudgeSession sends a message to a Claude Code session reliably.
 // This is the canonical way to send messages to Claude sessions.
 // Uses: literal mode + 500ms debounce + ESC (for vim mode) + separate Enter.
@@ -475,8 +491,8 @@ func (t *Tmux) NudgeSession(session, message string) error {
 		return err
 	}
 
-	// 2. Wait 500ms for paste to complete (tested, required)
-	time.Sleep(500 * time.Millisecond)
+	// 2. Wait for paste to complete (tested, required)
+	time.Sleep(nudgeDebounce(message))
 
 	// 3. Send Escape to exit vim INSERT mode if enabled (harmless in normal mode)
 	// See: https://github.com/anthropics/gastown/issues/307
@@ -512,8 +528,8 @@ func (t *Tmux) NudgePane(pane, message string) error {
 		return err
 	}
 
-	// 2. Wait 500ms for paste to complete (tested, required)
-	time.Sleep(500 * time.Millisecond)
+	// 2. Wait for paste to complete (tested, required)
+	time.Sleep(nudgeDebounce(message))
 
 	// 3. Send Escape to exit vim INSERT mode if enabled (harmless in normal mode)
 	// See: https://github.com/anthropics/gastown/issues/307
@@ -936,6 +952,7 @@ func (t *Tmux) WaitForShellReady(session string, timeout time.Duration) error {
 	}
 	return fmt.Errorf("timeout waiting for shell")
 }
+
 // WaitForClaudeUI polls until Claude Code's chat interface is ready for input.
 // Checks for multiple ready indicators:
 // 1. "Recent activity" or "No recent activity" in Claude's welcome message
