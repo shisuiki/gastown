@@ -13,3 +13,4 @@
 - Disabled tmux nudges for cmd package tests via GT_TEST_NO_NUDGE in TestMain.
 - Closed hq-w2c5 after confirming prefix mismatch comes from tombstones and advising skip/compact/rename workarounds to mayor.
 - Switched gt sling to default skip-busy with --force-busy override and clearer busy-skip messaging.
+- Created missing agent identity beads for TerraNomadicCity, ptst_exp, and lm_preproc rigs (hq-f7uu).
