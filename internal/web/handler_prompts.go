@@ -55,6 +55,7 @@ type PromptTemplateUpdateRequest struct {
 type ClaudeFileResponse struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	Exists  bool   `json:"exists"`
 }
 
 // ClaudeFileRequest represents the API request for updating CLAUDE.md.
@@ -262,31 +263,41 @@ func (h *GUIHandler) handleAPIPromptTemplates(w http.ResponseWriter, r *http.Req
 
 // handleAPIPromptClaude handles GET and POST for /api/prompts/claude.
 func (h *GUIHandler) handleAPIPromptClaude(w http.ResponseWriter, r *http.Request) {
-	repoRoot, err := promptsRepoRoot()
-	if err != nil {
-		http.Error(w, "Failed to locate repo root", http.StatusInternalServerError)
-		return
-	}
-
-	claudePath := filepath.Join(repoRoot, "CLAUDE.md")
+	gtRoot := getGTRoot()
+	claudePath := filepath.Join(gtRoot, "mayor", "CLAUDE.md")
 
 	switch r.Method {
 	case http.MethodGet:
-		content, err := os.ReadFile(claudePath)
-		if err != nil && !os.IsNotExist(err) {
-			log.Printf("Error reading CLAUDE.md: %v", err)
+		content := []byte{}
+		exists := false
+		if info, err := os.Stat(claudePath); err == nil && !info.IsDir() {
+			exists = true
+			content, err = os.ReadFile(claudePath)
+			if err != nil {
+				log.Printf("Error reading CLAUDE.md: %v", err)
+				http.Error(w, "Failed to read CLAUDE.md", http.StatusInternalServerError)
+				return
+			}
+		} else if err != nil && !os.IsNotExist(err) {
+			log.Printf("Error checking CLAUDE.md: %v", err)
 			http.Error(w, "Failed to read CLAUDE.md", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ClaudeFileResponse{
-			Path:    "CLAUDE.md",
+			Path:    filepath.ToSlash(filepath.Join("mayor", "CLAUDE.md")),
 			Content: string(content),
+			Exists:  exists,
 		})
 	case http.MethodPost:
 		var req ClaudeFileRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(claudePath), 0755); err != nil {
+			log.Printf("Error creating CLAUDE.md directory: %v", err)
+			http.Error(w, "Failed to update CLAUDE.md", http.StatusInternalServerError)
 			return
 		}
 		if err := os.WriteFile(claudePath, []byte(req.Content), 0644); err != nil {

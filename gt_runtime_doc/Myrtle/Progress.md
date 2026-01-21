@@ -18,6 +18,11 @@
 1. Added `bd` binary to container image build.
 2. Added canary ops docs with container validation and beads tracking guidance.
 
+### Prompts UI cleanup
+
+1. Pointed CLAUDE.md editing at `mayor/CLAUDE.md` with missing indicator.
+2. Restructured prompt templates by role with simplified + full prompts per role.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support

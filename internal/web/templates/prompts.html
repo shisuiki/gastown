@@ -48,6 +48,16 @@
         .role-polecat { background: #f59e0b; color: black; }
         .role-crew { background: #22c55e; color: black; }
         .role-claude { background: #0ea5e9; color: white; }
+        .prompt-subcard {
+            border-top: 1px solid var(--border);
+            margin-top: 12px;
+            padding-top: 12px;
+        }
+        .prompt-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
         .source-badge {
             display: inline-block;
             padding: 2px 8px;
@@ -218,6 +228,7 @@
                     <div class="prompt-title">
                         <span class="role-badge role-claude">CLAUDE</span>
                         <span class="source-badge" x-text="claude.path"></span>
+                        <span class="source-badge" x-show="!claude.exists">missing</span>
                     </div>
                     <div class="prompt-actions">
                         <template x-if="!claude.editing">
@@ -231,6 +242,7 @@
                         </template>
                     </div>
                 </div>
+                <p class="help-text" x-show="!claude.exists">CLAUDE.md not found. Saving will create it.</p>
                 <template x-if="!claude.editing">
                     <div class="prompt-content" x-text="claude.content"></div>
                 </template>
@@ -242,71 +254,74 @@
 
         <div class="card">
             <h2>Prompt Templates</h2>
-            <p class="text-muted" style="margin-bottom: 20px;">Edit the prompt template files used to build system instructions.</p>
+            <p class="text-muted" style="margin-bottom: 20px;">Each role has two prompt files: a simplified system prompt and a full role template.</p>
 
             <div class="prompts-section">
-                <h3>System Prompts (Simplified)</h3>
-                <template x-for="file in systemTemplates" :key="file.path">
+                <template x-for="rolePrompt in templateRoles" :key="rolePrompt.role">
                     <div class="prompt-card">
                         <div class="prompt-header">
                             <div class="prompt-title">
-                                <span class="source-badge" x-text="file.displayPath"></span>
-                            </div>
-                            <div class="prompt-actions">
-                                <template x-if="!file.editing">
-                                    <button class="btn-edit" @click="startTemplateEdit(file)">Edit</button>
-                                </template>
-                                <template x-if="file.editing">
-                                    <button class="btn-save" @click="saveTemplate('system', file)" :disabled="saving">Save</button>
-                                </template>
-                                <template x-if="file.editing">
-                                    <button class="btn-cancel" @click="cancelTemplateEdit(file)">Cancel</button>
-                                </template>
+                                <span class="role-badge" :class="'role-' + rolePrompt.role" x-text="rolePrompt.role"></span>
                             </div>
                         </div>
-                        <template x-if="!file.editing">
-                            <div class="prompt-content" x-text="file.content"></div>
-                        </template>
-                        <template x-if="file.editing">
-                            <textarea class="edit-textarea" x-model="file.editContent"></textarea>
-                        </template>
-                    </div>
-                </template>
-                <template x-if="systemTemplates.length === 0">
-                    <p class="text-muted">No system prompt templates found.</p>
-                </template>
-            </div>
 
-            <div class="prompts-section">
-                <h3>Role Templates (Full)</h3>
-                <template x-for="file in roleTemplates" :key="file.path">
-                    <div class="prompt-card">
-                        <div class="prompt-header">
-                            <div class="prompt-title">
-                                <span class="source-badge" x-text="file.displayPath"></span>
+                        <div class="prompt-subcard">
+                            <div class="prompt-header">
+                                <div class="prompt-title">
+                                    <span class="source-badge">Simplified</span>
+                                    <span class="source-badge" x-text="rolePrompt.system.displayPath"></span>
+                                    <span class="source-badge" x-show="rolePrompt.system.missing">missing</span>
+                                </div>
+                                <div class="prompt-actions">
+                                    <template x-if="!rolePrompt.system.editing">
+                                        <button class="btn-edit" @click="startTemplateEdit(rolePrompt.system)">Edit</button>
+                                    </template>
+                                    <template x-if="rolePrompt.system.editing">
+                                        <button class="btn-save" @click="saveTemplate('system', rolePrompt.system)" :disabled="saving">Save</button>
+                                    </template>
+                                    <template x-if="rolePrompt.system.editing">
+                                        <button class="btn-cancel" @click="cancelTemplateEdit(rolePrompt.system)">Cancel</button>
+                                    </template>
+                                </div>
                             </div>
-                            <div class="prompt-actions">
-                                <template x-if="!file.editing">
-                                    <button class="btn-edit" @click="startTemplateEdit(file)">Edit</button>
-                                </template>
-                                <template x-if="file.editing">
-                                    <button class="btn-save" @click="saveTemplate('roles', file)" :disabled="saving">Save</button>
-                                </template>
-                                <template x-if="file.editing">
-                                    <button class="btn-cancel" @click="cancelTemplateEdit(file)">Cancel</button>
-                                </template>
-                            </div>
+                            <template x-if="!rolePrompt.system.editing">
+                                <div class="prompt-content" x-text="rolePrompt.system.content"></div>
+                            </template>
+                            <template x-if="rolePrompt.system.editing">
+                                <textarea class="edit-textarea" x-model="rolePrompt.system.editContent"></textarea>
+                            </template>
                         </div>
-                        <template x-if="!file.editing">
-                            <div class="prompt-content" x-text="file.content"></div>
-                        </template>
-                        <template x-if="file.editing">
-                            <textarea class="edit-textarea" x-model="file.editContent"></textarea>
-                        </template>
+
+                        <div class="prompt-subcard">
+                            <div class="prompt-header">
+                                <div class="prompt-title">
+                                    <span class="source-badge">Full Template</span>
+                                    <span class="source-badge" x-text="rolePrompt.full.displayPath"></span>
+                                    <span class="source-badge" x-show="rolePrompt.full.missing">missing</span>
+                                </div>
+                                <div class="prompt-actions">
+                                    <template x-if="!rolePrompt.full.editing">
+                                        <button class="btn-edit" @click="startTemplateEdit(rolePrompt.full)">Edit</button>
+                                    </template>
+                                    <template x-if="rolePrompt.full.editing">
+                                        <button class="btn-save" @click="saveTemplate('roles', rolePrompt.full)" :disabled="saving">Save</button>
+                                    </template>
+                                    <template x-if="rolePrompt.full.editing">
+                                        <button class="btn-cancel" @click="cancelTemplateEdit(rolePrompt.full)">Cancel</button>
+                                    </template>
+                                </div>
+                            </div>
+                            <template x-if="!rolePrompt.full.editing">
+                                <div class="prompt-content" x-text="rolePrompt.full.content"></div>
+                            </template>
+                            <template x-if="rolePrompt.full.editing">
+                                <textarea class="edit-textarea" x-model="rolePrompt.full.editContent"></textarea>
+                            </template>
+                        </div>
                     </div>
                 </template>
-                <template x-if="roleTemplates.length === 0">
-                    <p class="text-muted">No role templates found.</p>
+                <template x-if="templateRoles.length === 0">
+                    <p class="text-muted">No prompt templates found.</p>
                 </template>
             </div>
         </div>
@@ -389,17 +404,22 @@
                 selectedRig: '',
                 rigs: [],
                 prompts: [],
+                roleNames: ['mayor', 'deacon', 'witness', 'refinery', 'polecat', 'crew'],
                 claude: {
                     path: 'CLAUDE.md',
                     content: '',
                     editing: false,
-                    editContent: ''
+                    editContent: '',
+                    exists: true
                 },
-                systemTemplates: [],
-                roleTemplates: [],
+                templateRoles: [],
                 templateBases: {
                     system: '',
                     roles: ''
+                },
+                templateMap: {
+                    system: {},
+                    roles: {}
                 },
 
                 init() {
@@ -439,9 +459,8 @@
                     }
                     try {
                         // Load prompts for each role
-                        const roles = ['mayor', 'deacon', 'witness', 'refinery', 'polecat', 'crew'];
                         this.prompts = [];
-                        for (const role of roles) {
+                        for (const role of this.roleNames) {
                             let url = `/api/prompts/${role}`;
                             if (this.selectedRig) {
                                 url += `?rig=${encodeURIComponent(this.selectedRig)}`;
@@ -476,6 +495,7 @@
                         const data = await res.json();
                         this.claude.path = data.path || 'CLAUDE.md';
                         this.claude.content = data.content || '';
+                        this.claude.exists = data.exists !== false;
                         this.claude.editing = false;
                         this.claude.editContent = this.claude.content;
                     } catch (e) {
@@ -493,23 +513,73 @@
                         const data = await res.json();
                         const base = data.base || '';
                         const files = Array.isArray(data.files) ? data.files : [];
-                        const next = files.map((file) => ({
-                            ...file,
-                            displayPath: base ? `${base}/${file.path}` : file.path,
-                            editing: false,
-                            editContent: file.content
-                        }));
                         if (kind === 'system') {
-                            this.systemTemplates = next;
                             this.templateBases.system = base;
+                            this.templateMap.system = this.mapTemplates(files, '.md');
                         } else if (kind === 'roles') {
-                            this.roleTemplates = next;
                             this.templateBases.roles = base;
+                            this.templateMap.roles = this.mapTemplates(files, '.md.tmpl');
                         }
+                        this.buildTemplateRoles();
                     } catch (e) {
                         this.message = `Failed to load ${kind} templates: ` + e.message;
                         this.messageType = 'error';
                     }
+                },
+
+                mapTemplates(files, suffix) {
+                    const map = {};
+                    files.forEach((file) => {
+                        if (!file.path.endsWith(suffix)) {
+                            return;
+                        }
+                        const role = file.path.slice(0, -suffix.length);
+                        map[role] = {
+                            path: file.path,
+                            content: file.content || '',
+                            editing: false,
+                            editContent: file.content || '',
+                            missing: false
+                        };
+                    });
+                    return map;
+                },
+
+                buildTemplateRoles() {
+                    const systemBase = this.templateBases.system;
+                    const roleBase = this.templateBases.roles;
+                    this.templateRoles = this.roleNames.map((role) => {
+                        const system = this.templateMap.system[role] || {
+                            path: `${role}.md`,
+                            content: '',
+                            editing: false,
+                            editContent: '',
+                            missing: true
+                        };
+                        const full = this.templateMap.roles[role] || {
+                            path: `${role}.md.tmpl`,
+                            content: '',
+                            editing: false,
+                            editContent: '',
+                            missing: true
+                        };
+                        return {
+                            role,
+                            system: this.decorateTemplate(system, systemBase),
+                            full: this.decorateTemplate(full, roleBase)
+                        };
+                    });
+                },
+
+                decorateTemplate(template, base) {
+                    return {
+                        path: template.path,
+                        content: template.content || '',
+                        editing: template.editing || false,
+                        editContent: template.editContent || template.content || '',
+                        missing: !!template.missing,
+                        displayPath: base ? `${base}/${template.path}` : template.path
+                    };
                 },
 
                 startEditClaude() {
