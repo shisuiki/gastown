@@ -1,75 +1,50 @@
-name: Canary Deploy
+name: Canary Deploy Trigger
 
 on:
   push:
-    branches: [ canary ]
+    branches:
+      - canary
   workflow_dispatch:
 
-concurrency:
-  group: canary-deploy
-  cancel-in-progress: false
+env:
+  CANARY_CONTAINER: gastown-canary
+  CANARY_COMMAND_TIMEOUT: '300'
 
 jobs:
-  deploy:
-    name: Deploy canary
-    runs-on: [self-hosted, canary]
+  deploy-trigger:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout gastown
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Read canary manifest
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          manifest = {}
-          section = None
-          with open('deploy/canary-manifest.yaml', 'r') as handle:
-            for line in handle:
-              line = line.strip()
-              if not line or line.startswith('#'):
-                continue
-              if line.endswith(':') and ' ' not in line[:-1]:
-                section = line[:-1]
-                manifest[section] = {}
-                continue
-              if ':' in line:
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip().strip('"')
-                if section and key in ('repo', 'ref'):
-                  manifest[section][key] = value
-                else:
-                  manifest[key] = value
-          env_repo = manifest.get('env_config', {}).get('repo', 'shisuiki/env-config')
-          env_ref = manifest.get('env_config', {}).get('ref', '')
-          gastown_ref = manifest.get('gastown_ref', '')
-          print(f"ENV_CONFIG_REPO={env_repo}")
-          print(f"ENV_CONFIG_REF={env_ref}")
-          print(f"GASTOWN_REF={gastown_ref}")
-          PY
+      - name: Make helper executable
+        run: chmod +x scripts/canary-docker-exec.sh
 
-      - name: Validate env-config ref
-        run: |
-          if [ -z "$ENV_CONFIG_REF" ]; then
-            echo "env-config ref missing in deploy/canary-manifest.yaml"
-            exit 1
-          fi
+      - name: Health check
+        run: scripts/canary-docker-exec.sh --command health
 
-      - name: Checkout env-config
-        uses: actions/checkout@v6
-        with:
-          repository: ${{ env.ENV_CONFIG_REPO }}
-          ref: ${{ env.ENV_CONFIG_REF }}
-          path: env-config
+      - name: Config reload
+        run: scripts/canary-docker-exec.sh --command config
 
-      - name: Deploy canary
-        env:
-          GT_WEB_AUTH_TOKEN: ${{ secrets.GT_WEB_AUTH_TOKEN_CANARY }}
-          GT_ROOT: ${{ secrets.GT_ROOT_CANARY }}
-          CANARY_PORT: ${{ secrets.GT_CANARY_PORT }}
-          GASTOWN_REF: ${{ env.GASTOWN_REF }}
-          ENV_CONFIG_REF: ${{ env.ENV_CONFIG_REF }}
-          ENV_CONFIG_DIR: ${{ github.workspace }}/env-config
-        run: |
-          ./deploy/canary-deploy.sh
+      - name: Migrations
+        run: scripts/canary-docker-exec.sh --command migrate
+
+      - name: Smoke test
+        run: scripts/canary-docker-exec.sh --command smoke
+
+  rollback:
+    if: failure()
+    needs: deploy-trigger
+    runs-on: ubuntu-latest
+    env:
+      CANARY_ROLLBACK_COMMANDS: |
+        git reset --hard origin/main;;gt config reload
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Make helper executable
+        run: chmod +x scripts/canary-docker-exec.sh
+
+      - name: Rollback conduit
+        run: scripts/canary-docker-exec.sh --command rollback
