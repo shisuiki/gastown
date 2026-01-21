@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 )
 
 //go:embed templates/*.html
@@ -29,6 +30,7 @@ type GUIHandler struct {
 	allowPasswordAuth bool // For local dev only - logs warning if enabled
 	statusCache       *StatusCache
 	cache             *Cache
+	historyMu         sync.Mutex
 }
 
 // authConfig controls authentication behavior.
@@ -112,13 +114,14 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	// Terminal API routes
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)
 	h.mux.HandleFunc("/api/terminal/send", h.handleAPITerminalSend)
+	h.mux.HandleFunc("/api/terminal/history", h.handleAPITerminalHistory)
 
 	// Crew API routes
 	h.mux.HandleFunc("/api/crew/list", h.handleAPICrewList)
 	h.mux.HandleFunc("/api/crew/action", h.handleAPICrewAction)
 
 	// Workflow API routes
-	h.mux.HandleFunc("/api/activity", h.handleAPIActivity)        // Legacy: git commits
+	h.mux.HandleFunc("/api/activity", h.handleAPIActivity) // Legacy: git commits
 	h.mux.HandleFunc("/api/workflow/hook", h.handleAPIWorkflowHook)
 	h.mux.HandleFunc("/api/workflow/ready", h.handleAPIWorkflowReady)
 
