@@ -1,0 +1,30 @@
+name: Nightingale Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why this trigger is running"
+        required: false
+        default: "manual"
+  repository_dispatch:
+    types:
+      - nightingale-trigger
+
+jobs:
+  trigger:
+    runs-on: [self-hosted, nightingale]
+    env:
+      NIGHTINGALE_RIG: nightingale
+      NIGHTINGALE_CREW: Nightingale
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Make trigger executable
+        run: chmod +x scripts/nightingale-trigger.sh
+
+      - name: Trigger Nightingale
+        env:
+          NIGHTINGALE_REASON: ${{ github.event.inputs.reason || github.event.client_payload.reason || 'manual' }}
+        run: scripts/nightingale-trigger.sh

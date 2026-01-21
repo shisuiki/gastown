@@ -29,6 +29,11 @@
 2. On git sync failure, auto-create a bead and sling to a polecat target.
 3. Added git author env support + unsaved-change warnings for config/prompts edits.
 
+### Nightingale trigger setup
+
+1. Added Nightingale ops doc + GitHub Actions trigger workflow and local trigger script.
+2. Created `nightingale` rig + Nightingale crew workspace; agent bead creation warned about prefix mismatch.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support
