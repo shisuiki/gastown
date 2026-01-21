@@ -436,7 +436,7 @@ func ensureRepoFingerprint(beadsPath string) error {
 
 // ensureCustomTypes registers Gas Town custom issue types with beads.
 // Beads core only supports built-in types (bug, feature, task, etc.).
-// Gas Town needs custom types: agent, role, rig, convoy, slot.
+// Gas Town needs custom types: agent, role, rig, convoy, slot, message.
 // This is idempotent - safe to call multiple times.
 func ensureCustomTypes(beadsPath string) error {
 	cmd := exec.Command("bd", "config", "set", "types.custom", constants.BeadsCustomTypes)
@@ -472,7 +472,7 @@ func initTownAgentBeads(townPath string) error {
 	// bd init doesn't enable "custom" issue types by default, but Gas Town uses
 	// agent/role beads during install and runtime. Ensure these types are enabled
 	// before attempting to create any town-level system beads.
-	if err := ensureBeadsCustomTypes(townPath, []string{"agent", "role", "rig", "convoy", "slot"}); err != nil {
+	if err := ensureBeadsCustomTypes(townPath, []string{"agent", "role", "rig", "convoy", "slot", "message"}); err != nil {
 		return err
 	}
 
