@@ -77,6 +77,34 @@ func TestReadHeartbeat_NonExistent(t *testing.T) {
 	}
 }
 
+func TestReadHeartbeat_LegacyTimestamp(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "deacon-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	ts := time.Now().UTC().Truncate(time.Second)
+	hbFile := HeartbeatFile(tmpDir)
+	if err := os.MkdirAll(filepath.Dir(hbFile), 0755); err != nil {
+		t.Fatalf("creating heartbeat dir: %v", err)
+	}
+	if err := os.WriteFile(hbFile, []byte(ts.Format(time.RFC3339)), 0600); err != nil {
+		t.Fatalf("writing legacy heartbeat: %v", err)
+	}
+
+	hb := ReadHeartbeat(tmpDir)
+	if hb == nil {
+		t.Fatal("expected heartbeat for legacy timestamp")
+	}
+	if hb.Timestamp.IsZero() {
+		t.Fatal("expected legacy timestamp to be parsed")
+	}
+	if !hb.Timestamp.Equal(ts) {
+		t.Errorf("Timestamp = %s, want %s", hb.Timestamp.Format(time.RFC3339), ts.Format(time.RFC3339))
+	}
+}
+
 func TestHeartbeat_Age(t *testing.T) {
 	// Test nil heartbeat
 	var nilHb *Heartbeat
@@ -90,6 +118,12 @@ func TestHeartbeat_Age(t *testing.T) {
 	}
 	if hb.Age() > time.Minute {
 		t.Errorf("Age() = %v, expected < 1 minute", hb.Age())
+	}
+
+	// Test zero timestamp heartbeat
+	zeroHb := &Heartbeat{}
+	if zeroHb.Age() < 24*time.Hour {
+		t.Error("zero timestamp heartbeat should have very large age")
 	}
 }
 

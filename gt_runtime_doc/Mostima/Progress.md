@@ -14,3 +14,4 @@
 - Closed hq-w2c5 after confirming prefix mismatch comes from tombstones and advising skip/compact/rename workarounds to mayor.
 - Switched gt sling to default skip-busy with --force-busy override and clearer busy-skip messaging.
 - Created missing agent identity beads for TerraNomadicCity, ptst_exp, and lm_preproc rigs (hq-f7uu).
+- Investigated hq-s3u97 deacon instability; found heartbeat written via legacy `date -Iseconds` format, added legacy parse fallback + zero-timestamp guard, and updated mol-deacon-patrol to use `gt deacon heartbeat` (go test ./internal/deacon).

@@ -37,6 +37,12 @@ Check the Mayor's inbox for messages from:
 - Polecats requesting help or escalation
 - External triggers (webhooks, timers)
 
+Update heartbeat at the start of each patrol cycle:
+```bash
+gt deacon heartbeat "patrol cycle"
+```
+Do not write `deacon/heartbeat.json` directly.
+
 ```bash
 gt mail inbox
 # For each message:

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -69,17 +70,28 @@ func ReadHeartbeat(townRoot string) *Heartbeat {
 	}
 
 	var hb Heartbeat
-	if err := json.Unmarshal(data, &hb); err != nil {
-		return nil
+	if err := json.Unmarshal(data, &hb); err == nil {
+		if hb.Timestamp.IsZero() {
+			if ts := parseLegacyHeartbeatTimestamp(string(data)); !ts.IsZero() {
+				hb.Timestamp = ts
+			} else {
+				return nil
+			}
+		}
+		return &hb
 	}
 
-	return &hb
+	if ts := parseLegacyHeartbeatTimestamp(string(data)); !ts.IsZero() {
+		return &Heartbeat{Timestamp: ts}
+	}
+
+	return nil
 }
 
 // Age returns how old the heartbeat is.
 // Returns a very large duration if the heartbeat is nil.
 func (hb *Heartbeat) Age() time.Duration {
-	if hb == nil {
+	if hb == nil || hb.Timestamp.IsZero() {
 		return 24 * time.Hour * 365 // Very stale
 	}
 	return time.Since(hb.Timestamp)
@@ -146,4 +158,24 @@ func TouchWithAction(townRoot, action string, healthy, unhealthy int) error {
 		HealthyAgents:   healthy,
 		UnhealthyAgents: unhealthy,
 	})
+}
+
+func parseLegacyHeartbeatTimestamp(raw string) time.Time {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return time.Time{}
+	}
+
+	if strings.HasPrefix(trimmed, "\"") && strings.HasSuffix(trimmed, "\"") {
+		trimmed = strings.Trim(trimmed, "\"")
+	}
+
+	if ts, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
+		return ts
+	}
+	if ts, err := time.Parse(time.RFC3339, trimmed); err == nil {
+		return ts
+	}
+
+	return time.Time{}
 }
