@@ -25,6 +25,8 @@ env-config ref for configuration.
 
 See `docs/MAYOR-CREW-DEPLOY.md` for the standard mayor → crew request and status
 update templates.
+See `docs/operations/canary-promotion.md` for promotion criteria and regression
+handling.
 
 ## Deploy Script
 
