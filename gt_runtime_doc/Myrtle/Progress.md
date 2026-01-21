@@ -7,6 +7,7 @@
 1. Added multi-stage `Dockerfile` that builds `gt` and runs `gt gui`.
 2. Documented container run, ports/volumes, and required env vars in `docs/INSTALLING.md`.
 3. Health check uses `gt version` (HTTP health check documented).
+4. Local Docker validation blocked: Docker daemon socket permission denied in this environment.
 
 ### Container build - CI job
 
