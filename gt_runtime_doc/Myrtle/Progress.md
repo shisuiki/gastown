@@ -10,6 +10,10 @@
 
 1. Made `/terminals?session=...` auto-connect run only once to avoid reconnecting after manual disconnect.
 
+### Docs env root tests
+
+1. Added tests covering env-based docs root resolution in `internal/web/handler_docs_test.go`.
+
 ## 2026-01-20
 
 ### P2 Incident: Docs Root Regression
