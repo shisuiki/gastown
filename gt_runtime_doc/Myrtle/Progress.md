@@ -47,6 +47,10 @@
 
 1. Documented validation, bead recording, and formula usage in canary deploy docs/checklist.
 
+### Canary workflow summary
+
+1. Added a summary entry for the canary workflow integration phase.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support
