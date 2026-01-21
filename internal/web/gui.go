@@ -81,6 +81,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/mail", h.handleMail)
 	h.mux.HandleFunc("/terminals", h.handleTerminals)
 	h.mux.HandleFunc("/crew", h.handleCrew)
+	h.mux.HandleFunc("/account", h.handleAccount)
 	h.mux.HandleFunc("/workflow", h.handleWorkflow)
 	h.mux.HandleFunc("/activity", h.handleWorkflow) // Legacy redirect
 	h.mux.HandleFunc("/git", h.handleGit)
@@ -110,6 +111,10 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/mail/mark-unread", h.handleAPIMailMarkUnread)
 	h.mux.HandleFunc("/api/mail/archive", h.handleAPIMailArchive)
 	h.mux.HandleFunc("/api/agents/list", h.handleAPIAgentsList)
+	h.mux.HandleFunc("/api/accounts", h.handleAPIAccounts)
+	h.mux.HandleFunc("/api/accounts/add", h.handleAPIAccountsAdd)
+	h.mux.HandleFunc("/api/accounts/default", h.handleAPIAccountsDefault)
+	h.mux.HandleFunc("/api/accounts/switch", h.handleAPIAccountsSwitch)
 
 	// Terminal API routes
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)

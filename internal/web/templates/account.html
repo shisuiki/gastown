@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>Accounts - Gas Town</title>
+</head>
+<body>
+    {{template "nav" .}}
+
+    <div class="container account-page">
+        <div class="card" style="margin-bottom: 20px;">
+            <h2>Account Status</h2>
+            <div id="account-status" class="text-muted">Loading...</div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Add Account</h2>
+                <form id="account-add-form">
+                    <div class="form-group">
+                        <label for="account-handle">Handle</label>
+                        <input id="account-handle" class="input-field" placeholder="work" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="account-email">Email (optional)</label>
+                        <input id="account-email" class="input-field" placeholder="you@company.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="account-desc">Description (optional)</label>
+                        <input id="account-desc" class="input-field" placeholder="Work account">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Account</button>
+                </form>
+                <div id="account-add-result" class="text-muted" style="margin-top: 10px;"></div>
+            </div>
+            <div class="card">
+                <h2>Usage Notes</h2>
+                <div class="text-muted" style="margin-bottom: 8px;">
+                    New sessions use the default account unless GT_ACCOUNT is set.
+                </div>
+                <div class="text-muted" style="margin-bottom: 8px;">
+                    Switching updates ~/.claude to point at the chosen account config.
+                    Restart Claude sessions after switching.
+                </div>
+                <div class="text-muted">
+                    Per-command overrides: GT_ACCOUNT=work gt crew start or use --account.
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2>Accounts</h2>
+            <div id="accounts-empty" class="text-muted">No accounts configured.</div>
+            <table class="history-table" id="accounts-table" style="margin-top: 10px;">
+                <thead>
+                    <tr>
+                        <th>Handle</th>
+                        <th>Email</th>
+                        <th>Description</th>
+                        <th>Config Dir</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="accounts-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        const statusEl = document.getElementById('account-status');
+        const tableBody = document.getElementById('accounts-body');
+        const emptyEl = document.getElementById('accounts-empty');
+        const tableEl = document.getElementById('accounts-table');
+        const addForm = document.getElementById('account-add-form');
+        const addResult = document.getElementById('account-add-result');
+
+        function formatSource(source) {
+            if (source === 'env') return 'GT_ACCOUNT';
+            if (source === 'default') return 'default';
+            return 'none';
+        }
+
+        function renderStatus(data) {
+            if (!data || !data.current_handle) {
+                statusEl.textContent = 'No account configured.';
+                return;
+            }
+
+            const rows = [];
+            rows.push('<tr><th>Current</th><td>' + escapeHtml(data.current_handle) + '</td></tr>');
+            rows.push('<tr><th>Source</th><td>' + escapeHtml(formatSource(data.current_source)) + '</td></tr>');
+            if (data.current_config_dir) {
+                rows.push('<tr><th>Config Dir</th><td>' + escapeHtml(data.current_config_dir) + '</td></tr>');
+            }
+            if (data.env_account) {
+                rows.push('<tr><th>GT_ACCOUNT</th><td>' + escapeHtml(data.env_account) + '</td></tr>');
+            }
+            if (data.claude_dir) {
+                let claudeInfo = data.claude_dir;
+                if (data.claude_is_symlink && data.claude_target) {
+                    claudeInfo += ' -> ' + data.claude_target;
+                }
+                rows.push('<tr><th>~/.claude</th><td>' + escapeHtml(claudeInfo) + '</td></tr>');
+            }
+
+            statusEl.innerHTML = '<table>' + rows.join('') + '</table>';
+        }
+
+        function renderAccounts(data) {
+            const accounts = (data && Array.isArray(data.accounts)) ? data.accounts : [];
+            if (accounts.length === 0) {
+                emptyEl.style.display = 'block';
+                tableEl.style.display = 'none';
+                tableBody.innerHTML = '';
+                return;
+            }
+
+            emptyEl.style.display = 'none';
+            tableEl.style.display = 'table';
+
+            tableBody.innerHTML = accounts.map(account => {
+                const badges = [];
+                if (account.is_default) {
+                    badges.push('<span class="badge badge-green">Default</span>');
+                }
+                if (account.is_current) {
+                    badges.push('<span class="badge badge-blue">Current</span>');
+                }
+
+                const defaultDisabled = account.is_default ? 'disabled' : '';
+                const switchDisabled = account.is_current ? 'disabled' : '';
+
+                return '<tr>' +
+                    '<td>' + escapeHtml(account.handle) + '</td>' +
+                    '<td>' + escapeHtml(account.email || '') + '</td>' +
+                    '<td>' + escapeHtml(account.description || '') + '</td>' +
+                    '<td>' + escapeHtml(account.config_dir || '') + '</td>' +
+                    '<td>' + badges.join(' ') + '</td>' +
+                    '<td><div class="table-actions">' +
+                        '<button class="btn btn-secondary btn-sm" data-action="default" data-handle="' + escapeHtml(account.handle) + '" ' + defaultDisabled + '>Set Default</button>' +
+                        '<button class="btn btn-warning btn-sm" data-action="switch" data-handle="' + escapeHtml(account.handle) + '" ' + switchDisabled + '>Switch</button>' +
+                    '</div></td>' +
+                    '</tr>';
+            }).join('');
+
+            tableBody.querySelectorAll('button[data-action]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const action = btn.getAttribute('data-action');
+                    const handle = btn.getAttribute('data-handle');
+                    if (action === 'default') {
+                        setDefault(handle);
+                    } else if (action === 'switch') {
+                        switchAccount(handle);
+                    }
+                });
+            });
+        }
+
+        async function loadAccounts() {
+            try {
+                const res = await fetch('/api/accounts');
+                if (!res.ok) {
+                    throw new Error(await res.text());
+                }
+                const data = await res.json();
+                renderStatus(data);
+                renderAccounts(data);
+            } catch (e) {
+                statusEl.textContent = 'Failed to load accounts: ' + e.message;
+            }
+        }
+
+        async function setDefault(handle) {
+            try {
+                const res = await fetch('/api/accounts/default', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handle })
+                });
+                if (!res.ok) {
+                    throw new Error(await res.text());
+                }
+                const data = await res.json();
+                renderStatus(data);
+                renderAccounts(data);
+            } catch (e) {
+                alert('Failed to set default: ' + e.message);
+            }
+        }
+
+        async function switchAccount(handle) {
+            if (!confirm('Switch to account "' + handle + '"? This updates ~/.claude and requires restarting Claude sessions.')) {
+                return;
+            }
+            try {
+                const res = await fetch('/api/accounts/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handle })
+                });
+                if (!res.ok) {
+                    throw new Error(await res.text());
+                }
+                const data = await res.json();
+                renderStatus(data);
+                renderAccounts(data);
+            } catch (e) {
+                alert('Failed to switch: ' + e.message);
+            }
+        }
+
+        addForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            addResult.textContent = '';
+
+            const handle = document.getElementById('account-handle').value.trim();
+            const email = document.getElementById('account-email').value.trim();
+            const description = document.getElementById('account-desc').value.trim();
+
+            try {
+                const res = await fetch('/api/accounts/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handle, email, description })
+                });
+                if (!res.ok) {
+                    throw new Error(await res.text());
+                }
+                const data = await res.json();
+                renderStatus(data);
+                renderAccounts(data);
+                addForm.reset();
+                if (data.accounts) {
+                    const account = data.accounts.find(a => a.handle === handle);
+                    if (account && account.config_dir) {
+                        addResult.textContent = 'Added. Login with: CLAUDE_CONFIG_DIR=' + account.config_dir + ' claude (then /login).';
+                    }
+                }
+            } catch (e) {
+                addResult.textContent = 'Failed to add account: ' + e.message;
+            }
+        });
+
+        loadAccounts();
+    </script>
+</body>
+</html>

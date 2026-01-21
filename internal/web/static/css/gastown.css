@@ -114,6 +114,7 @@ th { color: #64748b; font-weight: 500; }
     align-items: center;
     gap: 8px;
 }
+.table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ================================================================
    Badges
@@ -143,6 +144,7 @@ textarea.input-field { resize: vertical; }
 .btn-secondary { background: #334155; color: #e2e8f0; }
 .btn-secondary:hover { background: #475569; }
 .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ================================================================
    Terminal Output
