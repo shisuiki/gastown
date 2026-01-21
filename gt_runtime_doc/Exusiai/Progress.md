@@ -1,6 +1,7 @@
 # Progress
 
-- Added WebUI account management page and API endpoints to manage Claude account profiles.
-- Reworked WebUI navigation into main links plus Cfg/Dev dropdowns with mobile support.
-- Filed final summary for the accounts/nav rollout.
-- Added account login status, tmux login sessions, and safer activation behavior in the Accounts UI.
+- Updated crew long prompt with clarified Runtime Docs protocol and autonomy language.
+- Updated mayor long prompt with clarified Runtime Docs protocol and autonomy language.
+- Updated crew/mayor system prompts with Runtime Docs guidance and removed human escalation.
+- Added Log.md usage guidance and appended timestamped activity line.
+- Added phase and final summaries for prompt updates.
