@@ -49,7 +49,8 @@ func detectSessionState(ctx RoleContext) SessionState {
 	agentID := getAgentIdentity(ctx)
 	if agentID != "" {
 		b := beads.New(ctx.WorkDir)
-		hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+		townBeads := townBeadsForWorkDir(ctx.WorkDir)
+		hookedBeads, _, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 			Status:   beads.StatusHooked,
 			Assignee: agentID,
 			Priority: -1,
@@ -60,7 +61,7 @@ func detectSessionState(ctx RoleContext) SessionState {
 			return state
 		}
 		// Also check in_progress beads
-		inProgressBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+		inProgressBeads, _, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 			Status:   "in_progress",
 			Assignee: agentID,
 			Priority: -1,

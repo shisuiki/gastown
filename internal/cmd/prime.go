@@ -403,7 +403,8 @@ func checkSlungWork(ctx RoleContext) bool {
 
 	// Check for hooked beads (work on the agent's hook)
 	b := beads.New(ctx.WorkDir)
-	hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+	townBeads := townBeadsForWorkDir(ctx.WorkDir)
+	hookedBeads, _, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 		Status:   beads.StatusHooked,
 		Assignee: agentID,
 		Priority: -1,
@@ -416,7 +417,7 @@ func checkSlungWork(ctx RoleContext) bool {
 	// This handles the case where work was claimed (status changed to in_progress)
 	// but the session was interrupted before completion. The hook should persist.
 	if len(hookedBeads) == 0 {
-		inProgressBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+		inProgressBeads, _, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 			Status:   "in_progress",
 			Assignee: agentID,
 			Priority: -1,

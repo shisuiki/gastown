@@ -298,9 +298,11 @@ func runHookShow(cmd *cobra.Command, args []string) error {
 	}
 
 	b := beads.New(workDir)
+	townRoot, _ := findTownRoot()
+	townBeads := townBeadsForRoot(workDir, townRoot)
 
 	// Query for hooked beads assigned to the target
-	hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+	hookedBeads, _, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 		Status:   beads.StatusHooked,
 		Assignee: target,
 		Priority: -1,
@@ -311,8 +313,7 @@ func runHookShow(cmd *cobra.Command, args []string) error {
 
 	// If nothing found, try scanning all rigs for town-level roles
 	if len(hookedBeads) == 0 && isTownLevelRole(target) {
-		townRoot, err := findTownRoot()
-		if err == nil && townRoot != "" {
+		if townRoot != "" {
 			hookedBeads = scanAllRigsForHookedBeads(townRoot, target)
 		}
 	}

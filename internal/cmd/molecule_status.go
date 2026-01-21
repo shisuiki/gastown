@@ -316,6 +316,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	b := beads.New(workDir)
+	townBeads := townBeadsForRoot(workDir, townRoot)
 
 	// Build status info
 	status := MoleculeStatusInfo{
@@ -327,6 +328,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 	// This is the preferred method - agent beads have a hook_bead field
 	agentBeadID := buildAgentBeadID(target, roleCtx.Role, townRoot)
 	var hookBead *beads.Issue
+	var hookSource *beads.Beads
 
 	if agentBeadID != "" {
 		// Try to fetch the agent bead
@@ -339,12 +341,8 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 			// IMPORTANT: Don't use ParseAgentFieldsFromDescription - the description
 			// field may contain stale data, causing the wrong issue to be hooked.
 			if agentBead.HookBead != "" {
-				// Fetch the bead on the hook
-				hookBead, err = b.Show(agentBead.HookBead)
-				if err != nil {
-					// Hook bead referenced but not found - report error but continue
-					hookBead = nil
-				}
+				// Fetch the bead on the hook (town fallback for hq-* beads)
+				hookBead, hookSource = showBeadWithFallback(b, townBeads, agentBead.HookBead)
 			}
 		}
 		// If agent bead not found or not an agent type, fall through to legacy approach
@@ -354,6 +352,11 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 	if hookBead != nil {
 		status.HasWork = true
 		status.PinnedBead = hookBead
+
+		progressSource := hookSource
+		if progressSource == nil {
+			progressSource = b
+		}
 
 		// Check for attached molecule
 		attachment := beads.ParseAttachmentFields(hookBead)
@@ -368,7 +371,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 
 			// Get progress if there's an attached molecule
 			if attachment.AttachedMolecule != "" {
-				progress, _ := getMoleculeProgressInfo(b, attachment.AttachedMolecule)
+				progress, _ := getMoleculeProgressInfo(progressSource, attachment.AttachedMolecule)
 				status.Progress = progress
 				status.NextAction = determineNextAction(status)
 			}
@@ -376,7 +379,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 	} else {
 		// FALLBACK: Query for hooked beads (work on agent's hook)
 		// First try status=hooked (work that's been slung but not yet claimed)
-		hookedBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+		hookedBeads, hookSource, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 			Status:   beads.StatusHooked,
 			Assignee: target,
 			Priority: -1,
@@ -389,7 +392,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 		// This handles the case where work was claimed (status changed to in_progress)
 		// but the session was interrupted before completion. The hook should persist.
 		if len(hookedBeads) == 0 {
-			inProgressBeads, err := listBeadsForAssignee(b, beads.ListOptions{
+			inProgressBeads, inProgressSource, err := listBeadsForAssigneeWithFallback(b, townBeads, beads.ListOptions{
 				Status:   "in_progress",
 				Assignee: target,
 				Priority: -1,
@@ -397,6 +400,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 			if err == nil && len(inProgressBeads) > 0 {
 				// Use the first in_progress bead (should typically be only one)
 				hookedBeads = inProgressBeads
+				hookSource = inProgressSource
 			}
 		}
 
@@ -411,6 +415,11 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 			// Take the first hooked bead
 			status.PinnedBead = hookedBeads[0]
 
+			progressSource := hookSource
+			if progressSource == nil {
+				progressSource = b
+			}
+
 			// Check for attached molecule
 			attachment := beads.ParseAttachmentFields(hookedBeads[0])
 			if attachment != nil {
@@ -424,7 +433,7 @@ func runMoleculeStatus(cmd *cobra.Command, args []string) error {
 
 				// Get progress if there's an attached molecule
 				if attachment.AttachedMolecule != "" {
-					progress, _ := getMoleculeProgressInfo(b, attachment.AttachedMolecule)
+					progress, _ := getMoleculeProgressInfo(progressSource, attachment.AttachedMolecule)
 					status.Progress = progress
 					status.NextAction = determineNextAction(status)
 				}

@@ -4,3 +4,5 @@
 - Added `gt deacon backlog-dispatch` to pair ready issues with idle polecats.
 - Inserted backlog dispatch step into `mol-deacon-patrol` (version bump to 9).
 - Tests: `go test ./internal/cmd/...` passes after agent bead fallback fix.
+- Fixed `gt hook`/`gt prime` hook lookup to fall back to town beads from crew worktrees.
+- Tests: `go test ./internal/cmd/...` passes.
