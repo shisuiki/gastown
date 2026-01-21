@@ -21,3 +21,4 @@
 - Implemented canary env-config injection via read-only worktree mount and deploy manifest tooling; added docs and scripts (hq-h4mur).
 - Added canary validation runbook + docker exec validation script; integrated validation into canary deploy workflow (hq-eyxzd).
 - Regenerated embedded formulas from .beads to resolve stale internal/formula copies (hq-0h3k).
+- Rechecked hq-cat0 WebUI issues staleness; cache invalidation and beads-dir mismatch remain; updated bead notes.
