@@ -6,6 +6,10 @@
 
 1. Extended docs browser to include `.tmpl` files alongside markdown.
 
+### Prompts UI template editing
+
+1. Added CLAUDE.md editor and template file editors for system-prompts and roles on the prompts tab.
+
 ### Web UI service doc update
 
 1. Documented current system-level `gastown-gui.service` + user-level `gastown-sync.service` split in `docs/WEBUI-DEPLOY.md`.

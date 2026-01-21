@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     {{template "head" .}}
-    <title>System Prompts - Gas Town</title>
+    <title>Prompts - Gas Town</title>
     <style>
         .prompts-section {
             margin-bottom: 30px;
@@ -47,6 +47,7 @@
         .role-refinery { background: #a855f7; color: white; }
         .role-polecat { background: #f59e0b; color: black; }
         .role-crew { background: #22c55e; color: black; }
+        .role-claude { background: #0ea5e9; color: white; }
         .source-badge {
             display: inline-block;
             padding: 2px 8px;
@@ -209,7 +210,109 @@
         </template>
 
         <div class="card">
-            <h2>System Prompts</h2>
+            <h2>CLAUDE.md</h2>
+            <p class="text-muted" style="margin-bottom: 20px;">Edit the root CLAUDE.md instructions used by the system.</p>
+
+            <div class="prompt-card">
+                <div class="prompt-header">
+                    <div class="prompt-title">
+                        <span class="role-badge role-claude">CLAUDE</span>
+                        <span class="source-badge" x-text="claude.path"></span>
+                    </div>
+                    <div class="prompt-actions">
+                        <template x-if="!claude.editing">
+                            <button class="btn-edit" @click="startEditClaude()">Edit</button>
+                        </template>
+                        <template x-if="claude.editing">
+                            <button class="btn-save" @click="saveClaude()" :disabled="saving">Save</button>
+                        </template>
+                        <template x-if="claude.editing">
+                            <button class="btn-cancel" @click="cancelEditClaude()">Cancel</button>
+                        </template>
+                    </div>
+                </div>
+                <template x-if="!claude.editing">
+                    <div class="prompt-content" x-text="claude.content"></div>
+                </template>
+                <template x-if="claude.editing">
+                    <textarea class="edit-textarea" x-model="claude.editContent"></textarea>
+                </template>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Prompt Templates</h2>
+            <p class="text-muted" style="margin-bottom: 20px;">Edit the prompt template files used to build system instructions.</p>
+
+            <div class="prompts-section">
+                <h3>System Prompts (Simplified)</h3>
+                <template x-for="file in systemTemplates" :key="file.path">
+                    <div class="prompt-card">
+                        <div class="prompt-header">
+                            <div class="prompt-title">
+                                <span class="source-badge" x-text="file.displayPath"></span>
+                            </div>
+                            <div class="prompt-actions">
+                                <template x-if="!file.editing">
+                                    <button class="btn-edit" @click="startTemplateEdit(file)">Edit</button>
+                                </template>
+                                <template x-if="file.editing">
+                                    <button class="btn-save" @click="saveTemplate('system', file)" :disabled="saving">Save</button>
+                                </template>
+                                <template x-if="file.editing">
+                                    <button class="btn-cancel" @click="cancelTemplateEdit(file)">Cancel</button>
+                                </template>
+                            </div>
+                        </div>
+                        <template x-if="!file.editing">
+                            <div class="prompt-content" x-text="file.content"></div>
+                        </template>
+                        <template x-if="file.editing">
+                            <textarea class="edit-textarea" x-model="file.editContent"></textarea>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="systemTemplates.length === 0">
+                    <p class="text-muted">No system prompt templates found.</p>
+                </template>
+            </div>
+
+            <div class="prompts-section">
+                <h3>Role Templates (Full)</h3>
+                <template x-for="file in roleTemplates" :key="file.path">
+                    <div class="prompt-card">
+                        <div class="prompt-header">
+                            <div class="prompt-title">
+                                <span class="source-badge" x-text="file.displayPath"></span>
+                            </div>
+                            <div class="prompt-actions">
+                                <template x-if="!file.editing">
+                                    <button class="btn-edit" @click="startTemplateEdit(file)">Edit</button>
+                                </template>
+                                <template x-if="file.editing">
+                                    <button class="btn-save" @click="saveTemplate('roles', file)" :disabled="saving">Save</button>
+                                </template>
+                                <template x-if="file.editing">
+                                    <button class="btn-cancel" @click="cancelTemplateEdit(file)">Cancel</button>
+                                </template>
+                            </div>
+                        </div>
+                        <template x-if="!file.editing">
+                            <div class="prompt-content" x-text="file.content"></div>
+                        </template>
+                        <template x-if="file.editing">
+                            <textarea class="edit-textarea" x-model="file.editContent"></textarea>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="roleTemplates.length === 0">
+                    <p class="text-muted">No role templates found.</p>
+                </template>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>System Prompt Overrides</h2>
             <p class="text-muted" style="margin-bottom: 20px;">View and edit system prompts for each agent role. Prompts can be inline text or stored in files.</p>
 
             <!-- Rig selector (optional) -->
@@ -286,10 +389,34 @@
                 selectedRig: '',
                 rigs: [],
                 prompts: [],
+                claude: {
+                    path: 'CLAUDE.md',
+                    content: '',
+                    editing: false,
+                    editContent: ''
+                },
+                systemTemplates: [],
+                roleTemplates: [],
+                templateBases: {
+                    system: '',
+                    roles: ''
+                },
 
                 init() {
-                    this.loadRigs();
-                    this.loadPrompts();
+                    this.bootstrap();
+                },
+
+                async bootstrap() {
+                    this.loading = true;
+                    this.message = '';
+                    await Promise.all([
+                        this.loadRigs(),
+                        this.loadPrompts({ showLoading: false, clearMessage: false }),
+                        this.loadClaude(),
+                        this.loadTemplates('system'),
+                        this.loadTemplates('roles')
+                    ]);
+                    this.loading = false;
                 },
 
                 async loadRigs() {
@@ -303,9 +430,13 @@
                     }
                 },
 
-                async loadPrompts() {
-                    this.loading = true;
-                    this.message = '';
+                async loadPrompts({ showLoading = true, clearMessage = true } = {}) {
+                    if (showLoading) {
+                        this.loading = true;
+                    }
+                    if (clearMessage) {
+                        this.message = '';
+                    }
                     try {
                         // Load prompts for each role
                         const roles = ['mayor', 'deacon', 'witness', 'refinery', 'polecat', 'crew'];
@@ -331,7 +462,119 @@
                         this.message = 'Failed to load prompts: ' + e.message;
                         this.messageType = 'error';
                     }
-                    this.loading = false;
+                    if (showLoading) {
+                        this.loading = false;
+                    }
+                },
+
+                async loadClaude() {
+                    try {
+                        const res = await fetch('/api/prompts/claude');
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+                        const data = await res.json();
+                        this.claude.path = data.path || 'CLAUDE.md';
+                        this.claude.content = data.content || '';
+                        this.claude.editing = false;
+                        this.claude.editContent = this.claude.content;
+                    } catch (e) {
+                        this.message = 'Failed to load CLAUDE.md: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                },
+
+                async loadTemplates(kind) {
+                    try {
+                        const res = await fetch(`/api/prompts/templates?kind=${encodeURIComponent(kind)}`);
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+                        const data = await res.json();
+                        const base = data.base || '';
+                        const files = Array.isArray(data.files) ? data.files : [];
+                        const next = files.map((file) => ({
+                            ...file,
+                            displayPath: base ? `${base}/${file.path}` : file.path,
+                            editing: false,
+                            editContent: file.content
+                        }));
+                        if (kind === 'system') {
+                            this.systemTemplates = next;
+                            this.templateBases.system = base;
+                        } else if (kind === 'roles') {
+                            this.roleTemplates = next;
+                            this.templateBases.roles = base;
+                        }
+                    } catch (e) {
+                        this.message = `Failed to load ${kind} templates: ` + e.message;
+                        this.messageType = 'error';
+                    }
+                },
+
+                startEditClaude() {
+                    this.claude.editing = true;
+                    this.claude.editContent = this.claude.content;
+                },
+
+                cancelEditClaude() {
+                    this.claude.editing = false;
+                },
+
+                async saveClaude() {
+                    this.saving = true;
+                    this.message = '';
+                    try {
+                        const res = await fetch('/api/prompts/claude', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: this.claude.editContent })
+                        });
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+                        this.message = 'CLAUDE.md updated successfully';
+                        this.messageType = 'success';
+                        await this.loadClaude();
+                    } catch (e) {
+                        this.message = 'Failed to save CLAUDE.md: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                    this.saving = false;
+                },
+
+                startTemplateEdit(file) {
+                    file.editing = true;
+                    file.editContent = file.content;
+                },
+
+                cancelTemplateEdit(file) {
+                    file.editing = false;
+                },
+
+                async saveTemplate(kind, file) {
+                    this.saving = true;
+                    this.message = '';
+                    try {
+                        const res = await fetch(`/api/prompts/templates?kind=${encodeURIComponent(kind)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                path: file.path,
+                                content: file.editContent
+                            })
+                        });
+                        if (!res.ok) {
+                            throw new Error(await res.text());
+                        }
+                        this.message = `Template ${file.path} updated successfully`;
+                        this.messageType = 'success';
+                        await this.loadTemplates(kind);
+                    } catch (e) {
+                        this.message = 'Failed to save template: ' + e.message;
+                        this.messageType = 'error';
+                    }
+                    this.saving = false;
                 },
 
                 startEdit(prompt) {
@@ -376,7 +619,7 @@
                         this.messageType = 'success';
 
                         // Reload prompts
-                        await this.loadPrompts();
+                        await this.loadPrompts({ showLoading: false, clearMessage: false });
                     } catch (e) {
                         this.message = 'Failed to save prompt: ' + e.message;
                         this.messageType = 'error';
