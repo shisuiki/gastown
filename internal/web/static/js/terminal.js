@@ -385,6 +385,7 @@ class ActionHistory {
             storageKey: 'terminal-history',
             maxEntries: 500,
             defaultPageSize: 25,
+            apiUrl: null,
         }, options);
 
         this.tableBody = document.querySelector(this.options.tableBodyEl);
@@ -420,6 +421,13 @@ class ActionHistory {
     }
 
     load() {
+        this.loadFromLocal();
+        if (this.options.apiUrl) {
+            this.loadFromApi();
+        }
+    }
+
+    loadFromLocal() {
         try {
             const raw = localStorage.getItem(this.options.storageKey);
             if (raw) {
@@ -436,7 +444,28 @@ class ActionHistory {
         }
     }
 
-    save() {
+    async loadFromApi() {
+        try {
+            const res = await fetch(this.options.apiUrl + '?key=' + encodeURIComponent(this.options.storageKey));
+            if (!res.ok) {
+                throw new Error(await res.text());
+            }
+            const data = await res.json();
+            if (Array.isArray(data.entries)) {
+                this.entries = data.entries;
+            }
+            if (typeof data.page_size === 'number' && data.page_size > 0) {
+                this.pageSize = data.page_size;
+            }
+            this.page = 1;
+            this.saveLocal();
+            this.render();
+        } catch (e) {
+            console.warn('Failed to load history from API:', e);
+        }
+    }
+
+    saveLocal() {
         try {
             localStorage.setItem(this.options.storageKey, JSON.stringify({
                 entries: this.entries,
@@ -444,6 +473,21 @@ class ActionHistory {
             }));
         } catch (e) {
             console.warn('Failed to save history:', e);
+        }
+    }
+
+    async saveRemote(payload) {
+        if (!this.options.apiUrl) {
+            return;
+        }
+        try {
+            await fetch(this.options.apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.warn('Failed to save history to API:', e);
         }
     }
 
@@ -461,7 +505,11 @@ class ActionHistory {
             this.entries = this.entries.slice(0, this.options.maxEntries);
         }
         this.page = 1;
-        this.save();
+        this.saveLocal();
+        this.saveRemote({
+            storage_key: this.options.storageKey,
+            entry: record
+        });
         this.render();
     }
 
@@ -477,7 +525,11 @@ class ActionHistory {
     setPageSize(size) {
         this.pageSize = size;
         this.page = 1;
-        this.save();
+        this.saveLocal();
+        this.saveRemote({
+            storage_key: this.options.storageKey,
+            page_size: this.pageSize
+        });
         this.render();
     }
 
@@ -493,6 +545,9 @@ class ActionHistory {
             return;
         }
         const totalPages = this.totalPages();
+        if (this.page > totalPages) {
+            this.page = totalPages;
+        }
         const start = (this.page - 1) * this.pageSize;
         const pageEntries = this.entries.slice(start, start + this.pageSize);
 
@@ -501,8 +556,9 @@ class ActionHistory {
         }
 
         this.tableBody.innerHTML = pageEntries.map(entry => {
+            const time = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : (entry.time || '');
             return '<tr>' +
-                '<td>' + escapeHtml(entry.time) + '</td>' +
+                '<td>' + escapeHtml(time) + '</td>' +
                 '<td>' + escapeHtml(entry.target) + '</td>' +
                 '<td class="history-context">' + escapeHtml(entry.context) + '</td>' +
                 '</tr>';
