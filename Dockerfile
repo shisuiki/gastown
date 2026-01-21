@@ -9,6 +9,7 @@ RUN go mod download
 COPY . .
 
 RUN make build
+RUN go install github.com/steveyegge/beads/cmd/bd@latest
 
 FROM alpine:3.20
 
@@ -20,6 +21,7 @@ ENV GT_ROOT=/gt
 WORKDIR /gt
 
 COPY --from=builder /src/gt /usr/local/bin/gt
+COPY --from=builder /go/bin/bd /usr/local/bin/bd
 
 USER gastown
 EXPOSE 8080

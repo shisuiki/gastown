@@ -13,6 +13,11 @@
 
 1. Added GHCR build/push job in CI for `main` and `canary` with SHA/latest/canary tags.
 
+### Container fix - bd + ops docs
+
+1. Added `bd` binary to container image build.
+2. Added canary ops docs with container validation and beads tracking guidance.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support
