@@ -193,20 +193,27 @@ func (h *GUIHandler) handleAPIPromptsPost(w http.ResponseWriter, r *http.Request
 	}
 
 	// Update prompt
-	if err := updatePrompt(targetPath, isRig, role, &req); err != nil {
+	paths, err := updatePrompt(targetPath, isRig, role, &req)
+	if err != nil {
 		log.Printf("Error updating prompt for role %s: %v", role, err)
 		http.Error(w, "Failed to update prompt: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Commit and push changes
-	if err := gitCommitAndPush(targetPath, role); err != nil {
-		log.Printf("Error committing prompt changes: %v", err)
-		// Don't fail the request - just log
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "ok"}`))
+	resp := map[string]string{"status": "ok"}
+	if repoRoot, repoErr := findRepoRoot(targetPath); repoErr == nil {
+		if gitResult := runGitSync(repoRoot, paths, fmt.Sprintf("Update prompt for role %s via WebUI", role), "prompt update"); gitResult != nil {
+			resp["git_error"] = gitResult.Error
+			if gitResult.BeadID != "" {
+				resp["git_bead"] = gitResult.BeadID
+			}
+			if gitResult.SlingTarget != "" {
+				resp["git_target"] = gitResult.SlingTarget
+			}
+		}
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 // handleAPIPromptTemplates handles GET and POST for /api/prompts/templates.
@@ -249,13 +256,24 @@ func (h *GUIHandler) handleAPIPromptTemplates(w http.ResponseWriter, r *http.Req
 			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := writePromptTemplate(dir, allowedExts, &req); err != nil {
+		fullPath, err := writePromptTemplate(dir, allowedExts, &req)
+		if err != nil {
 			log.Printf("Error updating prompt template (%s): %v", kind, err)
 			http.Error(w, "Failed to update prompt template: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status": "ok"}`))
+		resp := map[string]string{"status": "ok"}
+		if gitResult := runGitSync(repoRoot, []string{fullPath}, fmt.Sprintf("Update %s prompt template via WebUI", kind), "prompt template update"); gitResult != nil {
+			resp["git_error"] = gitResult.Error
+			if gitResult.BeadID != "" {
+				resp["git_bead"] = gitResult.BeadID
+			}
+			if gitResult.SlingTarget != "" {
+				resp["git_target"] = gitResult.SlingTarget
+			}
+		}
+		json.NewEncoder(w).Encode(resp)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -306,20 +324,33 @@ func (h *GUIHandler) handleAPIPromptClaude(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status": "ok"}`))
+		resp := map[string]string{"status": "ok"}
+		if repoRoot, repoErr := findRepoRoot(claudePath); repoErr == nil {
+			if gitResult := runGitSync(repoRoot, []string{claudePath}, "Update CLAUDE.md via WebUI", "claude update"); gitResult != nil {
+				resp["git_error"] = gitResult.Error
+				if gitResult.BeadID != "" {
+					resp["git_bead"] = gitResult.BeadID
+				}
+				if gitResult.SlingTarget != "" {
+					resp["git_target"] = gitResult.SlingTarget
+				}
+			}
+		}
+		json.NewEncoder(w).Encode(resp)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 // updatePrompt updates the prompt for a role in either town or rig settings.
-func updatePrompt(targetPath string, isRig bool, role string, req *PromptRequest) error {
+func updatePrompt(targetPath string, isRig bool, role string, req *PromptRequest) ([]string, error) {
 	// Determine prompt value based on source
 	source := req.Source
 	if source == "" {
 		source = "inline"
 	}
 
+	var paths []string
 	var promptValue string
 	if source == "file" {
 		// Determine file path
@@ -333,7 +364,7 @@ func updatePrompt(targetPath string, isRig bool, role string, req *PromptRequest
 				promptsDir = filepath.Join(targetPath, "settings", "prompts")
 			}
 			if err := os.MkdirAll(promptsDir, 0755); err != nil {
-				return fmt.Errorf("creating prompts directory: %w", err)
+				return nil, fmt.Errorf("creating prompts directory: %w", err)
 			}
 			filePath = filepath.Join(promptsDir, role+".md")
 		} else {
@@ -343,14 +374,15 @@ func updatePrompt(targetPath string, isRig bool, role string, req *PromptRequest
 			}
 			// Ensure parent directory exists
 			if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-				return fmt.Errorf("creating directory for prompt file: %w", err)
+				return nil, fmt.Errorf("creating directory for prompt file: %w", err)
 			}
 		}
 
 		// Write prompt file
 		if err := os.WriteFile(filePath, []byte(req.Content), 0644); err != nil {
-			return fmt.Errorf("writing prompt file: %w", err)
+			return nil, fmt.Errorf("writing prompt file: %w", err)
 		}
+		paths = append(paths, filePath)
 		promptValue = "file:" + filePath
 	} else {
 		// Inline prompt
@@ -359,14 +391,23 @@ func updatePrompt(targetPath string, isRig bool, role string, req *PromptRequest
 
 	// Update settings
 	if isRig {
-		return updateRigPrompt(targetPath, role, promptValue)
-	} else {
-		return updateTownPrompt(targetPath, role, promptValue)
+		settingsPath, err := updateRigPrompt(targetPath, role, promptValue)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, settingsPath)
+		return paths, nil
 	}
+	settingsPath, err := updateTownPrompt(targetPath, role, promptValue)
+	if err != nil {
+		return nil, err
+	}
+	paths = append(paths, settingsPath)
+	return paths, nil
 }
 
 // updateRigPrompt updates the system prompt in rig settings.
-func updateRigPrompt(rigPath, role, promptValue string) error {
+func updateRigPrompt(rigPath, role, promptValue string) (string, error) {
 	settingsPath := config.RigSettingsPath(rigPath)
 	settings, err := config.LoadRigSettings(settingsPath)
 	if err != nil {
@@ -379,15 +420,15 @@ func updateRigPrompt(rigPath, role, promptValue string) error {
 	}
 	settings.SystemPrompts[role] = promptValue
 
-	return config.SaveRigSettings(settingsPath, settings)
+	return settingsPath, config.SaveRigSettings(settingsPath, settings)
 }
 
 // updateTownPrompt updates the system prompt in town settings.
-func updateTownPrompt(townRoot, role, promptValue string) error {
+func updateTownPrompt(townRoot, role, promptValue string) (string, error) {
 	settingsPath := config.TownSettingsPath(townRoot)
 	settings, err := config.LoadOrCreateTownSettings(settingsPath)
 	if err != nil {
-		return fmt.Errorf("loading town settings: %w", err)
+		return "", fmt.Errorf("loading town settings: %w", err)
 	}
 
 	if settings.SystemPrompts == nil {
@@ -395,50 +436,7 @@ func updateTownPrompt(townRoot, role, promptValue string) error {
 	}
 	settings.SystemPrompts[role] = promptValue
 
-	return config.SaveTownSettings(settingsPath, settings)
-}
-
-// gitCommitAndPush commits and pushes prompt changes to the git remote.
-func gitCommitAndPush(repoPath, role string) error {
-	// Check if the directory is a git repository
-	gitDir := filepath.Join(repoPath, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		// Not a git repo, skip git operations
-		return nil
-	}
-
-	// Determine which file(s) to add based on repo type
-	// For simplicity, add all changes in the repo
-	// We'll run git add . in the repo directory
-	cmd, cancel := command("git", "add", ".")
-	defer cancel()
-	cmd.Dir = repoPath
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git add failed: %v, output: %s", err, output)
-	}
-
-	// Commit
-	commitMsg := fmt.Sprintf("Update prompt for role %s via WebUI", role)
-	cmd, cancel = command("git", "commit", "-m", commitMsg)
-	defer cancel()
-	cmd.Dir = repoPath
-	if output, err := cmd.CombinedOutput(); err != nil {
-		// If there are no changes, git commit returns error, that's okay
-		if strings.Contains(string(output), "nothing to commit") {
-			return nil
-		}
-		return fmt.Errorf("git commit failed: %v, output: %s", err, output)
-	}
-
-	// Push
-	cmd, cancel = command("git", "push", "origin", "HEAD")
-	defer cancel()
-	cmd.Dir = repoPath
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git push failed: %v, output: %s", err, output)
-	}
-
-	return nil
+	return settingsPath, config.SaveTownSettings(settingsPath, settings)
 }
 
 func promptTemplateConfig(kind, repoRoot string) (string, string, map[string]bool, error) {
@@ -492,21 +490,21 @@ func readPromptTemplates(dir string, allowedExts map[string]bool) ([]PromptTempl
 	return files, nil
 }
 
-func writePromptTemplate(dir string, allowedExts map[string]bool, req *PromptTemplateUpdateRequest) error {
+func writePromptTemplate(dir string, allowedExts map[string]bool, req *PromptTemplateUpdateRequest) (string, error) {
 	if req.Path == "" {
-		return fmt.Errorf("missing path")
+		return "", fmt.Errorf("missing path")
 	}
 	fullPath, err := safeTemplatePath(dir, req.Path, allowedExts)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		return fmt.Errorf("creating template directory: %w", err)
+		return "", fmt.Errorf("creating template directory: %w", err)
 	}
 	if err := os.WriteFile(fullPath, []byte(req.Content), 0644); err != nil {
-		return fmt.Errorf("writing template file: %w", err)
+		return "", fmt.Errorf("writing template file: %w", err)
 	}
-	return nil
+	return fullPath, nil
 }
 
 func safeTemplatePath(baseDir, relPath string, allowedExts map[string]bool) (string, error) {

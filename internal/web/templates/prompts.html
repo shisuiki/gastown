@@ -603,8 +603,8 @@
                         if (!res.ok) {
                             throw new Error(await res.text());
                         }
-                        this.message = 'CLAUDE.md updated successfully';
-                        this.messageType = 'success';
+                        const data = await res.json();
+                        this.handleGitSync(data, 'CLAUDE.md updated successfully');
                         await this.loadClaude();
                     } catch (e) {
                         this.message = 'Failed to save CLAUDE.md: ' + e.message;
@@ -637,8 +637,8 @@
                         if (!res.ok) {
                             throw new Error(await res.text());
                         }
-                        this.message = `Template ${file.path} updated successfully`;
-                        this.messageType = 'success';
+                        const data = await res.json();
+                        this.handleGitSync(data, `Template ${file.path} updated successfully`);
                         await this.loadTemplates(kind);
                     } catch (e) {
                         this.message = 'Failed to save template: ' + e.message;
@@ -685,8 +685,8 @@
                             throw new Error(await res.text());
                         }
 
-                        this.message = `Prompt for ${prompt.role} updated successfully`;
-                        this.messageType = 'success';
+                        const data = await res.json();
+                        this.handleGitSync(data, `Prompt for ${prompt.role} updated successfully`);
 
                         // Reload prompts
                         await this.loadPrompts({ showLoading: false, clearMessage: false });
@@ -695,6 +695,18 @@
                         this.messageType = 'error';
                     }
                     this.saving = false;
+                },
+
+                handleGitSync(data, successMessage) {
+                    if (data && data.git_error) {
+                        const bead = data.git_bead ? ` Bead: ${data.git_bead}.` : '';
+                        const target = data.git_target ? ` Sling target: ${data.git_target}.` : '';
+                        this.message = `${successMessage} Git sync failed: ${data.git_error}.${bead}${target}`;
+                        this.messageType = 'error';
+                        return;
+                    }
+                    this.message = successMessage;
+                    this.messageType = 'success';
                 }
             };
         }

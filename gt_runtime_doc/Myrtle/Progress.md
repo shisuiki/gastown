@@ -23,6 +23,11 @@
 1. Pointed CLAUDE.md editing at `mayor/CLAUDE.md` with missing indicator.
 2. Restructured prompt templates by role with simplified + full prompts per role.
 
+### WebUI git sync workflow
+
+1. Added save-time git sync (add/commit/push) for config + prompts/CLAUDE/templates.
+2. On git sync failure, auto-create a bead and sling to a polecat target.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support

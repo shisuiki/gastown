@@ -390,8 +390,8 @@
                             throw new Error(await res.text());
                         }
 
-                        this.message = 'Configuration saved successfully';
-                        this.messageType = 'success';
+                        const data = await res.json();
+                        this.handleGitSync(data, 'Configuration saved successfully');
 
                         // Reload to get normalized values
                         await this.loadConfig();
@@ -400,6 +400,18 @@
                         this.messageType = 'error';
                     }
                     this.saving = false;
+                },
+
+                handleGitSync(data, successMessage) {
+                    if (data && data.git_error) {
+                        const bead = data.git_bead ? ` Bead: ${data.git_bead}.` : '';
+                        const target = data.git_target ? ` Sling target: ${data.git_target}.` : '';
+                        this.message = `${successMessage} Git sync failed: ${data.git_error}.${bead}${target}`;
+                        this.messageType = 'error';
+                        return;
+                    }
+                    this.message = successMessage;
+                    this.messageType = 'success';
                 },
 
                 setRoleAgent(role, value) {

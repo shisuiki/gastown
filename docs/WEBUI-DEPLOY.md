@@ -50,6 +50,8 @@ Environment=HOME=/home/shisui
 Environment=PATH=/home/shisui/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=GASTOWN_WEB_PORT=8080
 Environment=GASTOWN_SRC=/home/shisui/laplace/gastown-src
+Environment=GT_WEB_POST_SAVE_HOOK=/home/shisui/gt/scripts/webui-git-sync.sh
+Environment=GT_WEB_GIT_FAILOVER_TARGET=TerraNomadicCity
 
 [Install]
 WantedBy=multi-user.target
@@ -95,6 +97,21 @@ WantedBy=default.target
 # Check daemon status
 ./gastown-sync.sh status
 ```
+
+### 4. WebUI Git Sync Hook
+
+The WebUI can run git sync after saving Config/Prompts. Configure these env vars
+in `gastown-gui.service` if you want a custom hook:
+
+- `GT_WEB_POST_SAVE_HOOK`: Optional script path to run after save. It receives:
+  - `GT_WEB_GIT_REPO_ROOT`
+  - `GT_WEB_GIT_COMMIT_MSG`
+  - `GT_WEB_GIT_ACTION`
+  - `GT_WEB_GIT_PATHS` (comma-separated)
+- `GT_WEB_GIT_FAILOVER_TARGET`: Optional sling target for auto-recovery.
+
+If the hook is not set, the WebUI runs `git add`, `git commit`, and `git push`
+directly. On failure it creates a bead and slings it to the configured target.
 
 ### 4. Webhook Server (Optional)
 
