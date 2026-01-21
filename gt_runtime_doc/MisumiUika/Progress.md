@@ -7,3 +7,4 @@
 - Adjusted terminal send to append carriage return for reliable Enter delivery.
 - Switched terminal send to debounced tmux Enter to trigger prompt submission.
 - Added length-aware debounce for tmux nudges to reduce missed Enter on sling/mail.
+- Removed the unused Role Model Configuration section from the WebUI config page.

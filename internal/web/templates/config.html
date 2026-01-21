@@ -233,37 +233,6 @@
                 </template>
             </div>
 
-            <!-- Role Model Configuration -->
-            <div class="config-section">
-                <h3>Role Model Configuration</h3>
-                <p class="help-text" style="margin-bottom: 15px;">Configure model, endpoint, and API keys for each role.</p>
-
-                <template x-for="role in roles" :key="role.id">
-                    <div class="role-model-row" style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.1); border-radius: 6px;">
-                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                            <span class="role-badge" :class="'role-' + role.id" x-text="role.label"></span>
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Model:</span>
-                            <input type="text" class="config-input" x-model="roleModelConfig(role.id).model" placeholder="e.g., claude-sonnet-4">
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Endpoint:</span>
-                            <input type="text" class="config-input" x-model="roleModelConfig(role.id).endpoint" placeholder="https://api.anthropic.com">
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">Auth Profile:</span>
-                            <input type="text" class="config-input" x-model="roleModelConfig(role.id).auth" placeholder="auth profile from accounts.json">
-                        </div>
-                        <div class="config-row">
-                            <span class="config-label">API Key:</span>
-                            <input type="password" class="config-input" x-model="roleModelConfig(role.id).api_key" :placeholder="roleModelConfig(role.id).api_key ? '••••••••' : 'not set'">
-                        </div>
-                        <p class="help-text">API keys are stored in plaintext in config files. Consider using environment variables for better security.</p>
-                    </div>
-                </template>
-            </div>
-
             <!-- Custom Agents -->
             <div class="config-section">
                 <h3>Custom Agents</h3>
@@ -353,7 +322,6 @@
                     system_prompts: {},
                     agent_email_domain: ''
                 },
-                availableModels: {},
                 roles: [
                     { id: 'mayor', label: 'Mayor' },
                     { id: 'deacon', label: 'Deacon' },
@@ -362,13 +330,6 @@
                     { id: 'polecat', label: 'Polecat' },
                     { id: 'crew', label: 'Crew' }
                 ],
-
-                roleModelConfig(roleId) {
-                    if (!this.config.role_models[roleId]) {
-                        this.config.role_models[roleId] = {};
-                    }
-                    return this.config.role_models[roleId];
-                },
 
                 init() {
                     this.loadConfig();
@@ -391,53 +352,11 @@
                             system_prompts: data.system_prompts || {},
                             agent_email_domain: data.agent_email_domain || ''
                         };
-                        // Fetch available models for dropdowns
-                        await this.fetchModels();
                     } catch (e) {
                         this.message = 'Failed to load config: ' + e.message;
                         this.messageType = 'error';
                     }
                     this.loading = false;
-                },
-
-                async fetchModels() {
-                    try {
-                        const res = await fetch('/api/models/list');
-                        if (!res.ok) {
-                            throw new Error(await res.text());
-                        }
-                        this.availableModels = await res.json();
-                    } catch (e) {
-                        console.error('Failed to fetch models:', e);
-                        this.availableModels = {};
-                    }
-                },
-
-                // Return list of models for a given role based on assigned agent
-                modelsForRole(roleId) {
-                    const agent = this.config.role_agents[roleId] || this.config.default_agent || 'claude';
-                    return this.availableModels[agent] || [];
-                },
-
-                setRoleModel(roleId, value) {
-                    if (!this.config.role_models) {
-                        this.config.role_models = {};
-                    }
-                    if (value && value.trim()) {
-                        if (!this.config.role_models[roleId]) {
-                            this.config.role_models[roleId] = {};
-                        }
-                        this.config.role_models[roleId].model = value.trim();
-                    } else {
-                        // Remove model if empty
-                        if (this.config.role_models[roleId]) {
-                            delete this.config.role_models[roleId].model;
-                            // If no other fields, remove entire entry
-                            if (Object.keys(this.config.role_models[roleId]).length === 0) {
-                                delete this.config.role_models[roleId];
-                            }
-                        }
-                    }
                 },
 
                 async saveConfig() {
