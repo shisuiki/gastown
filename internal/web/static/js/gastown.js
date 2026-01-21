@@ -81,9 +81,36 @@ function issueTypeIcon(t) {
 function toggleNav() {
     const navLinks = document.getElementById('nav-links');
     if (navLinks) {
-        navLinks.classList.toggle('open');
+        const isOpen = navLinks.classList.toggle('open');
+        if (!isOpen) {
+            closeNavDropdowns();
+        }
     }
 }
+
+function toggleNavDropdown(name) {
+    const dropdown = document.querySelector('.nav-dropdown[data-menu="' + name + '"]');
+    if (!dropdown) {
+        return;
+    }
+    const isOpen = dropdown.classList.contains('open');
+    closeNavDropdowns();
+    if (!isOpen) {
+        dropdown.classList.add('open');
+    }
+}
+
+function closeNavDropdowns() {
+    document.querySelectorAll('.nav-dropdown.open').forEach(dropdown => {
+        dropdown.classList.remove('open');
+    });
+}
+
+document.addEventListener('click', (event) => {
+    if (!event.target.closest('.nav-dropdown')) {
+        closeNavDropdowns();
+    }
+});
 
 /**
  * Set active navigation link based on current path

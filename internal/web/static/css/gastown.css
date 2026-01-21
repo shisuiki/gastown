@@ -44,6 +44,25 @@ body {
 .nav-link:hover { background: #1a1a2e; color: #eee; }
 .nav-link.active { background: #3b82f6; color: #fff; }
 .nav-toggle { display: none; background: none; border: none; color: #eee; font-size: 1.5rem; cursor: pointer; padding: 8px; }
+.nav-dropdown { position: relative; display: inline-flex; align-items: center; }
+.nav-dropdown-toggle { background: none; border: 1px solid transparent; cursor: pointer; }
+.nav-dropdown.active .nav-dropdown-toggle { background: #1a1a2e; color: #eee; }
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 180px;
+    background: #0f172a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 6px;
+    gap: 4px;
+    flex-direction: column;
+    z-index: 200;
+}
+.nav-dropdown.open .nav-dropdown-menu { display: flex; }
+.nav-dropdown-menu .nav-link { width: 100%; }
 
 /* ================================================================
    Status Indicators
@@ -350,6 +369,15 @@ code { font-family: "Menlo", "Monaco", "Consolas", monospace; }
         z-index: 100;
     }
     .nav-links.open { display: flex; }
+    .nav-dropdown { width: 100%; }
+    .nav-dropdown-toggle { width: 100%; text-align: left; }
+    .nav-dropdown-menu {
+        position: static;
+        background: transparent;
+        border: none;
+        padding: 6px 0 6px 12px;
+    }
+    .nav-dropdown-menu .nav-link { padding-left: 24px; }
     table { font-size: 0.8rem; }
     th, td { padding: 6px 8px; }
     .terminal-output { min-height: 250px; max-height: 400px; font-size: 0.75rem; }

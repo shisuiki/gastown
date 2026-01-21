@@ -16,14 +16,25 @@
         <div class="nav-links" id="nav-links">
             <a href="/dashboard" class="nav-link{{if eq .ActivePage "dashboard"}} active{{end}}">Dashboard</a>
             <a href="/mayor" class="nav-link{{if eq .ActivePage "mayor"}} active{{end}}">Mayor</a>
-            <a href="/mail" class="nav-link{{if eq .ActivePage "mail"}} active{{end}}">Mail</a>
             <a href="/terminals" class="nav-link{{if eq .ActivePage "terminals"}} active{{end}}">Terminals</a>
-            <a href="/crew" class="nav-link{{if eq .ActivePage "crew"}} active{{end}}">Crew</a>
-            <a href="/workflow" class="nav-link{{if eq .ActivePage "workflow"}} active{{end}}">Workflow</a>
-            <a href="/git" class="nav-link{{if eq .ActivePage "git"}} active{{end}}">Git</a>
             <a href="/docs" class="nav-link{{if eq .ActivePage "docs"}} active{{end}}">Docs</a>
-            <a href="/config" class="nav-link{{if eq .ActivePage "config"}} active{{end}}">Config</a>
-            <a href="/prompts" class="nav-link{{if eq .ActivePage "prompts"}} active{{end}}">Prompts</a>
+            <div class="nav-dropdown{{if or (eq .ActivePage "crew") (eq .ActivePage "config") (eq .ActivePage "prompts") (eq .ActivePage "account")}} active{{end}}" data-menu="cfg">
+                <button class="nav-link nav-dropdown-toggle" type="button" onclick="toggleNavDropdown('cfg')">Cfg ▾</button>
+                <div class="nav-dropdown-menu">
+                    <a href="/crew" class="nav-link{{if eq .ActivePage "crew"}} active{{end}}">Crew</a>
+                    <a href="/config" class="nav-link{{if eq .ActivePage "config"}} active{{end}}">Config</a>
+                    <a href="/prompts" class="nav-link{{if eq .ActivePage "prompts"}} active{{end}}">Prompt</a>
+                    <a href="/account" class="nav-link{{if eq .ActivePage "account"}} active{{end}}">Account</a>
+                </div>
+            </div>
+            <div class="nav-dropdown{{if or (eq .ActivePage "mail") (eq .ActivePage "workflow") (eq .ActivePage "git")}} active{{end}}" data-menu="dev">
+                <button class="nav-link nav-dropdown-toggle" type="button" onclick="toggleNavDropdown('dev')">Dev ▾</button>
+                <div class="nav-dropdown-menu">
+                    <a href="/mail" class="nav-link{{if eq .ActivePage "mail"}} active{{end}}">Mail</a>
+                    <a href="/workflow" class="nav-link{{if eq .ActivePage "workflow"}} active{{end}}">Workflow</a>
+                    <a href="/git" class="nav-link{{if eq .ActivePage "git"}} active{{end}}">Git</a>
+                </div>
+            </div>
         </div>
     </div>
 </nav>
