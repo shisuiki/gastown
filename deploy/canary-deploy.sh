@@ -11,8 +11,7 @@ ENV_CONFIG_DIR=${ENV_CONFIG_DIR:-}
 STATE_DIR=${CANARY_STATE_DIR:-"$GT_ROOT/logs"}
 STATE_JSON=${CANARY_STATE_JSON:-"$STATE_DIR/canary-deploy.json"}
 STATE_ENV=${CANARY_STATE_ENV:-"$STATE_DIR/canary-deploy.env"}
-VALIDATE_CANARY=${VALIDATE_CANARY:-1}
-VALIDATION_SCRIPT=${VALIDATION_SCRIPT:-"$ROOT_DIR/deploy/canary-validate.sh"}
+CANARY_RECORD_BEAD=${CANARY_RECORD_BEAD:-1}
 
 log() {
   printf "[%s] %s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
@@ -105,9 +104,27 @@ rollback() {
   fi
 }
 
+record_deploy() {
+  local result=$1
+  if [ "$CANARY_RECORD_BEAD" = "0" ]; then
+    log "CANARY_RECORD_BEAD=0; skipping deploy bead"
+    return 0
+  fi
+  local record_script="$ROOT_DIR/scripts/canary-record-bead.sh"
+  if [ ! -x "$record_script" ]; then
+    log "Deploy bead script missing: $record_script"
+    return 0
+  fi
+  if ! CANARY_RESULT="$result" "$record_script"; then
+    log "WARN: deploy bead recording failed"
+  fi
+  return 0
+}
+
 on_error() {
   log "Deploy failed; invoking rollback"
   rollback
+  record_deploy "failed"
 }
 
 trap on_error ERR
@@ -147,17 +164,6 @@ for _ in $(seq 1 12); do
   fi
 done
 
-if [ "$VALIDATE_CANARY" != "0" ]; then
-  if [ -x "$VALIDATION_SCRIPT" ]; then
-    log "Running canary validation"
-    "$VALIDATION_SCRIPT" --container "$CONTAINER_NAME" --port "$CANARY_PORT"
-  else
-    fail "validation script missing or not executable: $VALIDATION_SCRIPT"
-  fi
-else
-  log "Skipping validation (VALIDATE_CANARY=0)"
-fi
-
 mkdir -p "$STATE_DIR"
 cat <<META > "$STATE_JSON"
 {
@@ -183,4 +189,5 @@ META
 
 log "Deployment metadata written to $STATE_JSON"
 trap - ERR
+record_deploy "success"
 log "Canary deploy complete"

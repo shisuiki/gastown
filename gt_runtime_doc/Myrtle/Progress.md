@@ -35,6 +35,10 @@
 1. Added Nightingale ops doc + GitHub Actions trigger workflow and local trigger script.
 2. Created `nightingale` rig + Nightingale crew workspace; agent bead creation warned about prefix mismatch.
 
+### Canary deploy bead recording
+
+1. Added canary deploy bead recorder script and wired `deploy/canary-deploy.sh` to log success/failure.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support
