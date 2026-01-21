@@ -42,6 +42,12 @@ The script records metadata at:
 - `/home/shisui/gt/logs/canary-deploy.json`
 - `/home/shisui/gt/logs/canary-deploy.env`
 
+## Validation
+
+`deploy/canary-deploy.sh` runs `deploy/canary-validate.sh` by default after the
+container reports healthy. Set `VALIDATE_CANARY=0` to skip validation. The
+validation runbook lives in `docs/operations/canary-validation-runbook.md`.
+
 ## GitHub Actions Workflow
 
 `.github/workflows/canary-deploy.yml` triggers on pushes to `canary` and runs on
