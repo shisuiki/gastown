@@ -162,8 +162,9 @@ func safeDocPath(repoRoot, relPath string) (string, error) {
 		return "", errors.New("path escapes repo root")
 	}
 
-	if strings.ToLower(filepath.Ext(fullPath)) != ".md" {
-		return "", errors.New("only markdown files supported")
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	if ext != ".md" && ext != ".tmpl" {
+		return "", errors.New("only markdown or tmpl files supported")
 	}
 
 	return fullPath, nil
@@ -194,7 +195,8 @@ func collectMarkdownFiles(repoRoot string) ([]string, error) {
 			}
 			return nil
 		}
-		if strings.ToLower(filepath.Ext(d.Name())) != ".md" {
+		ext := strings.ToLower(filepath.Ext(d.Name()))
+		if ext != ".md" && ext != ".tmpl" {
 			return nil
 		}
 		rel, err := filepath.Rel(repoRoot, path)

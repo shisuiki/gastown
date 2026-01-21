@@ -2,6 +2,10 @@
 
 ## 2026-01-21
 
+### Docs UI tmpl support
+
+1. Extended docs browser to include `.tmpl` files alongside markdown.
+
 ### Web UI service doc update
 
 1. Documented current system-level `gastown-gui.service` + user-level `gastown-sync.service` split in `docs/WEBUI-DEPLOY.md`.
