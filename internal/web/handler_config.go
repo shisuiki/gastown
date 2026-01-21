@@ -202,7 +202,7 @@ func (h *GUIHandler) handleAPIConfigPost(w http.ResponseWriter, r *http.Request)
 	log.Printf("Town settings updated via WebUI")
 	w.Header().Set("Content-Type", "application/json")
 	resp := map[string]string{"status": "ok"}
-	if repoRoot, repoErr := findRepoRoot(gtRoot); repoErr == nil {
+	if repoRoot, repoErr := resolveGitRepoRoot(gtRoot); repoErr == nil {
 		if gitResult := runGitSync(repoRoot, []string{settingsPath}, "Update town settings via WebUI", "config update"); gitResult != nil {
 			resp["git_error"] = gitResult.Error
 			if gitResult.BeadID != "" {

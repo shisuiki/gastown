@@ -15,6 +15,65 @@ type gitSyncResult struct {
 	SlingTarget string `json:"git_target,omitempty"`
 }
 
+func resolveGitRepoRoot(startPath string) (string, error) {
+	if override := strings.TrimSpace(os.Getenv("GT_WEB_GIT_REPO_ROOT")); override != "" {
+		return ensureGitRoot(override)
+	}
+
+	if startPath == "" {
+		return "", fmt.Errorf("missing repo root")
+	}
+
+	startPath = filepath.Clean(startPath)
+	info, err := os.Stat(startPath)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		startPath = filepath.Dir(startPath)
+	}
+
+	return findGitRoot(startPath)
+}
+
+func findGitRoot(startDir string) (string, error) {
+	dir := startDir
+	for {
+		if root, ok := isGitRoot(dir); ok {
+			return root, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("git repo not found")
+}
+
+func isGitRoot(dir string) (string, bool) {
+	gitPath := filepath.Join(dir, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		return "", false
+	}
+	if info.IsDir() {
+		return dir, true
+	}
+	if info.Mode().IsRegular() {
+		return dir, true
+	}
+	return "", false
+}
+
+func ensureGitRoot(path string) (string, error) {
+	path = filepath.Clean(path)
+	if _, ok := isGitRoot(path); ok {
+		return path, nil
+	}
+	return findGitRoot(path)
+}
+
 func runGitSync(repoRoot string, paths []string, commitMsg string, action string) *gitSyncResult {
 	repoRoot = strings.TrimSpace(repoRoot)
 	if repoRoot == "" {

@@ -110,6 +110,7 @@ in `gastown-gui.service` if you want a custom hook:
   - `GT_WEB_GIT_COMMIT_MSG`
   - `GT_WEB_GIT_ACTION`
   - `GT_WEB_GIT_PATHS` (comma-separated)
+- `GT_WEB_GIT_REPO_ROOT`: Override git root used for WebUI save-time commits.
 - `GT_WEB_GIT_FAILOVER_TARGET`: Optional sling target for auto-recovery.
 - `GT_WEB_GIT_AUTHOR_NAME` / `GT_WEB_GIT_AUTHOR_EMAIL`: Optional git author identity for commits.
 - `GT_WEB_GIT_COMMITTER_NAME` / `GT_WEB_GIT_COMMITTER_EMAIL`: Optional committer identity (defaults to author if omitted).

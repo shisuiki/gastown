@@ -28,6 +28,7 @@
 1. Added save-time git sync (add/commit/push) for config + prompts/CLAUDE/templates.
 2. On git sync failure, auto-create a bead and sling to a polecat target.
 3. Added git author env support + unsaved-change warnings for config/prompts edits.
+4. Fixed config git root resolution to use `.git` instead of go.mod.
 
 ### Nightingale trigger setup
 
