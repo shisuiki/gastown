@@ -14,6 +14,10 @@
 
 1. Added tests covering env-based docs root resolution in `internal/web/handler_docs_test.go`.
 
+### Witness idle-but-done guard
+
+1. Updated `mol-witness-patrol` to detect idle polecats with pushed work and nudge or submit instead of auto-nuking.
+
 ## 2026-01-20
 
 ### P2 Incident: Docs Root Regression
