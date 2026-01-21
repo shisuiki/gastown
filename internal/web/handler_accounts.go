@@ -38,6 +38,7 @@ type accountListItem struct {
 	ConfigDir   string `json:"config_dir"`
 	IsDefault   bool   `json:"is_default"`
 	IsCurrent   bool   `json:"is_current"`
+	LoggedIn    bool   `json:"logged_in"`
 }
 
 type accountsResponse struct {
@@ -61,6 +62,10 @@ type accountAddRequest struct {
 
 type accountHandleRequest struct {
 	Handle string `json:"handle"`
+}
+
+type accountLoginSessionResponse struct {
+	SessionID string `json:"session_id"`
 }
 
 // handleAPIAccounts returns the list of configured accounts and current status.
@@ -162,28 +167,9 @@ func (h *GUIHandler) handleAPIAccountsDefault(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	townRoot := webTownRoot()
-	accountsPath := constants.MayorAccountsPath(townRoot)
-	cfg, err := loadAccountsConfig(accountsPath)
+	resp, err := setDefaultAccount(handle)
 	if err != nil {
-		http.Error(w, "Failed to load accounts: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if _, exists := cfg.Accounts[handle]; !exists {
-		http.Error(w, "Account not found", http.StatusBadRequest)
-		return
-	}
-
-	cfg.Default = handle
-	if err := config.SaveAccountsConfig(accountsPath, cfg); err != nil {
-		http.Error(w, "Failed to save accounts: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := loadAccountsResponse()
-	if err != nil {
-		http.Error(w, "Failed to load accounts: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to set default: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -210,33 +196,9 @@ func (h *GUIHandler) handleAPIAccountsSwitch(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	townRoot := webTownRoot()
-	accountsPath := constants.MayorAccountsPath(townRoot)
-	cfg, err := loadAccountsConfig(accountsPath)
+	resp, err := setDefaultAccount(targetHandle)
 	if err != nil {
-		http.Error(w, "Failed to load accounts: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	targetAcct := cfg.GetAccount(targetHandle)
-	if targetAcct == nil {
-		http.Error(w, "Account not found", http.StatusBadRequest)
-		return
-	}
-
-	if err := switchClaudeAccount(cfg, targetHandle); err != nil {
 		http.Error(w, "Failed to switch account: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := config.SaveAccountsConfig(accountsPath, cfg); err != nil {
-		http.Error(w, "Failed to save accounts: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := loadAccountsResponse()
-	if err != nil {
-		http.Error(w, "Failed to load accounts: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -278,6 +240,26 @@ func loadAccountsResponse() (accountsResponse, error) {
 	return resp, nil
 }
 
+func setDefaultAccount(handle string) (accountsResponse, error) {
+	townRoot := webTownRoot()
+	accountsPath := constants.MayorAccountsPath(townRoot)
+	cfg, err := loadAccountsConfig(accountsPath)
+	if err != nil {
+		return accountsResponse{}, err
+	}
+
+	if _, exists := cfg.Accounts[handle]; !exists {
+		return accountsResponse{}, errors.New("account not found")
+	}
+
+	cfg.Default = handle
+	if err := config.SaveAccountsConfig(accountsPath, cfg); err != nil {
+		return accountsResponse{}, err
+	}
+
+	return loadAccountsResponse()
+}
+
 func loadAccountsConfig(path string) (*config.AccountsConfig, error) {
 	cfg, err := config.LoadAccountsConfig(path)
 	if err != nil {
@@ -310,6 +292,7 @@ func buildAccountList(cfg *config.AccountsConfig, currentHandle string) []accoun
 			ConfigDir:   acct.ConfigDir,
 			IsDefault:   handle == cfg.Default,
 			IsCurrent:   handle == currentHandle,
+			LoggedIn:    accountHasCredentials(acct.ConfigDir),
 		})
 	}
 
@@ -342,75 +325,113 @@ func populateClaudeStatus(resp *accountsResponse) {
 	}
 }
 
-func switchClaudeAccount(cfg *config.AccountsConfig, targetHandle string) error {
-	home, err := os.UserHomeDir()
+func accountHasCredentials(configDir string) bool {
+	if strings.TrimSpace(configDir) == "" {
+		return false
+	}
+	credPath := filepath.Join(configDir, ".credentials.json")
+	info, err := os.Stat(credPath)
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return info.Size() > 0
+}
+
+func accountLoginSessionName(handle string) string {
+	return "gt-login-" + handle
+}
+
+func (h *GUIHandler) handleAPIAccountsLoginStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req accountHandleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	handle := strings.TrimSpace(req.Handle)
+	if !accountHandlePattern.MatchString(handle) {
+		http.Error(w, "Invalid handle", http.StatusBadRequest)
+		return
+	}
+
+	townRoot := webTownRoot()
+	accountsPath := constants.MayorAccountsPath(townRoot)
+	cfg, err := loadAccountsConfig(accountsPath)
 	if err != nil {
-		return err
-	}
-	claudeDir := filepath.Join(home, ".claude")
-
-	targetAcct := cfg.GetAccount(targetHandle)
-	if targetAcct == nil {
-		return errors.New("account not found")
+		http.Error(w, "Failed to load accounts: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	fileInfo, err := os.Lstat(claudeDir)
-	if err != nil && !os.IsNotExist(err) {
-		return err
+	acct := cfg.GetAccount(handle)
+	if acct == nil {
+		http.Error(w, "Account not found", http.StatusBadRequest)
+		return
 	}
 
-	var currentHandle string
-	if err == nil && fileInfo.Mode()&os.ModeSymlink != 0 {
-		linkTarget, err := os.Readlink(claudeDir)
-		if err != nil {
-			return err
-		}
-		for handle, acct := range cfg.Accounts {
-			if acct.ConfigDir == linkTarget {
-				currentHandle = handle
-				break
-			}
-		}
+	configDir := strings.TrimSpace(acct.ConfigDir)
+	if configDir == "" {
+		http.Error(w, "Account missing config dir", http.StatusBadRequest)
+		return
 	}
 
-	if currentHandle == targetHandle {
-		cfg.Default = targetHandle
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		http.Error(w, "Failed to create config dir: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sessionID := accountLoginSessionName(handle)
+	if err := ensureTmuxSession(sessionID, configDir); err != nil {
+		http.Error(w, "Failed to start login session: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(accountLoginSessionResponse{SessionID: sessionID})
+}
+
+func (h *GUIHandler) handleAPIAccountsLoginStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req accountHandleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	handle := strings.TrimSpace(req.Handle)
+	if !accountHandlePattern.MatchString(handle) {
+		http.Error(w, "Invalid handle", http.StatusBadRequest)
+		return
+	}
+
+	sessionID := accountLoginSessionName(handle)
+	cmd, cancel := command("tmux", "kill-session", "-t", sessionID)
+	defer cancel()
+	_ = cmd.Run()
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func ensureTmuxSession(sessionID, configDir string) error {
+	if tmuxSessionExists(sessionID) {
 		return nil
 	}
 
-	if err == nil && fileInfo.Mode()&os.ModeSymlink == 0 && fileInfo.IsDir() {
-		if currentHandle == "" && cfg.Default != "" {
-			currentHandle = cfg.Default
-		}
+	cmd, cancel := command("tmux", "new-session", "-d", "-s", sessionID, "-c", configDir, "env", "CLAUDE_CONFIG_DIR="+configDir, "claude", "--dangerously-skip-permissions")
+	defer cancel()
+	return cmd.Run()
+}
 
-		if currentHandle == "" {
-			return errors.New("~/.claude exists but no default account is set")
-		}
-
-		currentAcct := cfg.GetAccount(currentHandle)
-		if currentAcct == nil {
-			return errors.New("current account not found")
-		}
-
-		if _, err := os.Stat(currentAcct.ConfigDir); err == nil {
-			if err := os.RemoveAll(currentAcct.ConfigDir); err != nil {
-				return err
-			}
-		}
-
-		if err := os.Rename(claudeDir, currentAcct.ConfigDir); err != nil {
-			return err
-		}
-	} else if err == nil && fileInfo.Mode()&os.ModeSymlink != 0 {
-		if err := os.Remove(claudeDir); err != nil {
-			return err
-		}
-	}
-
-	if err := os.Symlink(targetAcct.ConfigDir, claudeDir); err != nil {
-		return err
-	}
-
-	cfg.Default = targetHandle
-	return nil
+func tmuxSessionExists(sessionID string) bool {
+	cmd, cancel := command("tmux", "has-session", "-t", sessionID)
+	defer cancel()
+	return cmd.Run() == nil
 }

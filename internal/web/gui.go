@@ -115,6 +115,8 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/accounts/add", h.handleAPIAccountsAdd)
 	h.mux.HandleFunc("/api/accounts/default", h.handleAPIAccountsDefault)
 	h.mux.HandleFunc("/api/accounts/switch", h.handleAPIAccountsSwitch)
+	h.mux.HandleFunc("/api/accounts/login/start", h.handleAPIAccountsLoginStart)
+	h.mux.HandleFunc("/api/accounts/login/stop", h.handleAPIAccountsLoginStop)
 
 	// Terminal API routes
 	h.mux.HandleFunc("/api/terminal/stream", h.handleAPITerminalStream)

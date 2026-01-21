@@ -11,6 +11,9 @@
         <div class="card" style="margin-bottom: 20px;">
             <h2>Account Status</h2>
             <div id="account-status" class="text-muted">Loading...</div>
+            <div style="margin-top: 12px;">
+                <button id="account-refresh" class="btn btn-secondary btn-sm">Refresh</button>
+            </div>
         </div>
 
         <div class="grid">
@@ -65,9 +68,29 @@
                 <tbody id="accounts-body"></tbody>
             </table>
         </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <h2>Account Login Session</h2>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
+                <select id="login-account-select" class="input-field" style="min-width: 200px;"></select>
+                <button id="login-start" class="btn btn-primary btn-sm">Start Login Session</button>
+                <button id="login-stop" class="btn btn-secondary btn-sm">Stop Session</button>
+                <button id="login-send" class="btn btn-warning btn-sm">Send /login</button>
+            </div>
+            <pre class="terminal-output" id="login-output">Start a login session to authenticate an account.</pre>
+            <div id="login-input-area" style="display: none; margin-top: 10px;">
+                <textarea id="login-input" class="input-field" rows="2" style="resize: vertical; min-height: 40px; max-height: 200px;" placeholder="Type command and press Enter..."></textarea>
+                <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: nowrap;">
+                    <button id="login-send-input" class="btn btn-success" style="flex: 1; min-width: 60px; padding: 10px 12px;">Send</button>
+                    <button id="login-send-enter" class="btn" style="flex: 1; min-width: 60px; padding: 10px 12px; background: #6366f1; color: white;">Enter</button>
+                    <button id="login-send-ctrlc" class="btn btn-danger" style="flex: 1; min-width: 60px; padding: 10px 12px;">Ctrl+C</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     {{template "scripts" .}}
+    <script src="/static/js/terminal.js"></script>
     <script>
         const statusEl = document.getElementById('account-status');
         const tableBody = document.getElementById('accounts-body');
@@ -75,6 +98,17 @@
         const tableEl = document.getElementById('accounts-table');
         const addForm = document.getElementById('account-add-form');
         const addResult = document.getElementById('account-add-result');
+        const refreshBtn = document.getElementById('account-refresh');
+        const loginSelect = document.getElementById('login-account-select');
+        const loginStartBtn = document.getElementById('login-start');
+        const loginStopBtn = document.getElementById('login-stop');
+        const loginSendBtn = document.getElementById('login-send');
+        const loginSendInputBtn = document.getElementById('login-send-input');
+        const loginSendEnterBtn = document.getElementById('login-send-enter');
+        const loginSendCtrlBtn = document.getElementById('login-send-ctrlc');
+        let accountsCache = [];
+        let loginSessionHandle = '';
+        let loginTerminal = null;
 
         function formatSource(source) {
             if (source === 'env') return 'GT_ACCOUNT';
@@ -91,6 +125,12 @@
             const rows = [];
             rows.push('<tr><th>Current</th><td>' + escapeHtml(data.current_handle) + '</td></tr>');
             rows.push('<tr><th>Source</th><td>' + escapeHtml(formatSource(data.current_source)) + '</td></tr>');
+            if (Array.isArray(data.accounts)) {
+                const current = data.accounts.find(account => account.handle === data.current_handle);
+                if (current) {
+                    rows.push('<tr><th>Login</th><td>' + (current.logged_in ? 'Logged in' : 'Needs login') + '</td></tr>');
+                }
+            }
             if (data.current_config_dir) {
                 rows.push('<tr><th>Config Dir</th><td>' + escapeHtml(data.current_config_dir) + '</td></tr>');
             }
@@ -110,6 +150,8 @@
 
         function renderAccounts(data) {
             const accounts = (data && Array.isArray(data.accounts)) ? data.accounts : [];
+            accountsCache = accounts;
+            updateLoginSelect();
             if (accounts.length === 0) {
                 emptyEl.style.display = 'block';
                 tableEl.style.display = 'none';
@@ -128,9 +170,13 @@
                 if (account.is_current) {
                     badges.push('<span class="badge badge-blue">Current</span>');
                 }
+                if (account.logged_in) {
+                    badges.push('<span class="badge badge-yellow">Logged in</span>');
+                } else {
+                    badges.push('<span class="badge badge-red">Needs login</span>');
+                }
 
-                const defaultDisabled = account.is_default ? 'disabled' : '';
-                const switchDisabled = account.is_current ? 'disabled' : '';
+                const activateDisabled = !account.logged_in ? 'disabled' : '';
 
                 return '<tr>' +
                     '<td>' + escapeHtml(account.handle) + '</td>' +
@@ -139,8 +185,8 @@
                     '<td>' + escapeHtml(account.config_dir || '') + '</td>' +
                     '<td>' + badges.join(' ') + '</td>' +
                     '<td><div class="table-actions">' +
-                        '<button class="btn btn-secondary btn-sm" data-action="default" data-handle="' + escapeHtml(account.handle) + '" ' + defaultDisabled + '>Set Default</button>' +
-                        '<button class="btn btn-warning btn-sm" data-action="switch" data-handle="' + escapeHtml(account.handle) + '" ' + switchDisabled + '>Switch</button>' +
+                        '<button class="btn btn-secondary btn-sm" data-action="activate" data-handle="' + escapeHtml(account.handle) + '" ' + activateDisabled + '>Activate</button>' +
+                        '<button class="btn btn-warning btn-sm" data-action="login" data-handle="' + escapeHtml(account.handle) + '">Login</button>' +
                     '</div></td>' +
                     '</tr>';
             }).join('');
@@ -149,10 +195,10 @@
                 btn.addEventListener('click', () => {
                     const action = btn.getAttribute('data-action');
                     const handle = btn.getAttribute('data-handle');
-                    if (action === 'default') {
+                    if (action === 'activate') {
                         setDefault(handle);
-                    } else if (action === 'switch') {
-                        switchAccount(handle);
+                    } else if (action === 'login') {
+                        startLogin(handle);
                     }
                 });
             });
@@ -190,12 +236,46 @@
             }
         }
 
-        async function switchAccount(handle) {
-            if (!confirm('Switch to account "' + handle + '"? This updates ~/.claude and requires restarting Claude sessions.')) {
+        function updateLoginSelect() {
+            if (!loginSelect) {
+                return;
+            }
+            const current = loginSelect.value;
+            loginSelect.innerHTML = accountsCache.map(account => {
+                return '<option value="' + escapeHtml(account.handle) + '">' + escapeHtml(account.handle) + '</option>';
+            }).join('');
+            if (current && accountsCache.some(a => a.handle === current)) {
+                loginSelect.value = current;
+            }
+        }
+
+        function ensureLoginTerminal() {
+            if (loginTerminal) {
+                return loginTerminal;
+            }
+            loginTerminal = new TerminalWidget({
+                container: '.account-page',
+                outputEl: '#login-output',
+                toggleBtn: null,
+                inputEl: '#login-input',
+                inputArea: '#login-input-area',
+                sessionInfoEl: null,
+                sessionId: null,
+                streamUrl: '/api/terminal/stream',
+                sendUrl: '/api/terminal/send',
+                showInput: true,
+                showSessionInfo: false,
+                sendEnter: true
+            });
+            return loginTerminal;
+        }
+
+        async function startLogin(handle) {
+            if (!handle) {
                 return;
             }
             try {
-                const res = await fetch('/api/accounts/switch', {
+                const res = await fetch('/api/accounts/login/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ handle })
@@ -204,11 +284,46 @@
                     throw new Error(await res.text());
                 }
                 const data = await res.json();
-                renderStatus(data);
-                renderAccounts(data);
+                loginSessionHandle = handle;
+                if (loginSelect) {
+                    loginSelect.value = handle;
+                }
+                const terminal = ensureLoginTerminal();
+                terminal.sessionId = data.session_id;
+                terminal.connect();
             } catch (e) {
-                alert('Failed to switch: ' + e.message);
+                alert('Failed to start login session: ' + e.message);
             }
+        }
+
+        async function stopLogin(handle) {
+            if (!handle) {
+                return;
+            }
+            try {
+                await fetch('/api/accounts/login/stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handle })
+                });
+            } catch (e) {
+                console.warn('Failed to stop login session:', e);
+            }
+            if (loginTerminal) {
+                loginTerminal.disconnect();
+            }
+        }
+
+        function sendLoginCommand(cmd) {
+            if (!loginTerminal) {
+                return;
+            }
+            const input = document.getElementById('login-input');
+            if (!input) {
+                return;
+            }
+            input.value = cmd;
+            loginTerminal.sendInput();
         }
 
         addForm.addEventListener('submit', async (e) => {
@@ -242,6 +357,46 @@
                 addResult.textContent = 'Failed to add account: ' + e.message;
             }
         });
+
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => loadAccounts());
+        }
+        if (loginStartBtn) {
+            loginStartBtn.addEventListener('click', () => {
+                const handle = loginSelect ? loginSelect.value : '';
+                startLogin(handle);
+            });
+        }
+        if (loginStopBtn) {
+            loginStopBtn.addEventListener('click', () => {
+                const handle = loginSelect ? loginSelect.value : loginSessionHandle;
+                stopLogin(handle);
+            });
+        }
+        if (loginSendBtn) {
+            loginSendBtn.addEventListener('click', () => sendLoginCommand('/login'));
+        }
+        if (loginSendInputBtn) {
+            loginSendInputBtn.addEventListener('click', () => {
+                if (loginTerminal) {
+                    loginTerminal.sendInput();
+                }
+            });
+        }
+        if (loginSendEnterBtn) {
+            loginSendEnterBtn.addEventListener('click', () => {
+                if (loginTerminal) {
+                    loginTerminal.sendKey('Enter');
+                }
+            });
+        }
+        if (loginSendCtrlBtn) {
+            loginSendCtrlBtn.addEventListener('click', () => {
+                if (loginTerminal) {
+                    loginTerminal.sendKey('C-c');
+                }
+            });
+        }
 
         loadAccounts();
     </script>
