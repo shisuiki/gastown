@@ -52,6 +52,8 @@ Environment=GASTOWN_WEB_PORT=8080
 Environment=GASTOWN_SRC=/home/shisui/laplace/gastown-src
 Environment=GT_WEB_POST_SAVE_HOOK=/home/shisui/gt/scripts/webui-git-sync.sh
 Environment=GT_WEB_GIT_FAILOVER_TARGET=TerraNomadicCity
+Environment=GT_WEB_GIT_AUTHOR_NAME=Gastown WebUI
+Environment=GT_WEB_GIT_AUTHOR_EMAIL=shisuiki@users.noreply.github.com
 
 [Install]
 WantedBy=multi-user.target
@@ -109,6 +111,8 @@ in `gastown-gui.service` if you want a custom hook:
   - `GT_WEB_GIT_ACTION`
   - `GT_WEB_GIT_PATHS` (comma-separated)
 - `GT_WEB_GIT_FAILOVER_TARGET`: Optional sling target for auto-recovery.
+- `GT_WEB_GIT_AUTHOR_NAME` / `GT_WEB_GIT_AUTHOR_EMAIL`: Optional git author identity for commits.
+- `GT_WEB_GIT_COMMITTER_NAME` / `GT_WEB_GIT_COMMITTER_EMAIL`: Optional committer identity (defaults to author if omitted).
 
 If the hook is not set, the WebUI runs `git add`, `git commit`, and `git push`
 directly. On failure it creates a bead and slings it to the configured target.

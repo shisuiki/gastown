@@ -39,6 +39,36 @@ func runGitSync(repoRoot string, paths []string, commitMsg string, action string
 	return nil
 }
 
+func gitEnv() []string {
+	env := os.Environ()
+	authorName := strings.TrimSpace(os.Getenv("GT_WEB_GIT_AUTHOR_NAME"))
+	authorEmail := strings.TrimSpace(os.Getenv("GT_WEB_GIT_AUTHOR_EMAIL"))
+	committerName := strings.TrimSpace(os.Getenv("GT_WEB_GIT_COMMITTER_NAME"))
+	committerEmail := strings.TrimSpace(os.Getenv("GT_WEB_GIT_COMMITTER_EMAIL"))
+
+	if committerName == "" {
+		committerName = authorName
+	}
+	if committerEmail == "" {
+		committerEmail = authorEmail
+	}
+
+	if authorName != "" {
+		env = append(env, "GIT_AUTHOR_NAME="+authorName)
+	}
+	if authorEmail != "" {
+		env = append(env, "GIT_AUTHOR_EMAIL="+authorEmail)
+	}
+	if committerName != "" {
+		env = append(env, "GIT_COMMITTER_NAME="+committerName)
+	}
+	if committerEmail != "" {
+		env = append(env, "GIT_COMMITTER_EMAIL="+committerEmail)
+	}
+
+	return env
+}
+
 func normalizeGitPaths(repoRoot string, paths []string) []string {
 	if len(paths) == 0 {
 		return nil
@@ -91,6 +121,7 @@ func gitAddCommitPush(repoRoot string, paths []string, commitMsg string) error {
 	cmd, cancel := command("git", addArgs...)
 	defer cancel()
 	cmd.Dir = repoRoot
+	cmd.Env = gitEnv()
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add failed: %v, output: %s", err, output)
 	}
@@ -101,6 +132,7 @@ func gitAddCommitPush(repoRoot string, paths []string, commitMsg string) error {
 	cmd, cancel = command("git", "commit", "-m", commitMsg)
 	defer cancel()
 	cmd.Dir = repoRoot
+	cmd.Env = gitEnv()
 	if output, err := cmd.CombinedOutput(); err != nil {
 		if strings.Contains(string(output), "nothing to commit") {
 			return nil
@@ -111,6 +143,7 @@ func gitAddCommitPush(repoRoot string, paths []string, commitMsg string) error {
 	cmd, cancel = longCommand("git", "push", "origin", "HEAD")
 	defer cancel()
 	cmd.Dir = repoRoot
+	cmd.Env = gitEnv()
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git push failed: %v, output: %s", err, output)
 	}
@@ -122,12 +155,14 @@ func runGitHook(repoRoot, hook string, paths []string, commitMsg, action string)
 	cmd, cancel := longCommand(hook)
 	defer cancel()
 	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(),
+	env := gitEnv()
+	env = append(env,
 		"GT_WEB_GIT_REPO_ROOT="+repoRoot,
 		"GT_WEB_GIT_COMMIT_MSG="+commitMsg,
 		"GT_WEB_GIT_ACTION="+action,
 		"GT_WEB_GIT_PATHS="+strings.Join(paths, ","),
 	)
+	cmd.Env = env
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git hook failed: %v, output: %s", err, output)
 	}

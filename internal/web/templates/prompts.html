@@ -129,12 +129,13 @@
             min-height: 300px;
             font-family: monospace;
             padding: 12px;
-            background: var(--bg-input);
+            background: rgba(6, 10, 16, 0.85);
             border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-primary);
             margin-bottom: 10px;
             resize: vertical;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
         }
         .edit-textarea:focus {
             outline: none;
@@ -405,6 +406,7 @@
                 rigs: [],
                 prompts: [],
                 roleNames: ['mayor', 'deacon', 'witness', 'refinery', 'polecat', 'crew'],
+                beforeUnloadHandler: null,
                 claude: {
                     path: 'CLAUDE.md',
                     content: '',
@@ -424,6 +426,7 @@
 
                 init() {
                     this.bootstrap();
+                    this.registerUnloadWarning();
                 },
 
                 async bootstrap() {
@@ -437,6 +440,54 @@
                         this.loadTemplates('roles')
                     ]);
                     this.loading = false;
+                },
+
+                registerUnloadWarning() {
+                    if (this.beforeUnloadHandler) {
+                        return;
+                    }
+                    this.beforeUnloadHandler = (event) => {
+                        if (!this.hasUnsavedChanges()) {
+                            return;
+                        }
+                        event.preventDefault();
+                        event.returnValue = '';
+                    };
+                    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+                },
+
+                hasUnsavedChanges() {
+                    if (this.claude.editing && this.claude.editContent !== this.claude.content) {
+                        return true;
+                    }
+                    for (const prompt of this.prompts) {
+                        if (this.promptHasChanges(prompt)) {
+                            return true;
+                        }
+                    }
+                    for (const rolePrompt of this.templateRoles) {
+                        if (this.templateHasChanges(rolePrompt.system) || this.templateHasChanges(rolePrompt.full)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                },
+
+                promptHasChanges(prompt) {
+                    if (!prompt.editing) {
+                        return false;
+                    }
+                    const originalSource = prompt.source === 'file' ? 'file' : 'inline';
+                    const originalFilePath = prompt.file_path || '';
+                    const filePathChanged = prompt.editSource === 'file' && prompt.editFilePath !== originalFilePath;
+                    return prompt.editContent !== prompt.content || prompt.editSource !== originalSource || filePathChanged;
+                },
+
+                templateHasChanges(template) {
+                    if (!template || !template.editing) {
+                        return false;
+                    }
+                    return template.editContent !== template.content;
                 },
 
                 async loadRigs() {

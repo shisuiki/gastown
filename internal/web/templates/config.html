@@ -314,6 +314,8 @@
                 messageType: 'success',
                 showAddAgent: false,
                 newAgent: { name: '', command: '', args: '' },
+                originalConfigJson: '',
+                beforeUnloadHandler: null,
                 config: {
                     default_agent: '',
                     role_agents: {},
@@ -333,6 +335,7 @@
 
                 init() {
                     this.loadConfig();
+                    this.registerUnloadWarning();
                 },
 
                 async loadConfig() {
@@ -352,6 +355,7 @@
                             system_prompts: data.system_prompts || {},
                             agent_email_domain: data.agent_email_domain || ''
                         };
+                        this.originalConfigJson = JSON.stringify(this.buildConfigPayload());
                     } catch (e) {
                         this.message = 'Failed to load config: ' + e.message;
                         this.messageType = 'error';
@@ -359,26 +363,50 @@
                     this.loading = false;
                 },
 
+                buildConfigPayload() {
+                    const cleanRoleAgents = {};
+                    for (const [role, agent] of Object.entries(this.config.role_agents || {})) {
+                        if (agent && agent.trim()) {
+                            cleanRoleAgents[role] = agent.trim();
+                        }
+                    }
+
+                    return {
+                        default_agent: this.config.default_agent || 'claude',
+                        role_agents: cleanRoleAgents,
+                        role_models: this.config.role_models || {},
+                        agents: this.config.agents || {},
+                        system_prompts: this.config.system_prompts || {},
+                        agent_email_domain: this.config.agent_email_domain || ''
+                    };
+                },
+
+                registerUnloadWarning() {
+                    if (this.beforeUnloadHandler) {
+                        return;
+                    }
+                    this.beforeUnloadHandler = (event) => {
+                        if (!this.hasUnsavedChanges()) {
+                            return;
+                        }
+                        event.preventDefault();
+                        event.returnValue = '';
+                    };
+                    window.addEventListener('beforeunload', this.beforeUnloadHandler);
+                },
+
+                hasUnsavedChanges() {
+                    if (!this.originalConfigJson) {
+                        return false;
+                    }
+                    return JSON.stringify(this.buildConfigPayload()) !== this.originalConfigJson;
+                },
+
                 async saveConfig() {
                     this.saving = true;
                     this.message = '';
                     try {
-                        // Clean up empty role_agents
-                        const cleanRoleAgents = {};
-                        for (const [role, agent] of Object.entries(this.config.role_agents)) {
-                            if (agent && agent.trim()) {
-                                cleanRoleAgents[role] = agent.trim();
-                            }
-                        }
-
-                        const payload = {
-                            default_agent: this.config.default_agent || 'claude',
-                            role_agents: cleanRoleAgents,
-                            role_models: this.config.role_models || {},
-                            agents: this.config.agents,
-                            system_prompts: this.config.system_prompts || {},
-                            agent_email_domain: this.config.agent_email_domain || ''
-                        };
+                        const payload = this.buildConfigPayload();
 
                         const res = await fetch('/api/config', {
                             method: 'POST',
