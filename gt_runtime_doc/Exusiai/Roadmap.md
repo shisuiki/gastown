@@ -1,27 +1,26 @@
 # Roadmap
 
-## Phase 0: UX goals + architecture
-- Replace ASCII graph with visual graph rendering (canvas/SVG via OSS lib).
-- Restructure Git page layout into panels (branch/commit/graph) + bottom tabs.
-- Define interaction contracts: branch/commit/graph scroll sync + selection states.
+## Phase 0: Investigation + requirements
+- Confirm where terminal history is stored today (front-end only vs backend).
+- Determine backend storage options (existing store vs new local JSON).
+- Decide minimal API contract for reading/writing history.
 
-## Phase 1: Graph rendering
-- Integrate an open-source graph renderer (vis-network) for commit DAG.
-- Adapt `/api/git/graph` output to nodes/edges for the renderer.
-- Provide focus/scroll-to APIs for branch/commit selection.
+## Phase 1: Backend history storage
+- Add `/api/terminal/history` GET/POST endpoints.
+- Persist history in a local store under the rig runtime dir.
+- Validate keys and cap history size.
 
-## Phase 2: Layout + interactions
-- Two-column layout: left top branch list, left bottom commit list, right graph.
-- Bottom tabs for changes/files/compare/search with mobile stacking.
-- Click interactions: branch -> graph focus, commit -> graph focus + changes, graph node -> commit scroll.
+## Phase 2: Frontend integration
+- Load history from API with localStorage fallback.
+- Append new entries to API store; keep UI behavior unchanged.
+- Provide clear handling for missing/empty history.
 
-## Phase 3: UX polish + constraints
-- Fix diff panel overflow and long-line constraints.
-- Empty/error states, input defaults, and safe limits.
-- Mobile layout verification.
+## Phase 3: UX validation + guardrails
+- Confirm multi-device visibility of history.
+- Ensure scroll performance with large histories.
+- Add minimal constraints to prevent runaway growth.
 
 ## Acceptance criteria
-- Graph is visual (not ASCII) and reflects branch/merge structure.
-- Panel layout matches spec on desktop, stacks on mobile.
-- Clicking branch/commit/graph node scrolls/focuses correctly without page navigation.
-- Diff/patch views stay within bounds.
+- Terminal history persists across devices.
+- LocalStorage is fallback only; API is primary source.
+- API writes are bounded and safe under concurrent use.
