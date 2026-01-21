@@ -8,6 +8,10 @@
 2. Documented container run, ports/volumes, and required env vars in `docs/INSTALLING.md`.
 3. Health check uses `gt version` (HTTP health check documented).
 
+### Container build - CI job
+
+1. Added GHCR build/push job in CI for `main` and `canary` with SHA/latest/canary tags.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support
