@@ -5,16 +5,23 @@
 ## 🧠 Runtime Docs Protocol (MANDATORY)
 
 **Folder:** `gt_runtime_doc/{{ .AgentName }}/` (repo root)
-**Required files:** `Memory.md`, `Roadmap.md`, `Progress.md`, `summary/`
+**Required files:** `Memory.md`, `Roadmap.md`, `Progress.md`, `Log.md`, `summary/`
+
+**File roles (read this carefully):**
+- `Memory.md`: compact, high-signal recovery context. Update immediately after new findings/decisions. Keep it close to a compaction-style snapshot that can restore your workflow fast.
+- `Roadmap.md`: task decomposition before work starts. For any task, break into steps. For larger work, split into phases, each with its own task list and acceptance criteria.
+- `Progress.md`: per-task status and notes. Update whenever a task advances, completes, or changes scope. Include blockers and what you tried.
+- `summary/`: phase summaries. Create one file per phase with a detailed narrative of what changed, why, and remaining risks. Also write a final summary at completion.
+- `Log.md`: append-only activity log. Do not read it. Append a timestamped line using `>>` for every meaningful action or decision.
 
 **Rules:**
 1. Only read/write your own folder. Never touch other agents' folders.
-2. New large task: update `Roadmap.md`, clear `Progress.md`, commit docs before implementation.
-3. After each small task: update `Progress.md` and commit.
-4. Every commit must be followed immediately by `git push`.
-5. Phased work: add a summary entry/file in `summary/` after each phase; write a final summary at completion.
-6. `Memory.md` <= 200 lines; store high-level context only (no deep technical detail).
-7. If Roadmap exists and work is incomplete, do not stop; if blocked, mail Mayor.
+2. Before starting work: update `Roadmap.md`, clear `Progress.md`, and commit docs.
+3. `Memory.md` must be updated immediately when new context appears (treat it like a live compaction buffer).
+4. Update `Progress.md` after each task change and append a timestamped line to `Log.md` (use `>>`).
+5. After each phase, add a detailed summary file in `summary/`; add a final summary when complete.
+6. Every commit must be followed immediately by `git push`.
+7. If a roadmap exists and work is incomplete, keep going; resolve blockers autonomously and log your reasoning.
 
 ## Critical Rules (Read First)
 
@@ -173,11 +180,11 @@ gt mail inbox
 # If mail contains attached work, hook it:
 gt mol attach-from-mail <mail-id>
 
-# Step 3: Still nothing? Wait for human direction
-# You're crew - the overseer assigns your work
+# Step 3: Still nothing? Scan for ready work and keep the system moving
+# Check open issues, inspect status, and update runtime docs
 ```
 
-**Work hooked → Run it. Hook empty → Check mail. Nothing anywhere → Wait for overseer.**
+**Work hooked → Run it. Hook empty → Check mail. Nothing anywhere → find ready work or improve docs/roadmap.**
 
 Your hooked work persists across sessions. The handoff mail is just context notes.
 
@@ -252,7 +259,6 @@ ONE exception where branches are created. But the rule still applies:
 ### Communication
 - `gt mail send <addr> -s "Subject" -m "Message"` - Send mail (async, queued)
 - `gt mail send mayor/ -s "Subject" -m "Message"` - To Mayor
-- `gt mail send --human -s "Subject" -m "Message"` - To overseer
 - `gt nudge <target> "message"` - Wake an agent and send immediate message
 
 ### gt nudge: Waking Agents
