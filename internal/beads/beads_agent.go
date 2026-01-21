@@ -136,7 +136,6 @@ func (b *Beads) CreateAgentBead(id, title string, fields *AgentFields) (*Issue, 
 		"--id=" + id,
 		"--title=" + title,
 		"--description=" + description,
-		"--type=agent",
 		"--labels=gt:agent",
 	}
 	if NeedsForceForID(id) {
@@ -148,7 +147,10 @@ func (b *Beads) CreateAgentBead(id, title string, fields *AgentFields) (*Issue, 
 		args = append(args, "--actor="+actor)
 	}
 
-	out, err := b.run(args...)
+	out, err := b.run(append(args, "--type=agent")...)
+	if err != nil && isAgentTypeUnsupported(err) {
+		out, err = b.run(args...)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +189,6 @@ func (b *Beads) CreateAgentBead(id, title string, fields *AgentFields) (*Issue, 
 // NOTE: This does NOT handle tombstones. If the old bead was hard-deleted (creating
 // a tombstone), this function will fail. Use CloseAndClearAgentBead instead of DeleteAgentBead
 // when cleaning up agent beads to ensure they can be reopened later.
-//
 //
 // The function:
 // 1. Tries to create the agent bead
@@ -309,6 +310,9 @@ func (b *Beads) SetHookBead(agentBeadID, hookBeadID string) error {
 			_, _ = b.run("slot", "clear", agentBeadID, "hook")
 			_, err = b.run("slot", "set", agentBeadID, "hook", hookBeadID)
 		}
+		if err != nil && strings.Contains(err.Error(), "not an agent bead") {
+			return b.updateAgentHookDescription(agentBeadID, hookBeadID)
+		}
 		if err != nil {
 			return fmt.Errorf("setting hook: %w", err)
 		}
@@ -321,9 +325,32 @@ func (b *Beads) SetHookBead(agentBeadID, hookBeadID string) error {
 func (b *Beads) ClearHookBead(agentBeadID string) error {
 	_, err := b.run("slot", "clear", agentBeadID, "hook")
 	if err != nil {
+		if strings.Contains(err.Error(), "not an agent bead") {
+			return b.updateAgentHookDescription(agentBeadID, "")
+		}
 		return fmt.Errorf("clearing hook: %w", err)
 	}
 	return nil
+}
+
+func (b *Beads) updateAgentHookDescription(agentBeadID, hookBeadID string) error {
+	issue, err := b.Show(agentBeadID)
+	if err != nil {
+		return err
+	}
+
+	fields := ParseAgentFields(issue.Description)
+	fields.HookBead = hookBeadID
+	description := FormatAgentDescription(issue.Title, fields)
+	return b.Update(agentBeadID, UpdateOptions{Description: &description})
+}
+
+func isAgentTypeUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "invalid issue type") && strings.Contains(msg, "agent")
 }
 
 // UpdateAgentCleanupStatus updates the cleanup_status field in an agent bead.
@@ -447,8 +474,8 @@ func (b *Beads) CloseAndClearAgentBead(id, reason string) error {
 
 	// Parse existing fields and clear mutable ones
 	fields := ParseAgentFields(issue.Description)
-	fields.HookBead = ""     // Clear hook_bead
-	fields.ActiveMR = ""     // Clear active_mr
+	fields.HookBead = ""      // Clear hook_bead
+	fields.ActiveMR = ""      // Clear active_mr
 	fields.CleanupStatus = "" // Clear cleanup_status
 	fields.AgentState = "closed"
 

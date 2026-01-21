@@ -639,7 +639,14 @@ func getIssueFromAgentHook(bd *beads.Beads, agentBeadID string) string {
 	if err != nil {
 		return ""
 	}
-	return agentBead.HookBead
+	if agentBead.HookBead != "" {
+		return agentBead.HookBead
+	}
+	fields := beads.ParseAgentFields(agentBead.Description)
+	if fields != nil {
+		return fields.HookBead
+	}
+	return ""
 }
 
 // getDispatcherFromBead retrieves the dispatcher agent ID from the bead's attachment fields.

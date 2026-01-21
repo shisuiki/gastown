@@ -22,8 +22,6 @@ func (b *Beads) CreateDogAgentBead(name, location string) (*Issue, error) {
 
 	args := []string{
 		"create", "--json",
-		"--type=agent",
-		"--role-type=dog",
 		"--title=" + title,
 		"--labels=" + strings.Join(labels, ","),
 	}
@@ -33,7 +31,10 @@ func (b *Beads) CreateDogAgentBead(name, location string) (*Issue, error) {
 		args = append(args, "--actor="+actor)
 	}
 
-	out, err := b.run(args...)
+	out, err := b.run(append(args, "--type=agent")...)
+	if err != nil && isAgentTypeUnsupported(err) {
+		out, err = b.run(args...)
+	}
 	if err != nil {
 		return nil, err
 	}
