@@ -5,15 +5,58 @@ on:
     branches:
       - canary
   workflow_dispatch:
+  repository_dispatch:
+    types: [dependency-updated]
 
 env:
   CANARY_CONTAINER: gastown-canary
   CANARY_COMMAND_TIMEOUT: '300'
   CANARY_RETRY_ATTEMPTS: '3'
   CANARY_RETRY_BACKOFF_SECONDS: '10'
+  # Use canary workspace for GTRuntime dependencies
+  GT_ROOT: /home/shisui/gt-canary
 
 jobs:
+  validate-dependencies:
+    name: Validate Dependencies
+    runs-on: [self-hosted, canary]
+    outputs:
+      gtruntime_sha: ${{ steps.deps.outputs.gtruntime_sha }}
+    steps:
+      - name: Sync canary workspace
+        run: |
+          echo "=== Syncing canary workspace ==="
+          cd /home/shisui/gt-canary
+          git fetch origin canary
+          git reset --hard origin/canary
+          echo "Canary workspace synced"
+
+      - name: Capture dependency versions
+        id: deps
+        run: |
+          GTRUNTIME_SHA=$(cd /home/shisui/gt-canary && git rev-parse HEAD)
+          echo "gtruntime_sha=$GTRUNTIME_SHA" >> $GITHUB_OUTPUT
+          echo "GTRuntime SHA: $GTRUNTIME_SHA"
+
+          echo "=== Formulas available ==="
+          ls /home/shisui/gt-canary/.beads/formulas/*.formula.toml 2>/dev/null | wc -l
+          echo "formulas found"
+
+      - name: Validate canary workspace
+        run: |
+          # Ensure required directories exist
+          if [ ! -d "/home/shisui/gt-canary/.beads/formulas" ]; then
+            echo "::error::Canary workspace missing .beads/formulas"
+            exit 1
+          fi
+          if [ ! -d "/home/shisui/gt-canary/gt_runtime_doc" ]; then
+            echo "::error::Canary workspace missing gt_runtime_doc"
+            exit 1
+          fi
+          echo "Canary workspace validated"
+
   deploy-trigger:
+    needs: validate-dependencies
     runs-on: [self-hosted, canary]
     steps:
       - name: Checkout repo
@@ -21,6 +64,16 @@ jobs:
 
       - name: Make helper executable
         run: chmod +x scripts/canary-docker-exec.sh scripts/canary-command-retry.sh
+
+      - name: Log dependency info
+        run: |
+          echo "=== Deployment Info ==="
+          echo "GTRuntime SHA: ${{ needs.validate-dependencies.outputs.gtruntime_sha }}"
+          echo "GT_ROOT: $GT_ROOT"
+          echo "Trigger: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "Source: ${{ github.event.client_payload.source }}"
+          fi
 
       - name: Health check
         run: scripts/canary-command-retry.sh --command health --whitelist health,config,migrate,smoke

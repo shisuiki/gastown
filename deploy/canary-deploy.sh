@@ -4,10 +4,13 @@ set -euo pipefail
 ROOT_DIR=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 CONTAINER_NAME=${CONTAINER_NAME:-gastown-canary}
 CANARY_PORT=${CANARY_PORT:-8081}
-GT_ROOT=${GT_ROOT:-/home/shisui/gt}
+# Use canary workspace by default for canary deployments
+GT_ROOT=${GT_ROOT:-/home/shisui/gt-canary}
 GASTOWN_REF=${GASTOWN_REF:-}
 ENV_CONFIG_REF=${ENV_CONFIG_REF:-}
 ENV_CONFIG_DIR=${ENV_CONFIG_DIR:-}
+# GTRuntime (formulas + runtime docs) version tracking
+GTRUNTIME_REF=${GTRUNTIME_REF:-}
 STATE_DIR=${CANARY_STATE_DIR:-"$GT_ROOT/logs"}
 STATE_JSON=${CANARY_STATE_JSON:-"$STATE_DIR/canary-deploy.json"}
 STATE_ENV=${CANARY_STATE_ENV:-"$STATE_DIR/canary-deploy.env"}
@@ -62,7 +65,27 @@ if [ -z "$ENV_CONFIG_REF" ] && [ -n "$ENV_CONFIG_DIR" ]; then
   fi
 fi
 
+# Capture GTRuntime (formulas + runtime docs) version
+if [ -z "$GTRUNTIME_REF" ]; then
+  if command -v git >/dev/null 2>&1 && [ -d "$GT_ROOT/.git" ] || [ -f "$GT_ROOT/.git" ]; then
+    GTRUNTIME_REF=$(git -C "$GT_ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")
+  else
+    GTRUNTIME_REF="unknown"
+  fi
+fi
+
 require_dir "$GT_ROOT"
+
+# Validate canary workspace has required components
+if [ ! -d "$GT_ROOT/.beads/formulas" ]; then
+  fail "Canary workspace missing .beads/formulas directory: $GT_ROOT/.beads/formulas"
+fi
+
+if [ ! -d "$GT_ROOT/gt_runtime_doc" ]; then
+  fail "Canary workspace missing gt_runtime_doc directory: $GT_ROOT/gt_runtime_doc"
+fi
+
+log "Using GTRuntime from: $GT_ROOT (ref: $GTRUNTIME_REF)"
 
 if [ -z "${GT_WEB_AUTH_TOKEN:-}" ]; then
   fail "GT_WEB_AUTH_TOKEN is required for canary deployment"
@@ -138,6 +161,7 @@ $DOCKER_CMD run -d \
   -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
   -e GT_WEB_ALLOW_REMOTE=1 \
   --label "gastown_ref=$GASTOWN_REF" \
+  --label "gtruntime_ref=$GTRUNTIME_REF" \
   --label "env_config_ref=$ENV_CONFIG_REF" \
   "$IMAGE_TAG" >/dev/null
 
@@ -173,7 +197,9 @@ cat <<META > "$STATE_JSON"
   "image": "$IMAGE_TAG",
   "previous_image": "$PREVIOUS_IMAGE",
   "gastown_ref": "$GASTOWN_REF",
+  "gtruntime_ref": "$GTRUNTIME_REF",
   "env_config_ref": "$ENV_CONFIG_REF",
+  "gt_root": "$GT_ROOT",
   "canary_port": "$CANARY_PORT"
 }
 META
@@ -182,7 +208,9 @@ cat <<META > "$STATE_ENV"
 CURRENT_IMAGE="$IMAGE_TAG"
 PREVIOUS_IMAGE="$PREVIOUS_IMAGE"
 GASTOWN_REF="$GASTOWN_REF"
+GTRUNTIME_REF="$GTRUNTIME_REF"
 ENV_CONFIG_REF="$ENV_CONFIG_REF"
+GT_ROOT="$GT_ROOT"
 CONTAINER_NAME="$CONTAINER_NAME"
 CANARY_PORT="$CANARY_PORT"
 META
