@@ -30,9 +30,17 @@ GC is destructive. This formula errs on the side of caution:
 - Aggressive mode: Includes old but possibly-recoverable state
 
 Running `gt doctor --fix` handles most of this. This formula wraps it with
-reporting and multi-rig scope."""
+reporting and multi-rig scope.
+
+## Dog Timeout Protection
+
+Dogs have a 10-minute timeout. This formula is optimized to complete within
+that window by:
+- Skipping slow operations (beads duplicate cleanup)
+- Using timeout wrappers on long-running commands
+- Focusing on essential session/process cleanup"""
 formula = "mol-session-gc"
-version = 1
+version = 2
 
 [squash]
 trigger = "on_complete"
@@ -76,9 +84,12 @@ needs = ["determine-mode"]
 description = """
 Identify garbage without removing it yet.
 
-**1. Run doctor in preview mode:**
+**⚠️ TIMEOUT PROTECTION:**
+Use timeouts to prevent this step from blocking dog execution.
+
+**1. Run doctor in preview mode (2-minute timeout):**
 ```bash
-gt doctor -v
+timeout 120 gt doctor -v 2>&1 || echo "Doctor preview timed out"
 # Shows what would be cleaned, doesn't do it
 ```
 
@@ -87,16 +98,18 @@ gt doctor -v
 - orphan-processes: Claude processes to terminate
 - wisp-gc: Wisps to delete
 
-**3. Additional scans (for aggressive mode):**
+**3. Additional scans (for aggressive mode, with timeouts):**
 ```bash
-# Old branches
-git branch --list 'polecat/*' | while read branch; do
-  last_commit=$(git log -1 --format=%ct "$branch")
-  # If > 7 days old and no matching polecat, candidate for cleanup
-done
+# Old branches (30s timeout)
+timeout 30 bash -c '
+  git branch --list "polecat/*" 2>/dev/null | while read branch; do
+    last_commit=$(git log -1 --format=%ct "$branch" 2>/dev/null)
+    echo "Branch: $branch, last_commit: $last_commit"
+  done
+' || echo "Branch scan timed out"
 
-# Old state files
-find ~/.gt/ -name "*.state" -mtime +7
+# Old state files (30s timeout)
+timeout 30 find ~/.gt/ -name "*.state" -mtime +7 2>/dev/null | head -50 || true
 ```
 
 **4. Compile cleanup manifest:**
@@ -106,7 +119,10 @@ Record each item to be cleaned with:
 - Age
 - Reason for cleanup
 
-**Exit criteria:** Cleanup manifest ready, nothing deleted yet."""
+**Note:** If scans time out, proceed with whatever was found.
+Partial cleanup is better than no cleanup.
+
+**Exit criteria:** Cleanup manifest ready (possibly partial), nothing deleted yet."""
 
 [[steps]]
 id = "execute-gc"
@@ -115,30 +131,48 @@ needs = ["preview-cleanup"]
 description = """
 Actually remove the garbage.
 
-**1. Run doctor with fix:**
+**⚠️ TIMEOUT PROTECTION:**
+Dogs have a 10-minute timeout. Use timeout wrappers on all operations.
+Skip slow operations entirely (beads duplicate cleanup takes 30+ minutes).
+
+**1. Run doctor with fix (5-minute timeout):**
 ```bash
-gt doctor --fix
+timeout 300 gt doctor --fix 2>&1 || echo "Doctor timed out or failed, continuing..."
 # This handles sessions, processes, and wisps
+# If it times out, continue with partial cleanup
 ```
 
-**2. For aggressive mode, additional cleanup:**
+**2. Skip beads doctor operations:**
+DO NOT run `bd doctor --fix` - it takes 30+ minutes due to duplicate cleanup.
+The session/process cleanup from gt doctor is sufficient for dog work.
+Beads cleanup should be handled by a separate, longer-running process.
+
+**3. For aggressive mode, additional cleanup (with timeouts):**
 ```bash
-# Old branches (if aggressive mode)
-git branch -D <old-branch>
+# Old branches (if aggressive mode) - 60s timeout
+timeout 60 bash -c '
+  git branch --list "polecat/*" 2>/dev/null | while read branch; do
+    last_commit=$(git log -1 --format=%ct "$branch" 2>/dev/null || echo 0)
+    if [ $(($(date +%s) - last_commit)) -gt 604800 ]; then
+      git branch -D "$branch" 2>/dev/null || true
+    fi
+  done
+' || echo "Branch cleanup timed out"
 
-# Old state files (if aggressive mode)
-rm <state-file>
+# Old state files (if aggressive mode) - 30s timeout
+timeout 30 find ~/.gt/ -name "*.state" -mtime +7 -delete 2>/dev/null || true
 ```
 
-**3. Track what was deleted:**
+**4. Track what was deleted:**
 Record each item actually removed for the report.
 
 **Safety checks:**
 - Never delete active sessions (tmux list-clients)
 - Never delete branches with uncommitted polecat work
 - Never delete wisps < 1 hour old
+- Total execution target: < 8 minutes (buffer for 10-min dog timeout)
 
-**Exit criteria:** Garbage collected."""
+**Exit criteria:** Garbage collected (or timed out gracefully)."""
 
 [[steps]]
 id = "verify-cleanup"
@@ -147,22 +181,25 @@ needs = ["execute-gc"]
 description = """
 Confirm garbage was actually removed.
 
-**1. Re-run doctor to verify:**
+**⚠️ TIMEOUT PROTECTION:**
+Keep verification quick - dog timeout buffer is limited at this point.
+
+**1. Quick doctor verify (60s timeout):**
 ```bash
-gt doctor -v
+timeout 60 gt doctor -v 2>&1 | head -50 || echo "Verify timed out"
 # Should show no issues (or fewer issues)
 ```
 
-**2. Check for stragglers:**
+**2. Check for stragglers (quick checks only):**
 ```bash
 # Tmux sessions
-tmux list-sessions 2>/dev/null
+tmux list-sessions 2>/dev/null | wc -l || echo "0"
 
 # Claude processes
-pgrep -f claude
+pgrep -f claude | wc -l || echo "0"
 
-# Wisps
-ls .beads-wisp/ 2>/dev/null | wc -l
+# Wisps (just count, don't list)
+ls .beads-wisp/ 2>/dev/null | wc -l || echo "0"
 ```
 
 **3. Compare before/after:**
@@ -170,7 +207,10 @@ ls .beads-wisp/ 2>/dev/null | wc -l
 - Processes before: N → after: M
 - Wisps before: N → after: M
 
-**Exit criteria:** Cleanup verified."""
+**Note:** If execute-gc timed out, verification may show partial results.
+This is acceptable - report what was cleaned.
+
+**Exit criteria:** Cleanup verified (or partial verification completed)."""
 
 [[steps]]
 id = "report-gc"
