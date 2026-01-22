@@ -221,9 +221,9 @@ Create summary report of garbage collection.
 
 **1. Generate report:**
 ```markdown
-## Session GC Report: {{timestamp}}
+## Session GC Report: [TIMESTAMP]
 
-**Mode**: {{mode}}
+**Mode**: [MODE]
 
 ### Summary
 | Type | Before | After | Cleaned |
@@ -235,27 +235,21 @@ Create summary report of garbage collection.
 | State files | X | Y | Z |
 
 ### Items Cleaned
-{{#each cleaned}}
-- {{type}}: {{identifier}} (age: {{age}}, reason: {{reason}})
-{{/each}}
+- [TYPE]: [ID] (age: [AGE], reason: [REASON])
+- ... (list each cleaned item)
 
 ### Errors
-{{#if errors}}
-{{#each errors}}
-- {{item}}: {{error}}
-{{/each}}
-{{else}}
-None
-{{/if}}
+- [ITEM]: [ERROR] (if any)
+- None (if no errors)
 
 ### Space Recovered
-~{{bytes_freed}} bytes
+~[BYTES] bytes
 ```
 
 **2. Send to Deacon:**
 ```bash
-gt mail send deacon/ -s "GC complete: {{total_cleaned}} items" \
-  -m "{{report}}"
+gt mail send deacon/ -s "GC complete: [COUNT] items" \
+  -m "[REPORT_CONTENT]"
 ```
 
 **Exit criteria:** Report sent."""
@@ -270,9 +264,9 @@ Signal work complete and return to available pool.
 **1. Signal completion to Deacon:**
 ```bash
 gt mail send deacon/ -s "DOG_DONE $(hostname)" -m "Task: session-gc
-Mode: {{mode}}
-Items cleaned: {{total_cleaned}}
-Space recovered: {{bytes_freed}}
+Mode: [MODE]
+Items cleaned: [COUNT]
+Space recovered: [BYTES]
 Status: COMPLETE
 
 Ready for next assignment."
@@ -286,5 +280,4 @@ Dog returns to available state in the pool.
 [vars]
 [vars.mode]
 description = "GC mode: 'conservative' or 'aggressive'"
-required = true
 default = "conservative"
