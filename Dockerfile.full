@@ -26,7 +26,7 @@ RUN apk add --no-cache \
     npm \
     && addgroup -S gastown \
     && adduser -S -G gastown -u 10001 -s /bin/bash gastown \
-    && npm install -g @anthropic-ai/claude-code
+    && npm install -g @anthropic-ai/claude-code @openai/codex
 
 ENV GT_ROOT=/gt
 ENV HOME=/home/gastown

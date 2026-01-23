@@ -20,6 +20,11 @@ GTRUNTIME_REF=${GTRUNTIME_REF:-}
 STATE_DIR=${CANARY_STATE_DIR:-"$GT_ROOT/logs"}
 # Claude credentials directory - persists login across container restarts
 CLAUDE_CREDS_DIR=${CLAUDE_CREDS_DIR:-/home/shisui/.claude-canary}
+# Codex credentials directory - persists login across container restarts
+CODEX_CREDS_DIR=${CODEX_CREDS_DIR:-/home/shisui/.codex-canary}
+# Proxy configuration for Claude/Codex API access (Clash on HK server)
+HTTP_PROXY=${HTTP_PROXY:-http://host.docker.internal:7890}
+HTTPS_PROXY=${HTTPS_PROXY:-http://host.docker.internal:7890}
 STATE_JSON=${CANARY_STATE_JSON:-"$STATE_DIR/canary-deploy.json"}
 STATE_ENV=${CANARY_STATE_ENV:-"$STATE_DIR/canary-deploy.env"}
 
@@ -88,6 +93,25 @@ setup_claude_creds() {
 
 setup_claude_creds
 
+# Set up Codex credentials directory for container
+setup_codex_creds() {
+    if [ ! -d "$CODEX_CREDS_DIR" ]; then
+        log "Creating Codex credentials directory: $CODEX_CREDS_DIR"
+        mkdir -p "$CODEX_CREDS_DIR"
+        # Copy existing credentials if available
+        if [ -d "$HOME/.codex" ]; then
+            cp -r "$HOME/.codex/auth.json" "$CODEX_CREDS_DIR/" 2>/dev/null || true
+            cp -r "$HOME/.codex/config.toml" "$CODEX_CREDS_DIR/" 2>/dev/null || true
+            log "Copied existing Codex credentials"
+        fi
+    fi
+    # Ensure directory is accessible by container user (uid 10001)
+    chmod 755 "$CODEX_CREDS_DIR"
+    chmod 644 "$CODEX_CREDS_DIR"/* 2>/dev/null || true
+}
+
+setup_codex_creds
+
 IMAGE_TAG="gastown:canary-full-${GASTOWN_REF:0:12}"
 
 log "=== Full Gas Town Canary Deployment ==="
@@ -132,12 +156,19 @@ log "Starting full canary container on port $CANARY_PORT"
 $DOCKER_CMD run -d \
     --name "$CONTAINER_NAME" \
     --restart=always \
+    --add-host=host.docker.internal:host-gateway \
     -p "$CANARY_PORT:8080" \
     -v "$GT_ROOT:/gt" \
     -v "$CLAUDE_CREDS_DIR:/home/gastown/.claude" \
+    -v "$CODEX_CREDS_DIR:/home/gastown/.codex" \
     -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
     -e GT_WEB_ALLOW_REMOTE=1 \
     -e GT_ROOT=/gt \
+    -e HTTP_PROXY="$HTTP_PROXY" \
+    -e HTTPS_PROXY="$HTTPS_PROXY" \
+    -e http_proxy="$HTTP_PROXY" \
+    -e https_proxy="$HTTPS_PROXY" \
+    -e NO_PROXY="localhost,127.0.0.1,host.docker.internal" \
     --label "gastown_ref=$GASTOWN_REF" \
     --label "gtruntime_ref=$GTRUNTIME_REF" \
     --label "deploy_mode=full" \

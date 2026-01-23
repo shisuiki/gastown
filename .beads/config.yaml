@@ -60,7 +60,7 @@
 # - linear.api-key
 # - github.org
 # - github.repo
-sync-branch: beads-sync
+# sync-branch removed - gastown uses TerraNomadicCity rig beads instead
 
 # Gas Town custom types (bd-t5o8i)
 # These types are used by Gas Town infrastructure but are not core beads types.
