@@ -23,11 +23,63 @@ Witnesses detect it and escalate to the Mayor.
 The Deacon's agent bead last_activity timestamp is updated during each patrol
 cycle. Witnesses check this timestamp to verify health."""
 formula = "mol-deacon-patrol"
-version = 8
+version = 9
+
+[[steps]]
+id = "state-snapshot"
+title = "Capture state feedback for comparison"
+description = """
+Capture explicit state feedback at patrol start for comparison against expected state.
+
+This step provides timestamps and duration information to help detect drift
+between expected and actual agent states (Issue D: State Feedback - hq-wpg3s).
+
+**Step 1: Capture current timestamp**
+```bash
+echo "Patrol started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+**Step 2: List dog states with work duration**
+```bash
+for dog in ~/gt/deacon/dogs/*/; do
+    name=$(basename "$dog")
+    json="$dog/.dog.json"
+    if [ -f "$json" ]; then
+        state=$(jq -r '.state // "unknown"' "$json")
+        work_started=$(jq -r '.work.started_at // "N/A"' "$json")
+        if [ "$state" = "working" ] && [ "$work_started" != "N/A" ]; then
+            # Calculate duration in seconds
+            start_epoch=$(date -d "$work_started" +%s 2>/dev/null || echo 0)
+            now_epoch=$(date +%s)
+            duration=$((now_epoch - start_epoch))
+            echo "Dog $name: state=$state, work_duration=${duration}s"
+        else
+            echo "Dog $name: state=$state"
+        fi
+    fi
+done
+```
+
+**Step 3: Record expected state assertions**
+For each working dog, note the expected completion time based on task type:
+- Infrastructure tasks (orphan-scan, session-gc): expect < 10 min
+- Plugin rebuilds: expect < 5 min
+- Formula dispatch: expect < 30 min
+
+If actual duration exceeds expected by 2x, flag for investigation in dog-health-check.
+
+**State Feedback Contract:**
+This step establishes baseline state for comparison. Later steps can detect:
+- Duration drift: work taking longer than expected
+- State drift: expected "idle" but found "working"
+- Session drift: expected "alive" but session is gone
+
+Exit criteria: State snapshot captured, timestamps noted."""
 
 [[steps]]
 id = "inbox-check"
 title = "Handle callbacks from agents"
+needs = ["state-snapshot"]
 description = """
 Handle callbacks from agents.
 
@@ -85,45 +137,9 @@ Callbacks may spawn new polecats, update issue state, or trigger other actions.
 Keep inbox near-empty - only unprocessed items should remain."""
 
 [[steps]]
-id = "orphan-process-cleanup"
-title = "Clean up orphaned claude subagent processes"
-needs = ["inbox-check"]
-description = """
-Clean up orphaned claude subagent processes.
-
-Claude Code's Task tool spawns subagent processes that sometimes don't clean up
-properly after completion. These accumulate and consume significant memory.
-
-**Detection method:**
-Orphaned processes have no controlling terminal (TTY = "?"). Legitimate claude
-instances in terminals have a TTY like "pts/0".
-
-**Run cleanup:**
-```bash
-gt deacon cleanup-orphans
-```
-
-This command:
-1. Lists all claude/codex processes with `ps -eo pid,tty,comm`
-2. Filters for TTY = "?" (no controlling terminal)
-3. Sends SIGTERM to each orphaned process
-4. Reports how many were killed
-
-**Why this is safe:**
-- Processes in terminals (your personal sessions) have a TTY - they won't be touched
-- Only kills processes that have no controlling terminal
-- These orphans are children of the tmux server with no TTY, indicating they're
-  detached subagents that failed to exit
-
-**If cleanup fails:**
-Log the error but continue patrol - this is best-effort cleanup.
-
-**Exit criteria:** Orphan cleanup attempted (success or logged failure)."""
-
-[[steps]]
 id = "trigger-pending-spawns"
 title = "Nudge newly spawned polecats"
-needs = ["orphan-process-cleanup"]
+needs = ["inbox-check"]
 description = """
 Nudge newly spawned polecats that are ready for input.
 
@@ -420,55 +436,9 @@ gt mail send mayor/ -s "Health: <rig> <component> unresponsive" \\
 Reset unresponsive_cycles to 0 when component responds normally."""
 
 [[steps]]
-id = "canary-health-check"
-title = "Check canary container health"
-needs = ["health-scan"]
-description = """
-Check canary container status and alert if unhealthy.
-
-```bash
-if [ "${CANARY_HEALTH_CHECK:-1}" != "1" ]; then
-  echo "CANARY_HEALTH_CHECK disabled; skipping"
-  exit 0
-fi
-
-CONTAINER_NAME=${CONTAINER_NAME:-${CANARY_CONTAINER:-gastown-canary}}
-DOCKER_CMD="docker"
-if ! docker info >/dev/null 2>&1; then
-  if sudo -n docker info >/dev/null 2>&1; then
-    DOCKER_CMD="sudo docker"
-  else
-    echo "Docker unavailable; skipping"
-    exit 0
-  fi
-fi
-
-if ! $DOCKER_CMD inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-  gt mail send mayor/ -s "Canary missing: $CONTAINER_NAME" \
-    -m "Canary container not found on $(hostname)."
-  exit 0
-fi
-
-status=$($DOCKER_CMD inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "unknown")
-if [ "$status" != "healthy" ]; then
-  gt mail send mayor/ -s "Canary unhealthy: $CONTAINER_NAME" \
-    -m "Health status: $status on $(hostname)."
-
-  if [ "${CANARY_AUTO_RESTART:-0}" = "1" ]; then
-    $DOCKER_CMD restart "$CONTAINER_NAME"
-    sleep 10
-    $DOCKER_CMD inspect --format '{{.State.Health.Status}}' "$CONTAINER_NAME" || true
-  fi
-fi
-```
-
-**Exit criteria:** Health checked; alerts sent on missing/unhealthy container.
-"""
-
-[[steps]]
 id = "zombie-scan"
 title = "Detect zombie polecats (NO KILL AUTHORITY)"
-needs = ["canary-health-check"]
+needs = ["health-scan"]
 description = """
 Defense-in-depth DETECTION of zombie polecats that Witness should have cleaned.
 
@@ -489,25 +459,36 @@ Detection only - Boot handles termination.
 - No hooked work (nothing pending for this polecat)
 - Last activity: older than 10 minutes
 
-**Run the zombie scan (DRY RUN ONLY):**
+**Check for zombie sessions (manual method):**
+
+The `gt deacon zombie-scan` command is not yet implemented (tracked: hq-gsb5).
+Use this manual check instead:
+
 ```bash
-gt deacon zombie-scan --dry-run
+# List polecat sessions and check for zombies
+tmux list-sessions 2>/dev/null | grep -E "^gt-.*polecat" || echo "No polecat sessions"
+
+# For each session found, check if it has active work
+# gt hook <rig>/polecats/<name>  # Should show hooked work if alive
 ```
 
 **NEVER run:**
-- `gt deacon zombie-scan` (without --dry-run)
 - `tmux kill-session`
 - `gt polecat nuke`
 - Any command that terminates a session
 
-**If zombies detected:**
-1. Review the output to confirm they are truly abandoned
-2. File a death warrant for each detected zombie:
+**If zombies detected (via manual check):**
+1. Review the sessions to confirm they are truly abandoned
+2. Escalate to Mayor (gt warrant NOT YET IMPLEMENTED - tracked: hq-5r6q):
    ```bash
-   gt warrant file <polecat> --reason "Zombie detected: no session, no hook, idle >10m"
+   gt mail send mayor/ -s "Zombie detected: <polecat>" \
+     -m "Possible zombie polecat detected. Manual review needed.
+Session: <session-name>
+Last activity: <timestamp>
+Reason: no hook, idle >10m"
    ```
-3. Boot will handle interrogation and execution
-4. Notify the Mayor about Witness failure:
+3. Mayor will coordinate cleanup
+4. Notify about Witness failure:
    ```bash
    gt mail send mayor/ -s "Witness cleanup failure" \
      -m "Filed death warrant for <polecat>. Witness failed to clean up."
@@ -548,7 +529,7 @@ Skip this step if ~/gt/plugins/ does not exist or is empty."""
 [[steps]]
 id = "dog-pool-maintenance"
 title = "Maintain dog pool"
-needs = ["canary-health-check"]
+needs = ["health-scan"]
 description = """
 Ensure dog pool has available workers for dispatch.
 
@@ -586,11 +567,15 @@ id = "dog-health-check"
 title = "Check for stuck dogs"
 needs = ["dog-pool-maintenance"]
 description = """
-Check for dogs that have been working too long (stuck).
+Check for dogs that have been working too long (stuck) OR whose sessions have exited.
 
 Dogs dispatched via `gt dog dispatch --plugin` are marked as "working" with
 a work description like "plugin:rebuild-gt". If a dog hangs, crashes, or
 takes too long, it needs intervention.
+
+**NON-AGENTIC ENFORCEMENT**: This step detects session exit automatically,
+without waiting for the dog to send DOG_DONE mail. This prevents stuck dogs
+when the agent crashes or exits without cleanup (tracked: hq-iltag).
 
 **Step 1: List working dogs**
 ```bash
@@ -598,8 +583,37 @@ gt dog list --json
 # Filter for state: "working"
 ```
 
+**Step 1.5: Check session existence (NON-AGENTIC ENFORCEMENT)**
+For each working dog, verify its tmux session still exists:
+```bash
+# Session name format: gt-<town>-deacon-<dogname>
+TOWN=$(basename "$GT_ROOT")  # or hardcode: gt
+SESSION="gt-${TOWN}-deacon-<name>"
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    # Session is GONE but dog marked as working = session exited without DOG_DONE
+    # This is the non-agentic enforcement - clear dog immediately
+    echo "Dog <name> session exited without DOG_DONE - auto-clearing"
+
+    # Reset dog state to idle
+    jq '.state = "idle" | del(.work)' ~/gt/deacon/dogs/<name>/.dog.json > /tmp/dog.json && \
+      mv /tmp/dog.json ~/gt/deacon/dogs/<name>/.dog.json
+
+    # Notify Mayor about auto-clear (different from timeout)
+    gt mail send mayor/ -s "DOG_EXIT <name>" \
+      -m "Dog <name> session exited without DOG_DONE callback.
+Auto-cleared to idle state (non-agentic enforcement).
+Work was: <work_description>
+This may indicate: context limit, crash, or missed termination step.
+Related: hq-iltag"
+
+    # Skip duration check for this dog - already handled
+    continue
+fi
+```
+
 **Step 2: Check work duration**
-For each working dog:
+For each working dog (that still has a session):
 ```bash
 gt dog status <name> --json
 # Check: work_started_at, current_work
@@ -620,12 +634,15 @@ is_stuck = duration > stuck_threshold
 
 For dogs working > timeout:
 ```bash
-# Option A: File death warrant (Boot handles termination)
-gt warrant file deacon/dogs/<name> --reason "Stuck: working on <work> for <duration>"
+# NOTE: gt warrant and gt dog clear NOT YET IMPLEMENTED (tracked: hq-5r6q)
+# Manual workaround: reset dog state directly
+jq '.state = "idle" | del(.work)' ~/gt/deacon/dogs/<name>/.dog.json > /tmp/dog.json && \\
+  mv /tmp/dog.json ~/gt/deacon/dogs/<name>/.dog.json
 
-# Option B: Force clear work and notify
-gt dog clear <name> --force
-gt mail send deacon/ -s "DOG_TIMEOUT <name>" -m "Dog <name> timed out on <work> after <duration>"
+# Notify Mayor about timeout
+gt mail send mayor/ -s "DOG_TIMEOUT <name>" \\
+  -m "Dog <name> timed out. Working state with no work for <duration>.
+Manual reset applied. Please investigate root cause (tracked: hq-vggp)."
 ```
 
 **Decision matrix:**
@@ -633,8 +650,8 @@ gt mail send deacon/ -s "DOG_TIMEOUT <name>" -m "Dog <name> timed out on <work> 
 | Duration over timeout | Action |
 |----------------------|--------|
 | < 2x timeout | Log warning, check next cycle |
-| 2x - 5x timeout | File death warrant |
-| > 5x timeout | Force clear + escalate to Mayor |
+| 2x - 5x timeout | Reset dog + notify Mayor |
+| > 5x timeout | Reset dog + escalate to Mayor + remove from pool |
 
 **Step 4: Track chronic failures**
 If same dog gets stuck repeatedly:
@@ -888,6 +905,26 @@ The idle counter was auto-incremented. Continue to next patrol cycle
 - No polling or fixed sleep intervals
 
 If context is HIGH:
+
+**PRE-TERMINATION CHECKPOINT (Issue E: hq-wpg3s)**
+Before exiting, run checkpoint validation:
+```bash
+# 1. Verify no working dogs left unhandled
+working_dogs=$(gt dog list --json | jq '[.[] | select(.state == "working")] | length')
+if [ "$working_dogs" -gt 0 ]; then
+    echo "WARNING: $working_dogs dogs still working - add to handoff"
+fi
+
+# 2. Check for unprocessed mail
+unread=$(gt mail inbox --json 2>/dev/null | jq 'length')
+if [ "$unread" -gt 0 ]; then
+    echo "WARNING: $unread unread messages - should be processed or noted"
+fi
+
+# 3. Update heartbeat for successor
+echo '{"timestamp": "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'", "context": "high", "handoff": true}' > ~/gt/deacon/heartbeat.json
+```
+
 - Write state to persistent storage
 - Exit cleanly
 - Let the daemon orchestrator respawn a fresh Deacon
