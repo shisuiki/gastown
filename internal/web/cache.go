@@ -304,7 +304,7 @@ func mapToStatus(m map[string]interface{}) StatusResponse {
 // Cache TTL constants for different data types.
 const (
 	// StatusCacheTTL for dashboard status.
-	StatusCacheTTL = 10 * time.Second
+	StatusCacheTTL = 5 * time.Second
 
 	// ConvoyCacheTTL for convoy data.
 	ConvoyCacheTTL = 15 * time.Second
@@ -320,6 +320,12 @@ const (
 
 	// CrewCacheTTL for crew lists and status.
 	CrewCacheTTL = 10 * time.Second
+
+	// CICDStatusCacheTTL for CI/CD dashboard snapshot.
+	CICDStatusCacheTTL = 5 * time.Second
+
+	// CICDWorkflowsCacheTTL for CI/CD workflow/run lists.
+	CICDWorkflowsCacheTTL = 15 * time.Second
 
 	// GitCacheTTL for git data.
 	GitCacheTTL = 30 * time.Second

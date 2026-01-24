@@ -100,6 +100,7 @@ type StatusResponse struct {
 	MergeQueue []MergeQueueRow `json:"merge_queue"`
 	Agents     []AgentRow      `json:"agents"`
 	Mail       MailStatus      `json:"mail"`
+	CICD       CICDStatus      `json:"cicd"`
 }
 
 // DaemonStatus represents daemon health.
@@ -157,6 +158,9 @@ func (h *GUIHandler) buildStatusUncached() StatusResponse {
 
 	// Get mail status (medium cost)
 	status.Mail = h.getMailStatus()
+
+	// CI/CD status snapshot
+	status.CICD = h.getCICDStatus()
 
 	return status
 }
