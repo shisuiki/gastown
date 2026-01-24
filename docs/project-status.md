@@ -1,3 +1,17 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth:
+  - "deploy/canary-deploy-full.sh"
+  - "container-usage.md"
+---
+
 # Gas Town Project Status
 
 **Last Updated:** 2026-01-24
@@ -143,3 +157,8 @@ bd mol wisp mol-canary-coldstart-test
 
 - [Cold-Start Procedure](../gt_runtime_doc/operations/coldstart-procedure.md)
 - [Container Usage Guide](container-usage.md)
+
+## Scope
+
+- This page summarizes project structure, branch strategy, and deployment signals.
+- Operators should read this before troubleshooting canary vs. production differences.

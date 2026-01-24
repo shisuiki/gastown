@@ -1,3 +1,19 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "deploy/canary-deploy-full.sh"
+  - "deploy/canary-deploy.sh"
+---
+
 # Gas Town Container Usage Guide
 
 **Last Updated:** 2026-01-24
@@ -181,6 +197,23 @@ Credentials stored at:
 ```bash
 docker exec gastown-canary codex --version
 ```
+
+## Preconditions
+- `deploy/canary-deploy-full.sh` or `deploy/canary-deploy.sh` is available and executable.
+- GT root tokens (`GT_WEB_AUTH_TOKEN`, `GT_ROOT`, `CLAUDE_CREDS_DIR`, `CODEX_CREDS_DIR`) are exported.
+- Docker daemon runs on the host and the `gastown-canary` image exists.
+
+## Steps
+1. Run `deploy/canary-deploy-full.sh` to build the full container image and start `gastown-canary`.
+2. Use `docker exec gastown-canary gt status` and `docker logs gastown-canary --tail 200` to confirm services are healthy.
+3. Attach to the container for maintenance: `docker exec -it gastown-canary bash`.
+4. If redeploying, run the deploy script again with overrides (`CANARY_PORT`, credential directories) and watch for automatic rollback.
+5. If rollback is required, follow the “Rollback” section above and update the runbook bead with results.
+
+## Verification
+- `docker ps --filter \"name=gastown-canary\"`
+- `curl -fsS http://localhost:8081/_/health`
+- `./deploy/canary-deploy-full.sh --help`
 
 **Re-authenticate (if needed):**
 ```bash

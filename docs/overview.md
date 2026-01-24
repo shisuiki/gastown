@@ -96,7 +96,9 @@ When issues close, the convoy lands. See [Convoys](concepts/convoy.md) for detai
 - [Installing Gas Town](INSTALLING.md)
 - [Mayor → Crew Deploy Workflow](MAYOR-CREW-DEPLOY.md)
 - [Canary Deploy Workflow](CANARY-DEPLOY.md)
-- [Nightmare Ops Notes](operations/nightingale-ops.md)
+- [Nightingale Ops Notes](operations/nightingale-ops.md)
+- [Container Usage Guide](container-usage.md)
+- [Project Status](project-status.md)
 - [Docs inventory](_inventory.md) for a living map of these resources.
 
 ## Web UI resources
@@ -142,6 +144,7 @@ When issues close, the convoy lands. See [Convoys](concepts/convoy.md) for detai
 - [Failure modes report (archived)](FAILURE_MODES_REPORT.md)
 - [Gastown research report (archived)](gastown-research-report.md)
 - [Gastown WebUI research report (archived)](gastown-webui-report.md)
+- [Dog Timeout Fix report (archived)](DOG-TIMEOUT-FIX-REPORT.md)
 
 ## Crew vs Polecats
 

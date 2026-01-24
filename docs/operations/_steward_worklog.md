@@ -19,6 +19,7 @@ source_of_truth: []
 - Tagged each `docs/*.md` with frontmatter (type/status/owner/etc) and ensured runbooks include TTLs plus “Preconditions/Steps/Verification” sections referencing current scripts/configs.
 - Moved report artifacts into `docs/archive/2026-01`, leaving stubs at their original paths and documenting the archive contents.
 - Added `scripts/docs_lint.sh`, `Makefile` target, and a GitHub workflow so the docs surface is linted automatically on future changes.
+- Brought the newly added docs (`container-usage.md`, `project-status.md`, `operations/unified-cicd-workflow.md`) under the same metadata requirements, linked them from the overview/operations landing pages, and archived the `DOG-TIMEOUT-FIX-REPORT.md` along with its stub.
 
 ## Scope
 - Scope description pending.

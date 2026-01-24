@@ -20,6 +20,7 @@ source_of_truth: []
 - [Nightingale Ops](nightingale-ops.md)
 - [Canary Deploy Workflow](../CANARY-DEPLOY.md)
 - [Mayor → Crew Deploy Workflow](../MAYOR-CREW-DEPLOY.md)
+- [Unified CI/CD Workflow](unified-cicd-workflow.md)
 
 ### Validate
 - [Canary Validation Runbook](canary-validation-runbook.md)
