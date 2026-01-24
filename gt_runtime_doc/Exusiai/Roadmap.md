@@ -1,20 +1,20 @@
 # Roadmap
 
 ## Phase 0: Requirements
-- Inspect current mail injection path (`gt mail check --inject`) and hook usage.
-- Identify reliable tmux idle signal for 2-minute inactivity.
-- Decide on fallback behavior when idle cannot be determined.
+- Confirm desired behavior: delay reminders without dropping them.
+- Identify safe way to reschedule inject checks inside tmux without spamming.
+- Define a marker mechanism to avoid multiple pending timers.
 
-## Phase 1: Mail injection gating
-- Add idle-time check before emitting injected mail reminders.
-- Use tmux session activity or last-attached timestamps to compute idle time.
-- Make inject mode silent if idle threshold not met.
+## Phase 1: Delayed injection scheduling
+- When inject is skipped due to activity, schedule a delayed retry (sleep 120s).
+- Store a runtime marker with next scheduled time to avoid duplicate timers.
+- Clear marker once a reminder is successfully injected.
 
 ## Phase 2: Validation
+- Ensure inject mode remains silent when unread=0.
+- Ensure delayed retry re-checks idle state and re-schedules if still active.
 - Ensure non-inject modes are unchanged.
-- Ensure inject mode remains non-fatal and silent on errors.
-- Confirm idle threshold is 2 minutes.
 
 ## Acceptance criteria
-- `gt mail check --inject` emits reminders only after 2 minutes of tmux inactivity.
-- Active sessions are not interrupted by mail injection.
+- Reminders are delayed (not dropped) until tmux idle for 2 minutes.
+- Only one pending retry is scheduled per session.
