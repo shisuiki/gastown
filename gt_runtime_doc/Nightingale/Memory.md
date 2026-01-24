@@ -1,14 +1,11 @@
 # Memory
 
-- hq-rxziu DEPLOY task completed (TEST_ID: coldstart-20260124-155857).
-- Container rebuilt from canary branch (gastown:canary-full-5cb8314d1640).
-- Results: external PASSING (7/7), internal NO_RESPONSE from canary mayor.
-- Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-155857.json
-- web_ui now passing (was failing in previous test coldstart-20260124-132053).
-- Issues discovered:
-  - gt mayor start uses invalid --no-news flag (Claude Code 2.1.19 doesn't have it)
-  - Claude credentials permissions were wrong (fixed: chown to uid 10001)
-  - Beads directory permissions were restrictive (fixed: chmod o+rw)
-- Previous follow-ups still open:
-  - hq-t00sx: web_ui probe failure (now resolved by container rebuild)
-  - hq-ifo2u: mayor NO_RESPONSE (root cause identified: --no-news flag bug)
+- hq-8ynf4 DEPLOY task (proxy fix) completed (TEST_ID: coldstart-20260124-175829).
+- Container rebuilt from canary branch (7dda3265 - proxy fix).
+- Proxy fix verified: container can reach api.anthropic.com through host.docker.internal:7890.
+- Results: external 6/7 PASSING (gt_status timeout), internal AUTH_EXPIRED.
+- Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-175829.json
+- Mayor session (hq-mayor) now starts and persists.
+- Blocking issue: Claude OAuth token expired (401 authentication_error).
+- Needs manual re-authentication via /login in container.
+- Fixed: .claude directory permissions (chown to uid 10001).
