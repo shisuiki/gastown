@@ -5,17 +5,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/constants"
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/tmux"
 )
 
 const mailInjectIdleThreshold = 2 * time.Minute
+const mailInjectMarkerName = "mail_inject_pending.json"
 
 func runMailCheck(cmd *cobra.Command, args []string) error {
 	// Determine which inbox (priority: --identity flag, auto-detect)
@@ -67,28 +70,33 @@ func runMailCheck(cmd *cobra.Command, args []string) error {
 		return enc.Encode(result)
 	}
 
-	// Inject mode: only inject if the tmux session has been idle long enough
+	// Inject mode: delay until the tmux session has been idle long enough
 	if mailCheckInject {
-		if !shouldInjectMail() {
+		if unread == 0 {
+			clearMailInjectMarker(workDir)
 			return nil
 		}
-		if unread > 0 {
-			// Get subjects for context
-			messages, _ := mailbox.ListUnread()
-			var subjects []string
-			for _, msg := range messages {
-				subjects = append(subjects, fmt.Sprintf("- %s from %s: %s", msg.ID, msg.From, msg.Subject))
-			}
-
-			fmt.Println("<system-reminder>")
-			fmt.Printf("You have %d unread message(s) in your inbox.\n\n", unread)
-			for _, s := range subjects {
-				fmt.Println(s)
-			}
-			fmt.Println()
-			fmt.Println("Run 'gt mail inbox' to see your messages, or 'gt mail read <id>' for a specific message.")
-			fmt.Println("</system-reminder>")
+		sessionName, ok := canInjectMail()
+		if !ok {
+			scheduleMailInjectRetry(workDir, sessionName)
+			return nil
 		}
+		clearMailInjectMarker(workDir)
+		// Get subjects for context
+		messages, _ := mailbox.ListUnread()
+		var subjects []string
+		for _, msg := range messages {
+			subjects = append(subjects, fmt.Sprintf("- %s from %s: %s", msg.ID, msg.From, msg.Subject))
+		}
+
+		fmt.Println("<system-reminder>")
+		fmt.Printf("You have %d unread message(s) in your inbox.\n\n", unread)
+		for _, s := range subjects {
+			fmt.Println(s)
+		}
+		fmt.Println()
+		fmt.Println("Run 'gt mail inbox' to see your messages, or 'gt mail read <id>' for a specific message.")
+		fmt.Println("</system-reminder>")
 		return nil
 	}
 
@@ -101,23 +109,23 @@ func runMailCheck(cmd *cobra.Command, args []string) error {
 	return NewSilentExit(1)
 }
 
-func shouldInjectMail() bool {
+func canInjectMail() (string, bool) {
 	if os.Getenv("TMUX") == "" {
 		// Not in tmux; fall back to prior behavior.
-		return true
+		return "", true
 	}
 
 	sessionName, err := currentTmuxSessionName()
 	if err != nil || sessionName == "" {
-		return false
+		return "", false
 	}
 
 	idle, err := tmuxSessionIdleDuration(sessionName)
 	if err != nil {
-		return false
+		return sessionName, false
 	}
 
-	return idle >= mailInjectIdleThreshold
+	return sessionName, idle >= mailInjectIdleThreshold
 }
 
 func currentTmuxSessionName() (string, error) {
@@ -160,4 +168,98 @@ func parseTmuxTimestamp(value string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return time.Unix(epoch, 0), nil
+}
+
+type mailInjectMarker struct {
+	NextAttempt string `json:"next_attempt"`
+	Session     string `json:"session,omitempty"`
+}
+
+func scheduleMailInjectRetry(workDir, session string) {
+	markerPath := mailInjectMarkerPath(workDir)
+	if shouldSkipMailInjectSchedule(markerPath) {
+		return
+	}
+
+	nextAttempt := time.Now().UTC().Add(mailInjectIdleThreshold)
+	marker := mailInjectMarker{
+		NextAttempt: nextAttempt.Format(time.RFC3339),
+		Session:     session,
+	}
+	if err := writeMailInjectMarker(markerPath, marker); err != nil {
+		return
+	}
+
+	gtPath, err := exec.LookPath("gt")
+	if err != nil {
+		gtPath = "gt"
+	}
+	command := fmt.Sprintf("sleep %d; cd %s && %s mail check --inject",
+		int(mailInjectIdleThreshold.Seconds()),
+		shellQuote(workDir),
+		shellQuote(gtPath),
+	)
+
+	args := []string{"run-shell"}
+	if session != "" {
+		args = append(args, "-t", session)
+	}
+	args = append(args, command)
+	cmd := exec.Command("tmux", args...)
+	_ = cmd.Run()
+}
+
+func shouldSkipMailInjectSchedule(markerPath string) bool {
+	marker, err := readMailInjectMarker(markerPath)
+	if err != nil {
+		return false
+	}
+	if marker.NextAttempt == "" {
+		return false
+	}
+	next, err := time.Parse(time.RFC3339, marker.NextAttempt)
+	if err != nil {
+		return false
+	}
+	return time.Now().UTC().Before(next)
+}
+
+func clearMailInjectMarker(workDir string) {
+	markerPath := mailInjectMarkerPath(workDir)
+	_ = os.Remove(markerPath)
+}
+
+func mailInjectMarkerPath(workDir string) string {
+	return filepath.Join(workDir, constants.DirRuntime, mailInjectMarkerName)
+}
+
+func readMailInjectMarker(path string) (mailInjectMarker, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return mailInjectMarker{}, err
+	}
+	var marker mailInjectMarker
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return mailInjectMarker{}, err
+	}
+	return marker, nil
+}
+
+func writeMailInjectMarker(path string, marker mailInjectMarker) error {
+	runtimeDir := filepath.Dir(path)
+	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(marker)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
