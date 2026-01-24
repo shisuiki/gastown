@@ -27,12 +27,13 @@
                     <a href="/account" class="nav-link{{if eq .ActivePage "account"}} active{{end}}">Account</a>
                 </div>
             </div>
-            <div class="nav-dropdown{{if or (eq .ActivePage "mail") (eq .ActivePage "workflow") (eq .ActivePage "git")}} active{{end}}" data-menu="dev">
+            <div class="nav-dropdown{{if or (eq .ActivePage "mail") (eq .ActivePage "workflow") (eq .ActivePage "git") (eq .ActivePage "cicd")}} active{{end}}" data-menu="dev">
                 <button class="nav-link nav-dropdown-toggle" type="button" onclick="toggleNavDropdown('dev')">Dev ▾</button>
                 <div class="nav-dropdown-menu">
                     <a href="/mail" class="nav-link{{if eq .ActivePage "mail"}} active{{end}}">Mail</a>
                     <a href="/workflow" class="nav-link{{if eq .ActivePage "workflow"}} active{{end}}">Workflow</a>
                     <a href="/git" class="nav-link{{if eq .ActivePage "git"}} active{{end}}">Git</a>
+                    <a href="/cicd" class="nav-link{{if eq .ActivePage "cicd"}} active{{end}}">CI/CD</a>
                 </div>
             </div>
         </div>

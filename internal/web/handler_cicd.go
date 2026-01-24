@@ -289,9 +289,18 @@ func (h *GUIHandler) fetchCICDRuns(limit int) ([]CICDRunSummary, []string) {
 	cmd.Dir = repoRoot
 
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, []string{"gh CLI not found"}
+		}
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return nil, []string{fmt.Sprintf("gh run list failed: %s", detail)}
+		}
 		return nil, []string{fmt.Sprintf("gh run list failed: %v", err)}
 	}
 
@@ -343,11 +352,17 @@ func (h *GUIHandler) fetchCICDRunDetail(runID int64) (CICDRunDetail, error) {
 	cmd.Dir = repoRoot
 
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
 			return CICDRunDetail{}, fmt.Errorf("gh not installed")
+		}
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return CICDRunDetail{}, fmt.Errorf("gh run view failed: %s", detail)
 		}
 		return CICDRunDetail{}, fmt.Errorf("gh run view failed: %w", err)
 	}

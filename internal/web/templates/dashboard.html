@@ -58,6 +58,11 @@
             </div>
 
             <div class="card">
+                <h2>🧪 CI/CD</h2>
+                <div class="card-content" id="cicd-status">Loading...</div>
+            </div>
+
+            <div class="card">
                 <h2>📊 Rigs</h2>
                 <div class="card-content" id="rigs-list">Loading...</div>
             </div>
@@ -251,6 +256,11 @@
             document.getElementById('mail-status').innerHTML =
                 '<p>Unread: <strong>' + (data.mail.unread || 0) + '</strong></p>' +
                 '<p style="margin-top: 8px;"><a href="/mail">Open Mail Center →</a></p>';
+
+            const cicdEl = document.getElementById('cicd-status');
+            if (cicdEl) {
+                cicdEl.innerHTML = renderCICDCard(data.cicd);
+            }
         }
 
         async function loadActivity() {
@@ -301,16 +311,75 @@
             }
         }
 
+        function cicdBadge(status) {
+            switch ((status || '').toLowerCase()) {
+                case 'passing':
+                    return { label: 'Passing', className: 'badge-green' };
+                case 'failing':
+                    return { label: 'Failing', className: 'badge-red' };
+                case 'degraded':
+                    return { label: 'Degraded', className: 'badge-yellow' };
+                case 'running':
+                    return { label: 'Running', className: 'badge-yellow' };
+                case 'queued':
+                    return { label: 'Queued', className: 'badge-yellow' };
+                default:
+                    return { label: 'Unknown', className: 'badge-yellow' };
+            }
+        }
+
+        function renderCICDCard(cicd) {
+            if (!cicd) {
+                return '<p class="text-muted">No CI/CD data available</p>';
+            }
+
+            const badge = cicdBadge(cicd.overall_status);
+            const runs = (cicd.recent_runs || []).slice(0, 5);
+            const rows = runs.map(run => {
+                const runBadge = cicdBadge(run.status_group);
+                const time = run.created_at ? new Date(run.created_at).toLocaleString() : '-';
+                return '<tr>' +
+                    '<td>' + escapeHtml(run.workflow || '-') + '</td>' +
+                    '<td><span class="badge ' + runBadge.className + '">' + runBadge.label + '</span></td>' +
+                    '<td class="text-muted">' + escapeHtml(time) + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            const table = runs.length
+                ? '<table><tr><th>Workflow</th><th>Status</th><th>Time</th></tr>' + rows + '</table>'
+                : '<p class="text-muted">No recent runs</p>';
+
+            return '<div style="display:flex; justify-content: space-between; align-items:center; margin-bottom:8px;">' +
+                '<span class="text-muted">Overall</span>' +
+                '<span class="badge ' + badge.className + '">' + badge.label + '</span>' +
+                '</div>' +
+                '<div class="text-muted" style="margin-bottom:10px;">' + escapeHtml(cicd.summary || '') + '</div>' +
+                table +
+                '<div style="margin-top: 8px;"><a href="/cicd">Open CI/CD →</a></div>';
+        }
+
+        async function loadCICDStatus() {
+            try {
+                const res = await fetch('/api/cicd/status');
+                const data = await res.json();
+                document.getElementById('cicd-status').innerHTML = renderCICDCard(data);
+            } catch (e) {
+                document.getElementById('cicd-status').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
+            }
+        }
+
         // Initialize
         loadActivity();
         loadIssues();
         loadRoleBeads();
+        loadCICDStatus();
         loadSystemInfo('system-info');
         loadCLIUsage('cli-usage');
         loadCLILimits('cli-limits');
         setInterval(loadActivity, 30000);
         setInterval(loadIssues, 30000);
         setInterval(loadRoleBeads, 30000);
+        setInterval(loadCICDStatus, 30000);
         setInterval(() => loadSystemInfo('system-info'), 60000);
         setInterval(() => loadCLIUsage('cli-usage'), 60000);
         setInterval(() => loadCLILimits('cli-limits'), 60000);

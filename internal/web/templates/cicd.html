@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {{template "head" .}}
+    <title>CI/CD - Gas Town</title>
+    <style>
+        .cicd-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .cicd-filters {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            align-items: flex-end;
+        }
+        .cicd-filter {
+            min-width: 180px;
+            flex: 1;
+        }
+        .cicd-table {
+            max-height: 420px;
+            overflow-y: auto;
+        }
+        .report-block {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .report-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .report-details {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body x-data="cicdPage()" class="cicd-page">
+    {{template "nav" .}}
+
+    <div class="container">
+        <div class="cicd-header">
+            <div>
+                <h1 style="font-size: 1.2rem; color: #e2e8f0;">CI/CD</h1>
+                <p class="text-muted" x-text="status?.summary || 'Loading CI/CD status…'"></p>
+            </div>
+            <div>
+                <span class="badge" :class="badgeClass(status?.overall_status)" x-text="badgeLabel(status?.overall_status)"></span>
+                <span class="text-muted" style="margin-left: 10px; font-size: 0.8rem;" x-text="updatedLabel()"></span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>🧭 Health Summary</h2>
+                <div class="card-content">
+                    <template x-if="status">
+                        <div>
+                            <p><span class="text-muted">Repo:</span> <span x-text="status.repo || '-'" style="margin-left: 6px;"></span></p>
+                            <p style="margin-top: 6px;">
+                                <span class="text-muted">Overall:</span>
+                                <span class="badge" :class="badgeClass(status.overall_status)" x-text="badgeLabel(status.overall_status)" style="margin-left: 6px;"></span>
+                            </p>
+                            <div style="margin-top: 12px;">
+                                <div class="text-muted" style="margin-bottom: 6px;">Recent runs</div>
+                                <div x-html="renderRecentRuns()"></div>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="!status">
+                        <p class="text-muted">Loading…</p>
+                    </template>
+                </div>
+            </div>
+            <div class="card">
+                <h2>🧾 Reports</h2>
+                <div class="card-content">
+                    <div x-html="renderReport(status?.reports?.internal)"></div>
+                    <div x-html="renderReport(status?.reports?.external)"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid" style="margin-top: 20px;">
+            <div class="card">
+                <h2>🧪 Workflows</h2>
+                <div class="card-content cicd-table" x-html="renderWorkflowTable()"></div>
+            </div>
+            <div class="card">
+                <h2>📌 Run History</h2>
+                <div class="card-content">
+                    <div class="cicd-filters">
+                        <div class="cicd-filter">
+                            <label class="text-muted">Workflow</label>
+                            <select class="input-field" x-model="filters.workflow" @change="reloadRuns()">
+                                <option value="">All</option>
+                                <template x-for="item in filterOptions.workflows" :key="item">
+                                    <option :value="item" x-text="item"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="cicd-filter">
+                            <label class="text-muted">Branch</label>
+                            <select class="input-field" x-model="filters.branch" @change="reloadRuns()">
+                                <option value="">All</option>
+                                <template x-for="item in filterOptions.branches" :key="item">
+                                    <option :value="item" x-text="item"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="cicd-filter">
+                            <label class="text-muted">Status</label>
+                            <select class="input-field" x-model="filters.status" @change="reloadRuns()">
+                                <option value="">All</option>
+                                <template x-for="item in filterOptions.statuses" :key="item">
+                                    <option :value="item" x-text="item"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cicd-table" x-html="renderRunTable()"></div>
+                    <div class="pagination">
+                        <div class="text-muted" x-text="paginationLabel()"></div>
+                        <div>
+                            <button class="btn btn-secondary btn-sm" @click="prevPage()" :disabled="paging.offset === 0">Prev</button>
+                            <button class="btn btn-secondary btn-sm" @click="nextPage()" :disabled="paging.offset + paging.limit >= totalRuns">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{template "scripts" .}}
+    <script>
+        function cicdPage() {
+            return {
+                status: null,
+                workflows: [],
+                runs: [],
+                totalRuns: 0,
+                filters: { workflow: '', branch: '', status: '' },
+                filterOptions: { workflows: [], branches: [], statuses: [] },
+                paging: { limit: 20, offset: 0 },
+                timer: null,
+
+                init() {
+                    this.loadAll();
+                    this.timer = setInterval(() => {
+                        this.loadStatus();
+                        this.loadRuns();
+                    }, 30000);
+                },
+
+                async loadAll() {
+                    await Promise.all([this.loadStatus(), this.loadRuns()]);
+                },
+
+                async loadStatus() {
+                    try {
+                        const res = await fetch('/api/cicd/status');
+                        this.status = await res.json();
+                    } catch (e) {
+                        console.error('Failed to load CI/CD status:', e);
+                    }
+                },
+
+                async loadRuns() {
+                    const params = new URLSearchParams();
+                    if (this.filters.workflow) params.set('workflow', this.filters.workflow);
+                    if (this.filters.branch) params.set('branch', this.filters.branch);
+                    if (this.filters.status) params.set('status', this.filters.status);
+                    params.set('limit', this.paging.limit);
+                    params.set('offset', this.paging.offset);
+
+                    try {
+                        const res = await fetch('/api/cicd/workflows?' + params.toString());
+                        const data = await res.json();
+                        this.workflows = data.workflows || [];
+                        this.runs = data.runs || [];
+                        this.totalRuns = data.total || 0;
+                        this.filterOptions = data.filters || { workflows: [], branches: [], statuses: [] };
+                    } catch (e) {
+                        console.error('Failed to load CI/CD runs:', e);
+                    }
+                },
+
+                reloadRuns() {
+                    this.paging.offset = 0;
+                    this.loadRuns();
+                },
+
+                badgeClass(status) {
+                    if (!status) return 'badge-yellow';
+                    switch (status.toLowerCase()) {
+                        case 'passing': return 'badge-green';
+                        case 'failing': return 'badge-red';
+                        case 'degraded': return 'badge-yellow';
+                        case 'running': return 'badge-yellow';
+                        case 'queued': return 'badge-yellow';
+                        default: return 'badge-yellow';
+                    }
+                },
+
+                badgeLabel(status) {
+                    if (!status) return 'Unknown';
+                    switch (status.toLowerCase()) {
+                        case 'passing': return 'Passing';
+                        case 'failing': return 'Failing';
+                        case 'degraded': return 'Degraded';
+                        case 'running': return 'Running';
+                        case 'queued': return 'Queued';
+                        default: return 'Unknown';
+                    }
+                },
+
+                formatTime(value) {
+                    if (!value) return '-';
+                    const date = new Date(value);
+                    if (isNaN(date.getTime())) return value;
+                    return date.toLocaleString();
+                },
+
+                updatedLabel() {
+                    if (!this.status || !this.status.updated_at) return '';
+                    return 'Updated ' + this.formatTime(this.status.updated_at);
+                },
+
+                renderRecentRuns() {
+                    if (!this.status || !this.status.recent_runs || this.status.recent_runs.length === 0) {
+                        return '<p class="text-muted">No recent runs</p>';
+                    }
+                    const rows = this.status.recent_runs.map(run => {
+                        const badge = this.badgeClass(run.status_group);
+                        return '<tr>' +
+                            '<td>' + escapeHtml(run.workflow || '-') + '</td>' +
+                            '<td><span class="badge ' + badge + '">' + this.badgeLabel(run.status_group) + '</span></td>' +
+                            '<td class="text-muted">' + escapeHtml(this.formatTime(run.created_at)) + '</td>' +
+                            '</tr>';
+                    }).join('');
+
+                    return '<table><tr><th>Workflow</th><th>Status</th><th>Time</th></tr>' + rows + '</table>';
+                },
+
+                renderReport(report) {
+                    if (!report) {
+                        return '<div class="report-block"><div class="text-muted">No report data</div></div>';
+                    }
+                    const details = (report.details || []).map(line => '<div>' + escapeHtml(line) + '</div>').join('');
+                    return '<div class="report-block">' +
+                        '<div class="report-title">' +
+                            '<span>' + escapeHtml(report.title || '') + '</span>' +
+                            '<span class="badge ' + this.badgeClass(report.status) + '">' + this.badgeLabel(report.status) + '</span>' +
+                        '</div>' +
+                        '<div class="text-muted" style="margin-bottom: 6px;">' + escapeHtml(report.summary || '') + '</div>' +
+                        (report.updated_at ? '<div class="text-muted" style="font-size: 0.75rem;">Updated ' + escapeHtml(report.updated_at) + '</div>' : '') +
+                        (details ? '<div class="report-details" style="margin-top: 6px;">' + details + '</div>' : '') +
+                        '</div>';
+                },
+
+                renderWorkflowTable() {
+                    if (!this.workflows || this.workflows.length === 0) {
+                        return '<p class="text-muted">No workflows found</p>';
+                    }
+                    const rows = this.workflows.map(wf => {
+                        return '<tr>' +
+                            '<td>' + escapeHtml(wf.name || '-') + '</td>' +
+                            '<td><span class="badge ' + this.badgeClass(wf.status_group) + '">' + this.badgeLabel(wf.status_group) + '</span></td>' +
+                            '<td class="text-muted">' + escapeHtml(this.formatTime(wf.last_run_at)) + '</td>' +
+                            '<td class="text-muted">' + escapeHtml(wf.branch || '-') + '</td>' +
+                            '</tr>';
+                    }).join('');
+                    return '<table><tr><th>Workflow</th><th>Status</th><th>Last Run</th><th>Branch</th></tr>' + rows + '</table>';
+                },
+
+                renderRunTable() {
+                    if (!this.runs || this.runs.length === 0) {
+                        return '<p class="text-muted">No runs found</p>';
+                    }
+                    const rows = this.runs.map(run => {
+                        return '<tr>' +
+                            '<td>' + escapeHtml(run.workflow || '-') + '</td>' +
+                            '<td><span class="badge ' + this.badgeClass(run.status_group) + '">' + this.badgeLabel(run.status_group) + '</span></td>' +
+                            '<td class="text-muted">' + escapeHtml(run.branch || '-') + '</td>' +
+                            '<td class="text-muted">' + escapeHtml(this.formatTime(run.created_at)) + '</td>' +
+                            '</tr>';
+                    }).join('');
+                    return '<table><tr><th>Workflow</th><th>Status</th><th>Branch</th><th>Time</th></tr>' + rows + '</table>';
+                },
+
+                paginationLabel() {
+                    if (!this.totalRuns) return '0 runs';
+                    const start = this.paging.offset + 1;
+                    const end = Math.min(this.paging.offset + this.paging.limit, this.totalRuns);
+                    return start + '-' + end + ' of ' + this.totalRuns + ' runs';
+                },
+
+                nextPage() {
+                    if (this.paging.offset + this.paging.limit >= this.totalRuns) return;
+                    this.paging.offset += this.paging.limit;
+                    this.loadRuns();
+                },
+
+                prevPage() {
+                    if (this.paging.offset === 0) return;
+                    this.paging.offset = Math.max(0, this.paging.offset - this.paging.limit);
+                    this.loadRuns();
+                }
+            };
+        }
+    </script>
+</body>
+</html>
