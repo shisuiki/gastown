@@ -75,6 +75,8 @@ fi
 # Set up Claude credentials directory for container
 # Always sync fresh credentials from host (OAuth tokens expire)
 setup_claude_creds() {
+    # Take ownership first (may be owned by 10001 from previous deploy)
+    sudo chown -R "$(id -u):$(id -g)" "$CLAUDE_CREDS_DIR" 2>/dev/null || true
     mkdir -p "$CLAUDE_CREDS_DIR"
     # Always copy fresh credentials if available (tokens expire frequently)
     if [ -f "$HOME/.claude/.credentials.json" ]; then
@@ -90,8 +92,7 @@ setup_claude_creds() {
         log "Synced Claude .claude.json from host"
     fi
     # CRITICAL: chown to container user uid 10001 so container can write
-    # (chmod alone is insufficient - owner must match for write access)
-    sudo chown -R 10001:10001 "$CLAUDE_CREDS_DIR" 2>/dev/null || {
+    sudo chown -R 10001:10001 "$CLAUDE_CREDS_DIR" || {
         log "WARNING: Could not chown $CLAUDE_CREDS_DIR to 10001 (need sudo)"
         log "         Container may have write permission issues"
     }
@@ -102,6 +103,8 @@ setup_claude_creds
 # Set up Codex credentials directory for container
 # Always sync fresh credentials from host (tokens may expire)
 setup_codex_creds() {
+    # Take ownership first (may be owned by 10001 from previous deploy)
+    sudo chown -R "$(id -u):$(id -g)" "$CODEX_CREDS_DIR" 2>/dev/null || true
     mkdir -p "$CODEX_CREDS_DIR"
     # Always copy fresh credentials if available
     if [ -d "$HOME/.codex" ]; then
@@ -113,8 +116,7 @@ setup_codex_creds() {
         log "         Run 'codex auth login' on host before deploying"
     fi
     # CRITICAL: chown to container user uid 10001 so container can write
-    # (codex needs write access to ~/.codex for state/logs)
-    sudo chown -R 10001:10001 "$CODEX_CREDS_DIR" 2>/dev/null || {
+    sudo chown -R 10001:10001 "$CODEX_CREDS_DIR" || {
         log "WARNING: Could not chown $CODEX_CREDS_DIR to 10001 (need sudo)"
         log "         Codex will report 'Permission denied' errors"
     }
