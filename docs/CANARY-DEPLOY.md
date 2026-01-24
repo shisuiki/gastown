@@ -17,11 +17,11 @@ If non-sudo Docker access is desired, add the deployment user to the `docker`
 - Image tag: `gastown:canary-<git-sha>`
 - Port: `8081` (defaults; configurable with `CANARY_PORT`)
 
-## Manifest Pairing
+## Configuration
 
-`deploy/canary-manifest.yaml` pins the env-config ref used for canary deploys.
-The deploy workflow uses the current `canary` commit for gastown and the pinned
-env-config ref for configuration.
+Runtime configuration is stored in GTRuntime (`settings/config.json`) and mounted
+into the container at `/gt`. The deploy workflow uses the current `canary` commit
+for gastown.
 
 See `docs/MAYOR-CREW-DEPLOY.md` for the standard mayor → crew request and status
 update templates.
@@ -56,7 +56,7 @@ deploy event bead (parent epic `hq-vsa3v`) with metadata:
 
 - Timestamp
 - Gastown SHA
-- Env-config SHA
+- GTRuntime ref
 - Image tag
 - Result (success/failed)
 
@@ -72,8 +72,8 @@ The canary workflow is captured in
 ## GitHub Actions Workflow
 
 `.github/workflows/canary-deploy.yml` triggers on pushes to `canary` and runs on
-self-hosted runners labeled `canary`. It checks out env-config at the pinned ref
-from the manifest and runs the deploy script.
+self-hosted runners labeled `canary`. It checks out gastown and runs the deploy
+script.
 
 Required secrets (configured on the repo):
 

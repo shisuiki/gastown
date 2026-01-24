@@ -18,8 +18,7 @@ Objective
 
 Inputs
 - Gastown ref: <commit SHA or tag>
-- Env-config ref: <commit SHA>
-- Manifest: deploy/canary-manifest.yaml (updated?)
+- GTRuntime ref: <commit SHA or HEAD>
 - Branch: <canary|main>
 
 Host / Runner
@@ -75,7 +74,7 @@ Escalations
 
 Escalate to the Mayor immediately if any of the following occur:
 
-- Repo access blocked (gastown or env-config).
+- Repo access blocked (gastown or GTRuntime).
 - Docker daemon unavailable or permission denied on canary host.
 - Self-hosted runner offline or missing required labels.
 - Required secrets missing (e.g., `GT_WEB_AUTH_TOKEN_CANARY`).
@@ -102,8 +101,7 @@ Objective
 
 Inputs
 - Gastown ref: refs/heads/canary
-- Env-config ref: 732d141d3b7c...
-- Manifest: deploy/canary-manifest.yaml (pinned)
+- GTRuntime ref: HEAD (mounted at /gt)
 - Branch: canary
 
 Host / Runner

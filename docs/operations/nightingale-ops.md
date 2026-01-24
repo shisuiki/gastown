@@ -52,7 +52,41 @@ When Nightingale receives a hook, it should:
 2. Follow `docs/operations/canary-docker-exec-workflow.md`.
 3. Reference `docs/CANARY-DEPLOY.md` and `docs/MAYOR-CREW-DEPLOY.md` for status updates.
 
+## Cold-Start Test Protocol
+
+When running cold-start tests on gastown-canary:
+
+### Communication Channel
+
+The containerized mayor replies to `nightingale/Nightingale` (this crew's inbox).
+
+1. **Send probe:** `docker exec gastown-canary gt mail send mayor/ -s "COLDSTART_PROBE: ..."`
+2. **Mayor processes:** Canary mayor sees probe, gathers status, replies
+3. **Receive response:** Check `gt mail inbox` for `COLDSTART_ASSESSMENT` subject
+
+### Context Injection (if needed)
+
+If the canary mayor needs context about the test:
+```bash
+# Nudge mayor with context
+docker exec gastown-canary gt nudge mayor "Nightingale CI/CD test in progress. Reply to nightingale/Nightingale."
+```
+
+### Verifying Mayor Responsiveness
+
+```bash
+# Check if mayor session is active
+docker exec gastown-canary tmux has-session -t hq-mayor
+
+# If not active, start it
+docker exec gastown-canary gt mayor start
+
+# Attach to mayor for manual interaction
+docker exec -it gastown-canary gt mayor attach
+```
+
 ## Notes
 
 - If the host rig is unavailable, the workflow should fail and be retried.
 - Beads act as the durable audit trail for CI/CD actions.
+- Canary mayor is configured to know it's containerized and how to communicate with Nightingale.

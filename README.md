@@ -200,7 +200,7 @@ gt convoy list
 
 ## Canary Deploys
 
-Gas Town uses a canary branch plus a separate environment config repo to stage releases.
+Gas Town uses a canary branch strategy to stage releases before production.
 
 ### Branch Strategy
 
@@ -212,17 +212,16 @@ Gas Town uses a canary branch plus a separate environment config repo to stage r
 
 - CI checks required by branch protection are green on `canary`.
 - Canary deploy runs without regressions or P1/P2 incidents.
-- `deploy/canary-manifest.yaml` updated to the intended gastown + env-config refs.
+- Gastown SHA and GTRuntime state recorded in deploy metadata.
 
 See `docs/CANARY-DEPLOY.md` for host configuration and rollback steps.
 See `docs/MAYOR-CREW-DEPLOY.md` for the mayor → crew request/status template.
 See `docs/operations/canary-promotion.md` for promotion criteria and regression handling.
 
-### Version Pairing
+### Configuration
 
-- Config lives in `shisuiki/env-config`.
-- `canary/config.yaml` and `production/config.yaml` set the `service.ref` (gastown SHA or tag).
-- `deploy/canary-manifest.yaml` is the pairing manifest between gastown and env-config refs.
+- Runtime configuration lives in GTRuntime (`settings/config.json`), mounted into the container at `/gt`.
+- Deploy metadata (gastown SHA, GTRuntime ref, image tag) stored in `logs/canary-deploy.json`.
 
 ### Minimal Mode (No Tmux)
 
