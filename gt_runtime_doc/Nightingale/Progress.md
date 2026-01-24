@@ -1,8 +1,11 @@
 # Progress
 
-- 2026-01-24: Cold-start test executed (TEST_ID coldstart-20260124-132053).
-  - External probes: PASSING (6/7); web_ui failed.
-  - Internal assessment: NO_RESPONSE.
-  - Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-132053.json
-- Follow-up issues filed: hq-t00sx (web_ui), hq-ifo2u (mayor response).
-- Manifest removal tracked in repo history (commit c874f77b).
+- 2026-01-24: DEPLOY task hq-rxziu executed.
+  - Rebuilt gastown-canary from canary branch (5cb8314d).
+  - Container healthy after 6s.
+  - External probes: PASSING (7/7) - all checks pass including web_ui.
+  - Internal assessment: NO_RESPONSE (mayor session startup bug).
+  - Discovered --no-news flag bug in gt mayor start.
+  - Fixed permissions: .claude-canary ownership, .beads directory access.
+  - Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-155857.json
+  - Results sent to mayor via reply to hq-rxziu.
