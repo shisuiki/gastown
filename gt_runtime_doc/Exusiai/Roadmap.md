@@ -1,27 +1,20 @@
 # Roadmap
 
 ## Phase 0: Requirements
-- Review existing crew/mayor prompts and locate Runtime Docs references.
-- Translate new requirements into concise, agent-friendly prompt text.
-- Identify all human-dependency lines to remove.
+- Inspect current mail injection path (`gt mail check --inject`) and hook usage.
+- Identify reliable tmux idle signal for 2-minute inactivity.
+- Decide on fallback behavior when idle cannot be determined.
 
-## Phase 1: Prompt updates (long)
-- Update crew long prompt Runtime Docs Protocol (Memory/Roadmap/Progress/summary/Log).
-- Update mayor long prompt Runtime Docs Protocol similarly.
-- Remove human-dependency guidance from crew/mayor long prompts.
-- Add Log.md append-only instructions.
+## Phase 1: Mail injection gating
+- Add idle-time check before emitting injected mail reminders.
+- Use tmux session activity or last-attached timestamps to compute idle time.
+- Make inject mode silent if idle threshold not met.
 
-## Phase 2: Prompt updates (short)
-- Update crew system prompt with Runtime Docs protocol.
-- Update mayor system prompt with Runtime Docs protocol.
-- Remove any “escalate to humans” guidance.
-
-## Phase 3: Validation
-- Ensure prompts describe Roadmap/Progress/summary roles clearly.
-- Ensure Log.md instruction is explicit: append with timestamp using `>>`, never read.
-- Confirm autonomy language (no “mail the human” dependency).
+## Phase 2: Validation
+- Ensure non-inject modes are unchanged.
+- Ensure inject mode remains non-fatal and silent on errors.
+- Confirm idle threshold is 2 minutes.
 
 ## Acceptance criteria
-- Crew and Mayor prompts include clear Runtime Docs guidance (Memory/Roadmap/Progress/summary/Log).
-- No human-dependency lines remain in crew/mayor prompts.
-- Log.md is documented as append-only with timestamps.
+- `gt mail check --inject` emits reminders only after 2 minutes of tmux inactivity.
+- Active sessions are not interrupted by mail injection.
