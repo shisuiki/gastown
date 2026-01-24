@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/mail"
 	"github.com/steveyegge/gastown/internal/style"
+	"github.com/steveyegge/gastown/internal/tmux"
 )
+
+const mailInjectIdleThreshold = 2 * time.Minute
 
 func runMailCheck(cmd *cobra.Command, args []string) error {
 	// Determine which inbox (priority: --identity flag, auto-detect)
@@ -60,8 +67,11 @@ func runMailCheck(cmd *cobra.Command, args []string) error {
 		return enc.Encode(result)
 	}
 
-	// Inject mode: output system-reminder if mail exists
+	// Inject mode: only inject if the tmux session has been idle long enough
 	if mailCheckInject {
+		if !shouldInjectMail() {
+			return nil
+		}
 		if unread > 0 {
 			// Get subjects for context
 			messages, _ := mailbox.ListUnread()
@@ -89,4 +99,65 @@ func runMailCheck(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println("No new mail")
 	return NewSilentExit(1)
+}
+
+func shouldInjectMail() bool {
+	if os.Getenv("TMUX") == "" {
+		// Not in tmux; fall back to prior behavior.
+		return true
+	}
+
+	sessionName, err := currentTmuxSessionName()
+	if err != nil || sessionName == "" {
+		return false
+	}
+
+	idle, err := tmuxSessionIdleDuration(sessionName)
+	if err != nil {
+		return false
+	}
+
+	return idle >= mailInjectIdleThreshold
+}
+
+func currentTmuxSessionName() (string, error) {
+	cmd := exec.Command("tmux", "display-message", "-p", "#S")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func tmuxSessionIdleDuration(session string) (time.Duration, error) {
+	info, err := tmux.NewTmux().GetSessionInfo(session)
+	if err != nil {
+		return 0, err
+	}
+
+	if info.Activity != "" {
+		if ts, err := parseTmuxTimestamp(info.Activity); err == nil {
+			return time.Since(ts), nil
+		}
+	}
+
+	if info.LastAttached != "" {
+		if ts, err := parseTmuxTimestamp(info.LastAttached); err == nil {
+			return time.Since(ts), nil
+		}
+	}
+
+	return 0, fmt.Errorf("no session activity timestamp")
+}
+
+func parseTmuxTimestamp(value string) (time.Time, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return time.Time{}, fmt.Errorf("empty timestamp")
+	}
+	epoch, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Unix(epoch, 0), nil
 }
