@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# Pre-push hook: Warn when pushing to protected branches
+# Provides agent-ergonomic hints to use canary workflow instead
+#
+
+remote="$1"
+url="$2"
+
+while read local_ref local_oid remote_ref remote_oid
+do
+    # Extract branch name from refs/heads/branch
+    branch=$(echo "$remote_ref" | sed 's|refs/heads/||')
+
+    if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════════╗"
+        echo "║  ⚠️  PROTECTED BRANCH: $branch                                    ║"
+        echo "╠══════════════════════════════════════════════════════════════════╣"
+        echo "║  Direct pushes to '$branch' require PR approval.                  ║"
+        echo "║                                                                  ║"
+        echo "║  RECOMMENDED WORKFLOW:                                           ║"
+        echo "║  1. Push to 'canary' branch instead:                             ║"
+        echo "║     git push origin canary                                       ║"
+        echo "║                                                                  ║"
+        echo "║  2. Create PR from canary → main for review                      ║"
+        echo "║     gh pr create --base main --head canary                       ║"
+        echo "║                                                                  ║"
+        echo "║  3. After approval, merge via GitHub UI or:                      ║"
+        echo "║     gh pr merge --rebase                                         ║"
+        echo "╚══════════════════════════════════════════════════════════════════╝"
+        echo ""
+
+        # Allow the push but warn - change to 'exit 1' to block
+        # exit 1
+    fi
+done
+
+exit 0
