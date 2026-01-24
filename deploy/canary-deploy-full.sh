@@ -79,16 +79,22 @@ setup_claude_creds() {
     # Always copy fresh credentials if available (tokens expire frequently)
     if [ -f "$HOME/.claude/.credentials.json" ]; then
         cp "$HOME/.claude/.credentials.json" "$CLAUDE_CREDS_DIR/"
-        log "Synced Claude credentials from host"
+        log "Synced Claude .credentials.json from host"
     else
         log "WARNING: No Claude credentials found at $HOME/.claude/.credentials.json"
         log "         Run 'claude --login' on host before deploying"
     fi
-    # Ensure directory is accessible by container user (uid 10001)
-    chmod 755 "$CLAUDE_CREDS_DIR"
-    if [ -f "$CLAUDE_CREDS_DIR/.credentials.json" ]; then
-        chmod 644 "$CLAUDE_CREDS_DIR/.credentials.json"
+    # Also sync .claude.json (session/config data required for auth)
+    if [ -f "$HOME/.claude.json" ]; then
+        cp "$HOME/.claude.json" "$CLAUDE_CREDS_DIR/claude.json"
+        log "Synced Claude .claude.json from host"
     fi
+    # CRITICAL: chown to container user uid 10001 so container can write
+    # (chmod alone is insufficient - owner must match for write access)
+    sudo chown -R 10001:10001 "$CLAUDE_CREDS_DIR" 2>/dev/null || {
+        log "WARNING: Could not chown $CLAUDE_CREDS_DIR to 10001 (need sudo)"
+        log "         Container may have write permission issues"
+    }
 }
 
 setup_claude_creds
@@ -106,9 +112,12 @@ setup_codex_creds() {
         log "WARNING: No Codex credentials found at $HOME/.codex"
         log "         Run 'codex auth login' on host before deploying"
     fi
-    # Ensure directory is accessible by container user (uid 10001)
-    chmod 755 "$CODEX_CREDS_DIR"
-    chmod 644 "$CODEX_CREDS_DIR"/* 2>/dev/null || true
+    # CRITICAL: chown to container user uid 10001 so container can write
+    # (codex needs write access to ~/.codex for state/logs)
+    sudo chown -R 10001:10001 "$CODEX_CREDS_DIR" 2>/dev/null || {
+        log "WARNING: Could not chown $CODEX_CREDS_DIR to 10001 (need sudo)"
+        log "         Codex will report 'Permission denied' errors"
+    }
 }
 
 setup_codex_creds
@@ -154,6 +163,11 @@ trap rollback ERR
 
 # Start new container with full mode
 log "Starting full canary container on port $CANARY_PORT"
+# Build volume mounts - include .claude.json if it was synced
+CLAUDE_JSON_MOUNT=""
+if [ -f "$CLAUDE_CREDS_DIR/claude.json" ]; then
+    CLAUDE_JSON_MOUNT="-v $CLAUDE_CREDS_DIR/claude.json:/home/gastown/.claude.json"
+fi
 $DOCKER_CMD run -d \
     --name "$CONTAINER_NAME" \
     --restart=always \
@@ -161,6 +175,7 @@ $DOCKER_CMD run -d \
     -p "$CANARY_PORT:8080" \
     -v "$GT_ROOT:/gt" \
     -v "$CLAUDE_CREDS_DIR:/home/gastown/.claude" \
+    $CLAUDE_JSON_MOUNT \
     -v "$CODEX_CREDS_DIR:/home/gastown/.codex" \
     -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
     -e GT_WEB_ALLOW_REMOTE=1 \
