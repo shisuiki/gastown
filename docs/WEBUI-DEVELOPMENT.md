@@ -20,6 +20,7 @@ This document tracks WebUI development conventions and current architecture.
 
 - Status: `GET /api/status` builds a cached status snapshot.
 - WebSocket: `/ws/status` pushes status updates for dashboards.
+- CI/CD: `GET /api/cicd/status`, `GET /api/cicd/workflows`, `GET /api/cicd/runs/:id` (GitHub Actions via `gh`, plus canary/coldstart logs).
 - Mail: WebUI uses the mail router/mailbox APIs for listing, mark read/unread, and archive.
 - Beads and convoys: prefer `issues.jsonl` via `BeadsReader`/convoy fetcher with BEADS_DIR-scoped CLI fallback.
 - Agent hook status: still uses `gt hook` for now (no direct hook file/state).
@@ -28,7 +29,8 @@ This document tracks WebUI development conventions and current architecture.
 ## Caching
 
 - Stale-while-revalidate cache lives in `internal/web/cache.go`.
-- Status cache TTL: 10s (see `StatusCacheTTL`).
+- Status cache TTL: 5s (see `StatusCacheTTL`).
+- CI/CD status cache TTL: 5s (`CICDStatusCacheTTL`), workflow/run lists: 15s (`CICDWorkflowsCacheTTL`).
 - Mail, agents, and convoys use per-endpoint caches to avoid repeated CLI calls.
 - Crew cache TTL: 10s (see `CrewCacheTTL`), invalidated on crew actions.
 
