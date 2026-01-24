@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Mayor → Crew Deploy Workflow
 
 This document defines the standard request and status formats for canary deploy
@@ -117,3 +129,6 @@ Execution
 Rollback
 - If health check fails, run deploy/canary-rollback.sh
 ```
+
+## Scope
+- Scope description pending.

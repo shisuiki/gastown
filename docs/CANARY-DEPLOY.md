@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Canary Deploy Workflow
 
 This document defines the canary deployment flow for Gas Town.
@@ -91,3 +103,6 @@ export GT_WEB_AUTH_TOKEN=...
 ```
 
 The rollback script uses `logs/canary-deploy.env` to restart the previous image.
+
+## Scope
+- Scope description pending.

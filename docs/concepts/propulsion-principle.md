@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # The Propulsion Principle
 
 > **If you find something on your hook, YOU RUN IT.**
@@ -103,3 +115,6 @@ becomes part of a permanent ledger of demonstrated capability.
 
 This isn't just about the current task. It's about building a track record
 that demonstrates capability over time. Execute with care.
+
+## Scope
+- Scope description pending.

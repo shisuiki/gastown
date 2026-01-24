@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Gas Town Web UI Deployment
 
 This document describes how the Gas Town Web UI is deployed and auto-updated.
@@ -272,3 +284,6 @@ cd ~/laplace/gastown-src
 go build -o ~/go/bin/gt ./cmd/gt
 systemctl --user restart gastown-web
 ```
+
+## Scope
+- Scope description pending.

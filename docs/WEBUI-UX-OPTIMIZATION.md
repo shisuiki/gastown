@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # WebUI UX Optimization Recommendations
 
 ## Goals
@@ -205,3 +217,6 @@ Phase 4: Overview and Repo polish
 - Work page remains responsive with 500+ beads.
 - Mail and agent lists remain usable with 200+ agents.
 - Primary actions accessible within 2 clicks from any page.
+
+## Scope
+- Scope description pending.

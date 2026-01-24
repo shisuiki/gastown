@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Operational State in Gas Town
 
 > Managing runtime state through events and labels.
@@ -139,3 +151,6 @@ gt dog prime boot
 ---
 
 *Events are the source of truth. Labels are the cache.*
+
+## Scope
+- Scope description pending.

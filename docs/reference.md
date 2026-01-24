@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Gas Town Reference
 
 Technical reference for Gas Town internals. Read the README first.
@@ -627,3 +639,6 @@ bd mol bond mol-security-scan $PATROL_ID --var scope="$SCOPE"
 **Nondeterministic idempotence**: Any worker can continue any molecule. Steps are atomic checkpoints in beads.
 
 **Convoy tracking**: Convoys track batched work across rigs. A "swarm" is ephemeral - just the workers currently on a convoy's issues. See [Convoys](concepts/convoy.md) for details.
+
+## Scope
+- Scope description pending.

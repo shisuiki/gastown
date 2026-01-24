@@ -1,3 +1,15 @@
+---
+type: example
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Towers of Hanoi Demo
 
 A durability proof demonstrating Gas Town's ability to execute arbitrarily long

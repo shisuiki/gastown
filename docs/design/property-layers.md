@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Property Layers: Multi-Level Configuration
 
 > Implementation guide for Gas Town's configuration system.
@@ -298,3 +310,6 @@ func (d *Daemon) maybeStartRigServices(rig string) {
 - `~/gt/docs/hop/PROPERTY-LAYERS.md` - Strategic architecture
 - `wisp-architecture.md` - Wisp system design
 - `agent-as-bead.md` - Agent identity beads (similar pattern)
+
+## Scope
+- Scope description pending.

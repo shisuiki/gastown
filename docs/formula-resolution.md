@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Formula Resolution Architecture
 
 > Where formulas live, how they're found, and how they'll scale to Mol Mall
@@ -246,3 +258,6 @@ gt formula uninstall mol-code-review-strict
 - [Mol Mall Design](mol-mall-design.md) - Registry architecture
 - [molecules.md](molecules.md) - Formula → Proto → Mol lifecycle
 - [understanding-gas-town.md](../../../docs/understanding-gas-town.md) - Gas Town architecture
+
+## Scope
+- Scope description pending.

@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Understanding Gas Town
 
 This document provides a conceptual overview of Gas Town's architecture, focusing on
@@ -65,6 +77,71 @@ gt convoy list
 
 The "swarm" is ephemeral - just the workers currently assigned to a convoy's issues.
 When issues close, the convoy lands. See [Convoys](concepts/convoy.md) for details.
+
+## Role-based reading
+
+- **Dev:** Start with this overview, the [Glossary](glossary.md), and the [Reference](reference.md) to ground yourself in terminology and APIs. Next, explore system shape via [Design](design/architecture.md).
+- **Ops:** Head to the [Operations landing page](operations/README.md) to reach deploy, validation, failure, and promotion runbooks plus the [Nightingale Ops notes](operations/nightingale-ops.md).
+- **Oncall:** Track alert-worthy flows with the [Failure Handling runbook](operations/canary-failure-handling.md) and use the archived [Failure Modes Report](FAILURE_MODES_REPORT.md) when researching past incidents.
+
+## Document types
+
+- **evergreen:** Stable reference material (concepts, architecture, tutorials). These pages describe how Gas Town works on a daily basis.
+- **runbook:** Operational procedures with a TTL and Verification checklist. Think: deploys, validations, failure handling—these are rehearsed scripts.
+- **report:** Historical research or incident notes. These are archived in `docs/archive/` and should **not** be used as executable runbooks.
+- **example:** Walkthroughs or demos that illustrate workflows outside the core runbooks.
+
+## Installation & deployment reference
+
+- [Installing Gas Town](INSTALLING.md)
+- [Mayor → Crew Deploy Workflow](MAYOR-CREW-DEPLOY.md)
+- [Canary Deploy Workflow](CANARY-DEPLOY.md)
+- [Nightmare Ops Notes](operations/nightingale-ops.md)
+- [Docs inventory](_inventory.md) for a living map of these resources.
+
+## Web UI resources
+
+- [Web UI deployment](WEBUI-DEPLOY.md)
+- [Web UI development notes](WEBUI-DEVELOPMENT.md)
+- [Web UI refactor plan](WEBUI-REFACTOR-PLAN.md)
+- [Web UI UX optimization report](WEBUI-UX-OPTIMIZATION.md)
+
+## Design & reference compass
+
+- [Formula resolution architecture](formula-resolution.md)
+- [Design architecture](design/architecture.md)
+- [Mail protocol](design/mail-protocol.md)
+- [Convoy lifecycle](design/convoy-lifecycle.md)
+- [Dog pool architecture](design/dog-pool-architecture.md)
+- [Escalation system](design/escalation-system.md)
+- [Escalation protocol](design/escalation.md)
+- [Federation architecture](design/federation.md)
+- [Operational state](design/operational-state.md)
+- [Plugin system design](design/plugin-system.md)
+- [Property layers](design/property-layers.md)
+- [Why these features?](why-these-features.md)
+- [Reference](reference.md)
+
+## Concept capsules
+
+- [Convoys](concepts/convoy.md)
+- [Agent identity](concepts/identity.md)
+- [Molecules](concepts/molecules.md)
+- [Polecat lifecycle](concepts/polecat-lifecycle.md)
+- [Propulsion principle](concepts/propulsion-principle.md)
+
+## Examples & experiments
+
+- [Beads-native messaging](beads-native-messaging.md)
+- [Mol Mall design](mol-mall-design.md)
+- [Towers of Hanoi demo](examples/hanoi-demo.md)
+- [Gastown risk checklist](gastown-risk-checklist.md)
+
+## Reports archive
+
+- [Failure modes report (archived)](FAILURE_MODES_REPORT.md)
+- [Gastown research report (archived)](gastown-research-report.md)
+- [Gastown WebUI research report (archived)](gastown-webui-report.md)
 
 ## Crew vs Polecats
 
@@ -228,3 +305,6 @@ This is particularly valuable for:
 3. **Working in wrong directory**: Gas Town uses cwd for identity detection. Stay in your home directory.
 4. **Waiting for confirmation when work is hooked**: The hook IS your assignment. Execute immediately.
 5. **Creating worktrees when dispatch is better**: If work should be owned by the target rig, dispatch it instead.
+
+## Scope
+- Scope description pending.

@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Installing Gas Town
 
 Complete setup guide for Gas Town multi-agent orchestrator.
@@ -343,3 +355,6 @@ After installation:
 2. **Try a simple workflow** - `bd create "Test task"` then `gt convoy create "Test" <bead-id>`
 3. **Explore docs** - `docs/reference.md` for command reference
 4. **Run doctor regularly** - `gt doctor` catches problems early
+
+## Scope
+- Scope description pending.

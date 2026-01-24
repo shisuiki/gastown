@@ -1,3 +1,21 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: oncall
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "scripts/canary-command-retry.sh"
+  - "scripts/canary-alert.sh"
+  - ".github/workflows/canary-deploy.yml"
+  - "scripts/canary-docker-exec.sh"
+---
+
 # Canary Failure Handling and Recovery
 
 Step 10 of the `hq-vsa3v` Canary Deploy Infrastructure epic (`hq-sic13`) focuses on understanding what can go wrong when the canary workflow runs and automating as much of the response as possible. This document references the Docker exec trigger workflow from Step 5 and extends it with failure classification, retry/exponential-backoff guidance, rollback paths, and alerting hooks.
@@ -73,3 +91,21 @@ Operators can read the alert summary to decide whether to pause the canary branc
 ## Manual escalation
 - If alerts keep firing for the same issue, disable the canary workflow (remove the `canary` branch trigger) and hand the incident to the team via email/Slack, referencing bead `hq-sic13`.
 - Log the failure and mitigation steps under the “Manual recovery notes” section in this document so future engineers inherit the context.
+
+## Preconditions
+- `scripts/canary-command-retry.sh` and `scripts/canary-alert.sh` are executable.
+- `CANARY_RETRY_ATTEMPTS`, `CANARY_ALERT_EMAIL`, and `CANARY_ALERT_WEBHOOK` are configured for the environment.
+- Operators are subscribed to the alert channel referenced in `CANARY_ALERT_WEBHOOK`.
+
+## Steps
+1. When `deploy-trigger` fails, read `canary-failure-context.txt` (or the run output from `scripts/canary-command-retry.sh`) to capture the failed command, exit code, and retry count.
+2. Allow `.github/workflows/canary-deploy.yml` to run the `rollback` job, which executes `scripts/canary-docker-exec.sh --command rollback` with the configured `CANARY_ROLLBACK_COMMANDS`.
+3. If rollback succeeds, close the canary bead; if it fails, notify stakeholders through the alert job and escalate manually.
+4. When repeated failures occur (e.g., all retry attempts exhausted), pause the `canary` branch trigger (remove the push trigger or set `CANARY_PAUSE=1`) and file an incident referencing bead `hq-sic13`.
+5. Document the investigation outcomes and manual steps in this document under a “Manual recovery notes” section with the command outputs.
+
+## Verification
+- `scripts/canary-command-retry.sh --command health --no-retry`
+- `scripts/canary-alert.sh --message "test alert" --context canary-failure-context.txt`
+- `cat canary-failure-context.txt`
+- `docker logs gastown-canary --tail 200`

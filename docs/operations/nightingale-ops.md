@@ -1,3 +1,19 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "scripts/nightingale-trigger.sh"
+  - ".github/workflows/nightingale-trigger.yml"
+---
+
 # Nightingale CI/CD Ops
 
 Nightingale is the host-rig crew used for CI/CD operations. It runs on a
@@ -26,8 +42,7 @@ Actions via a self-hosted runner.
 
 ## Trigger Mechanism
 
-GitHub Actions uses `.github/workflows/nightingale-trigger.yml` which runs on
-`self-hosted` runners and calls `scripts/nightingale-trigger.sh`.
+GitHub Actions can call `scripts/nightingale-trigger.sh` (for example from a workflow such as `.github/workflows/nightingale-trigger.yml`) on `self-hosted` runners labeled `nightingale`.
 
 The script:
 - Creates a bead describing the CI/CD trigger
@@ -90,3 +105,20 @@ docker exec -it gastown-canary gt mayor attach
 - If the host rig is unavailable, the workflow should fail and be retried.
 - Beads act as the durable audit trail for CI/CD actions.
 - Canary mayor is configured to know it's containerized and how to communicate with Nightingale.
+
+## Preconditions
+- The `nightingale` rig and crew workspaces exist (`gt rig list`, `gt crew list`).
+- The self-hosted runner has label `nightingale` and can reach this repo.
+- `scripts/nightingale-trigger.sh` is up to date and owned by the team.
+
+## Steps
+1. Trigger the workflow via `gh workflow run nightingale-trigger.yml --ref main` or the dispatch call shown above.
+2. Inspect the bead created by the script (`bd show <auto-created bead>`) and ensure it references the intended canary job.
+3. Follow `docs/operations/canary-docker-exec-workflow.md` when Nightingale receives work, linking status updates through `docs/CANARY-DEPLOY.md`.
+4. If Nightingale fails, nudge the rig owner with the alert in `docs/operations/canary-failure-handling.md` and archive related logs.
+
+## Verification
+- `gt rig list | grep nightingale`
+- `gt crew list --rig nightingale`
+- `scripts/nightingale-trigger.sh --help`
+- `gt status -s` (ensure no pending work blocking Nightingale)

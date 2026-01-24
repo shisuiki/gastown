@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Mol Mall Design
 
 > A marketplace for Gas Town formulas
@@ -474,3 +486,6 @@ gt formula install hop://molmall.acme.corp/formulas/@acme/mol-deploy@2.1.0
 - [Formula Resolution](formula-resolution.md) - Local resolution order
 - [molecules.md](molecules.md) - Formula lifecycle (cook, pour, squash)
 - [understanding-gas-town.md](../../../docs/understanding-gas-town.md) - Gas Town architecture
+
+## Scope
+- Scope description pending.

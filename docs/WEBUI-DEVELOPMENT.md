@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # WebUI Development Notes
 
 This document tracks WebUI development conventions and current architecture.
@@ -61,3 +73,6 @@ Future improvements should:
 
 - If WebUI appears stale, confirm the cache TTLs and status WebSocket.
 - If mail actions fail, verify the town `.beads` directory and `GT_ROOT`.
+
+## Scope
+- Scope description pending.

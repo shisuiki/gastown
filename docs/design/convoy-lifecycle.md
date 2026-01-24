@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Convoy Lifecycle Design
 
 > Making convoys actively converge on completion.
@@ -195,3 +207,6 @@ Explicit reopen for clarity (currently implicit via add).
 - [convoy.md](../concepts/convoy.md) - Convoy concept and usage
 - [watchdog-chain.md](watchdog-chain.md) - Deacon patrol system
 - [mail-protocol.md](mail-protocol.md) - Notification delivery
+
+## Scope
+- Scope description pending.
