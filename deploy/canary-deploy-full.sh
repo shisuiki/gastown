@@ -73,16 +73,16 @@ if [ -z "${GT_WEB_AUTH_TOKEN:-}" ]; then
 fi
 
 # Set up Claude credentials directory for container
-# This persists login across container restarts
+# Always sync fresh credentials from host (OAuth tokens expire)
 setup_claude_creds() {
-    if [ ! -d "$CLAUDE_CREDS_DIR" ]; then
-        log "Creating Claude credentials directory: $CLAUDE_CREDS_DIR"
-        mkdir -p "$CLAUDE_CREDS_DIR"
-        # Copy existing credentials if available
-        if [ -f "$HOME/.claude/.credentials.json" ]; then
-            cp "$HOME/.claude/.credentials.json" "$CLAUDE_CREDS_DIR/"
-            log "Copied existing Claude credentials"
-        fi
+    mkdir -p "$CLAUDE_CREDS_DIR"
+    # Always copy fresh credentials if available (tokens expire frequently)
+    if [ -f "$HOME/.claude/.credentials.json" ]; then
+        cp "$HOME/.claude/.credentials.json" "$CLAUDE_CREDS_DIR/"
+        log "Synced Claude credentials from host"
+    else
+        log "WARNING: No Claude credentials found at $HOME/.claude/.credentials.json"
+        log "         Run 'claude --login' on host before deploying"
     fi
     # Ensure directory is accessible by container user (uid 10001)
     chmod 755 "$CLAUDE_CREDS_DIR"
@@ -94,16 +94,17 @@ setup_claude_creds() {
 setup_claude_creds
 
 # Set up Codex credentials directory for container
+# Always sync fresh credentials from host (tokens may expire)
 setup_codex_creds() {
-    if [ ! -d "$CODEX_CREDS_DIR" ]; then
-        log "Creating Codex credentials directory: $CODEX_CREDS_DIR"
-        mkdir -p "$CODEX_CREDS_DIR"
-        # Copy existing credentials if available
-        if [ -d "$HOME/.codex" ]; then
-            cp -r "$HOME/.codex/auth.json" "$CODEX_CREDS_DIR/" 2>/dev/null || true
-            cp -r "$HOME/.codex/config.toml" "$CODEX_CREDS_DIR/" 2>/dev/null || true
-            log "Copied existing Codex credentials"
-        fi
+    mkdir -p "$CODEX_CREDS_DIR"
+    # Always copy fresh credentials if available
+    if [ -d "$HOME/.codex" ]; then
+        cp "$HOME/.codex/auth.json" "$CODEX_CREDS_DIR/" 2>/dev/null || true
+        cp "$HOME/.codex/config.toml" "$CODEX_CREDS_DIR/" 2>/dev/null || true
+        log "Synced Codex credentials from host"
+    else
+        log "WARNING: No Codex credentials found at $HOME/.codex"
+        log "         Run 'codex auth login' on host before deploying"
     fi
     # Ensure directory is accessible by container user (uid 10001)
     chmod 755 "$CODEX_CREDS_DIR"
