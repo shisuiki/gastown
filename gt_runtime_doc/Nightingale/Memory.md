@@ -1,6 +1,9 @@
 # Memory
 
-- Current task: hq-tpays cold-start test + CI/CD status update for canary.
-- Prereq hq-xe36v completed (refinery orphan salvage closed 2026-01-24).
-- Procedure reference: /home/shisui/gt/gt_runtime_doc/operations/coldstart-procedure.md.
-- Expected outputs: cold-start JSON in /home/shisui/gt/logs/coldstart-tests/, CI/CD panel data updated, test history table updated.
+- hq-tpays cold-start test completed.
+- Test ID: coldstart-20260124-132053.
+- External probes: PASSING (6/7), web_ui probe failed (no listener on :8080).
+- Internal assessment: NO_RESPONSE from canary mayor within 60s.
+- Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-132053.json (latest.json updated).
+- coldstart-procedure.md history appended with PASS + notes.
+- Mayor notified of issues via gt mail (subject: COLDSTART_TEST: Issues detected).
