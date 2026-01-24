@@ -23,6 +23,14 @@ CLAUDE_CREDS_DIR=${CLAUDE_CREDS_DIR:-/home/shisui/.claude-canary}
 # Codex credentials directory - persists login across container restarts
 CODEX_CREDS_DIR=${CODEX_CREDS_DIR:-/home/shisui/.codex-canary}
 # Proxy configuration for Claude/Codex API access (Clash on HK server)
+# Force host.docker.internal for container proxy - don't inherit 127.0.0.1 from host
+# which would point to container's localhost instead of host's proxy
+if echo "$HTTP_PROXY" | grep -q "127.0.0.1"; then
+    HTTP_PROXY="http://host.docker.internal:7890"
+fi
+if echo "$HTTPS_PROXY" | grep -q "127.0.0.1"; then
+    HTTPS_PROXY="http://host.docker.internal:7890"
+fi
 HTTP_PROXY=${HTTP_PROXY:-http://host.docker.internal:7890}
 HTTPS_PROXY=${HTTPS_PROXY:-http://host.docker.internal:7890}
 STATE_JSON=${CANARY_STATE_JSON:-"$STATE_DIR/canary-deploy.json"}
