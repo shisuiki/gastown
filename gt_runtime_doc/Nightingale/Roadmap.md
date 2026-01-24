@@ -1,25 +1,20 @@
 # Roadmap
 
-## hq-tpays: Cold-start test + CI/CD status
+## hq-tpays: Cold-start test + CI/CD status (completed)
 
 ### Phase 1: Prep
-- Confirm prerequisite completion (hq-xe36v)
-- Review cold-start procedure and locate CI/CD status data source
-
-Acceptance
-- Procedure understood and target files located
+- Confirmed prerequisite (hq-xe36v) complete
+- Reviewed cold-start procedure + CI/CD status source
 
 ### Phase 2: Execute test
-- Run mol-canary-coldstart-test (or manual procedure)
-- Capture timing + health results
-
-Acceptance
-- New test artifact written under /home/shisui/gt/logs/coldstart-tests/
+- Ran mol-canary-coldstart-test
+- Captured external probes + internal assessment
 
 ### Phase 3: Report + docs
-- Update CI/CD status panel data with latest results
-- Append test history entry in coldstart-procedure.md
-- Communicate status to mayor (per template)
+- Report written to /home/shisui/gt/logs/coldstart-tests/
+- Procedure history updated
+- Status + issues notified to mayor
 
-Acceptance
-- Data updated and docs reflect new test run
+## Follow-ups (filed)
+- hq-t00sx: Investigate web_ui probe failure (no :8080 listener)
+- hq-ifo2u: Investigate canary mayor NO_RESPONSE

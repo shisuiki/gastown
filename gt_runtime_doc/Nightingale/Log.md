@@ -18,3 +18,9 @@
 >> 2026-01-24 13:34:00 +0800 Wrote phase summary for hq-tpays.
 >> 2026-01-24 13:34:24 +0800 Sent status update to mayor.
 >> 2026-01-24 13:34:44 +0800 Closed bead hq-tpays.
+>> 2026-01-24 13:35:15 +0800 Committed and pushed hq-tpays runtime doc updates.
+>> 2026-01-24 13:35:49 +0800 Noticed unexpected deletion of deploy/canary-manifest.yaml in git status; awaiting guidance.
+>> 2026-01-24 14:20:27 +0800 Filed follow-up issues hq-t00sx (web_ui probe) and hq-ifo2u (mayor NO_RESPONSE).
+>> 2026-01-24 14:21:24 +0800 Updated Memory/Roadmap/Progress and added Scratch/Handoff.
+>> 2026-01-24 14:21:40 +0800 Wrote final summary for session.
+>> 2026-01-24 14:22:54 +0800 Confirmed canary-manifest deletion already committed (c874f77b); updated handoff docs.
