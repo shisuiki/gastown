@@ -66,6 +66,14 @@ start_deacon() {
     wait_for_session "hq-deacon" 30
 }
 
+start_mayor() {
+    log "Starting mayor session..."
+    gt mayor start || {
+        log "Mayor start command completed"
+    }
+    wait_for_session "hq-mayor" 30
+}
+
 start_web_ui() {
     log "Starting web UI on port 8080..."
     # Run in foreground to keep container alive
@@ -91,9 +99,13 @@ run_full_mode() {
         bd init /gt/.beads 2>/dev/null || true
     fi
 
-    # Initialize tmux server
+    # Initialize tmux server with a holder session
+    # Note: tmux start-server alone doesn't persist - we need a session
     log "Initializing tmux server..."
-    tmux start-server || true
+    if ! tmux has-session -t gt-holder 2>/dev/null; then
+        tmux new-session -d -s gt-holder -x 120 -y 30 "while true; do sleep 3600; done"
+        log "Created tmux holder session"
+    fi
 
     # Start daemon first
     start_daemon
@@ -105,6 +117,9 @@ run_full_mode() {
     # Give deacon time to initialize patrol
     log "Allowing deacon patrol initialization..."
     sleep 5
+
+    # Start mayor session (handles coordination and probe responses)
+    start_mayor
 
     # Show status
     log "=== Gas Town Status ==="
