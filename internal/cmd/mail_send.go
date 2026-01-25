@@ -74,7 +74,11 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 	} else {
 		msg.Priority = mail.PriorityFromInt(mailPriority)
 	}
-	if mailNotify && msg.Priority == mail.PriorityNormal {
+
+	// Resolve effective notify flag (--no-notify overrides --notify default)
+	shouldNotify := mailNotify && !mailNoNotify
+
+	if shouldNotify && msg.Priority == mail.PriorityNormal {
 		msg.Priority = mail.PriorityHigh
 	}
 
@@ -128,8 +132,8 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 		fmt.Printf("%s Message sent to %s\n", style.Bold.Render("✓"), to)
 		fmt.Printf("  Subject: %s\n", mailSubject)
 
-		// Send notification if --notify flag is set
-		if mailNotify {
+		// Send notification (enabled by default, use --no-notify to disable)
+		if shouldNotify {
 			notifyMailRecipients(townRoot, []string{to}, from, mailSubject)
 		}
 		return nil
@@ -186,8 +190,8 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Type: %s\n", msg.Type)
 	}
 
-	// Send notification if --notify flag is set
-	if mailNotify {
+	// Send notification (enabled by default, use --no-notify to disable)
+	if shouldNotify {
 		notifyMailRecipients(townRoot, recipientAddrs, from, mailSubject)
 	}
 
