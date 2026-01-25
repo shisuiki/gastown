@@ -182,6 +182,39 @@ Examples:
 	RunE: runDogDispatch,
 }
 
+// Dog clear command flags
+var (
+	dogClearAll bool
+)
+
+var dogClearCmd = &cobra.Command{
+	Use:   "clear <name>... | --all",
+	Short: "Clear work assignment and reset dog to idle",
+	Long: `Clear work assignment from a dog and reset state to idle.
+
+This is the programmatic way to clear a dog when:
+- The dog's session exited without sending DOG_DONE
+- A stuck dog needs to be manually reset
+- Non-agentic enforcement detects session exit
+
+Use instead of manually editing .dog.json files.
+
+Examples:
+  gt dog clear alpha         # Clear specific dog
+  gt dog clear alpha bravo   # Clear multiple dogs
+  gt dog clear --all         # Clear all working dogs`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if dogClearAll {
+			return nil
+		}
+		if len(args) < 1 {
+			return fmt.Errorf("requires at least 1 dog name (or use --all)")
+		}
+		return nil
+	},
+	RunE: runDogClear,
+}
+
 func init() {
 	// List flags
 	dogListCmd.Flags().BoolVar(&dogListJSON, "json", false, "Output as JSON")
@@ -205,6 +238,9 @@ func init() {
 	dogDispatchCmd.Flags().BoolVarP(&dogDispatchDryRun, "dry-run", "n", false, "Show what would be done without doing it")
 	_ = dogDispatchCmd.MarkFlagRequired("plugin")
 
+	// Clear flags
+	dogClearCmd.Flags().BoolVar(&dogClearAll, "all", false, "Clear all working dogs")
+
 	// Add subcommands
 	dogCmd.AddCommand(dogAddCmd)
 	dogCmd.AddCommand(dogRemoveCmd)
@@ -212,6 +248,7 @@ func init() {
 	dogCmd.AddCommand(dogCallCmd)
 	dogCmd.AddCommand(dogStatusCmd)
 	dogCmd.AddCommand(dogDispatchCmd)
+	dogCmd.AddCommand(dogClearCmd)
 
 	rootCmd.AddCommand(dogCmd)
 }
@@ -810,6 +847,71 @@ func runDogDispatch(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Dog: %s\n", targetDog.Name)
 	fmt.Printf("  Work: %s\n", workDesc)
 
+	return nil
+}
+
+// runDogClear clears work from a dog and resets it to idle.
+func runDogClear(cmd *cobra.Command, args []string) error {
+	mgr, err := getDogManager()
+	if err != nil {
+		return err
+	}
+
+	if dogClearAll {
+		// Clear all working dogs
+		dogs, err := mgr.List()
+		if err != nil {
+			return fmt.Errorf("listing dogs: %w", err)
+		}
+
+		cleared := 0
+		for _, d := range dogs {
+			if d.State == dog.StateWorking {
+				oldWork := d.Work
+				if err := mgr.ClearWork(d.Name); err != nil {
+					fmt.Printf("Warning: failed to clear %s: %v\n", d.Name, err)
+					continue
+				}
+				cleared++
+				fmt.Printf("✓ Cleared %s (was: %s)\n", d.Name, oldWork)
+			}
+		}
+
+		if cleared == 0 {
+			fmt.Println("No working dogs to clear")
+		} else {
+			fmt.Printf("\n%d dog(s) cleared and returned to idle\n", cleared)
+		}
+		return nil
+	}
+
+	// Clear specific dogs
+	cleared := 0
+	for _, name := range args {
+		d, err := mgr.Get(name)
+		if err != nil {
+			fmt.Printf("Warning: dog %s not found: %v\n", name, err)
+			continue
+		}
+
+		if d.State == dog.StateIdle {
+			fmt.Printf("Dog %s is already idle\n", name)
+			continue
+		}
+
+		oldWork := d.Work
+		if err := mgr.ClearWork(name); err != nil {
+			fmt.Printf("Warning: failed to clear %s: %v\n", name, err)
+			continue
+		}
+
+		cleared++
+		fmt.Printf("✓ Cleared %s (was: %s)\n", name, oldWork)
+	}
+
+	if cleared > 0 {
+		fmt.Printf("\n%d dog(s) cleared and returned to idle\n", cleared)
+	}
 	return nil
 }
 
