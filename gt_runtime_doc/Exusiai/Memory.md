@@ -1,4 +1,4 @@
 # Memory
 
-- Latest action: generated deploy token, wrote `/etc/gastown.env`, and restarted `gastown-web.service` using updated unit with EnvironmentFile.
+- Current focus: audit gastown-sync.service and laplace repo freshness; repair if stale.
 - Repo: /home/shisui/gt/TerraNomadicCity/crew/Exusiai (Gas Town).
