@@ -29,3 +29,4 @@
 2026-01-24T08:08:56Z - DEPLOY hq-rxziu complete: container rebuilt, external 7/7 PASSING, internal NO_RESPONSE, report sent to mayor
 2026-01-24T10:04:45Z - DEPLOY hq-8ynf4 (proxy fix) complete: external 6/7 PASSING, internal AUTH_EXPIRED, report sent
 2026-01-25T18:08:09Z - mol-canary-coldstart-test complete: 10/10 steps, external 6/7, internal NO_RESPONSE
+2026-01-25T19:43:51Z - Coldstart test SUCCESS: 6/7 external, FULLY_OPERATIONAL internal. Mail fix verified.
