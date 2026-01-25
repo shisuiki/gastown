@@ -173,6 +173,7 @@ IMAGE_TAG="gastown:canary-full-${GASTOWN_REF:0:12}"
 HOST_BEADS_DIR=${HOST_BEADS_DIR:-/home/shisui/gt/.beads}
 
 log "=== Full Gas Town Canary Deployment ==="
+log "HOST_BEADS_DIR: $HOST_BEADS_DIR"
 log "Using docker: $DOCKER_CMD"
 log "GT_ROOT: $GT_ROOT"
 log "HOST_BEADS_DIR: $HOST_BEADS_DIR"
