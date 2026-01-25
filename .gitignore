@@ -29,6 +29,12 @@ config.toml
 !config.example.toml
 gt
 
+# Environment files with secrets (never commit!)
+*.env
+!*.env.example
+.env.*
+!.env.*.example
+
 # Runtime state
 state.json
 .runtime/

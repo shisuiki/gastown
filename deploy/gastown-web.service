@@ -8,9 +8,25 @@ WorkingDirectory=/home/shisui/gt
 ExecStart=/home/shisui/go/bin/gt gui --port 8080
 Restart=on-failure
 RestartSec=5
+
+# 基础环境变量
 Environment=HOME=/home/shisui
 Environment=GT_ROOT=/home/shisui/gt
 Environment=PATH=/home/shisui/go/bin:/home/shisui/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+# ============================================================================
+# 认证配置：从外部文件加载（推荐）
+# ============================================================================
+# 创建 /etc/gastown.env 文件并设置 GT_WEB_AUTH_TOKEN
+# 这样 Token 不会被提交到 Git 仓库
+EnvironmentFile=-/etc/gastown.env
+
+# ============================================================================
+# 或者：直接在这里设置（不推荐，但简单）
+# ============================================================================
+# 取消下面两行的注释并填入你的 Token
+# Environment=GT_WEB_AUTH_TOKEN=YOUR_SECURE_TOKEN_HERE
+# Environment=GT_WEB_ALLOW_REMOTE=1
 
 [Install]
 WantedBy=default.target
