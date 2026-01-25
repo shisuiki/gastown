@@ -11,7 +11,9 @@ import (
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/events"
 	"github.com/steveyegge/gastown/internal/mail"
+	"github.com/steveyegge/gastown/internal/session"
 	"github.com/steveyegge/gastown/internal/style"
+	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
 
@@ -125,6 +127,11 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 		_ = events.LogFeed(events.TypeMail, from, events.MailPayload(to, mailSubject))
 		fmt.Printf("%s Message sent to %s\n", style.Bold.Render("✓"), to)
 		fmt.Printf("  Subject: %s\n", mailSubject)
+
+		// Send notification if --notify flag is set
+		if mailNotify {
+			notifyMailRecipients(townRoot, []string{to}, from, mailSubject)
+		}
 		return nil
 	}
 
@@ -179,6 +186,11 @@ func runMailSend(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Type: %s\n", msg.Type)
 	}
 
+	// Send notification if --notify flag is set
+	if mailNotify {
+		notifyMailRecipients(townRoot, recipientAddrs, from, mailSubject)
+	}
+
 	return nil
 }
 
@@ -187,4 +199,90 @@ func generateThreadID() string {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b) // crypto/rand.Read only fails on broken system
 	return "thread-" + hex.EncodeToString(b)
+}
+
+// notifyMailRecipients sends tmux notifications to mail recipients.
+// This is called when --notify flag is set on mail send.
+// Errors are logged but don't fail the mail send operation.
+func notifyMailRecipients(townRoot string, recipients []string, from, subject string) {
+	t := tmux.NewTmux()
+	message := fmt.Sprintf("[mail from %s] %s", from, subject)
+
+	var notified int
+	for _, addr := range recipients {
+		sessionName := resolveMailAddrToSession(addr)
+		if sessionName == "" {
+			continue
+		}
+
+		// Check if session exists
+		exists, err := t.HasSession(sessionName)
+		if err != nil || !exists {
+			continue
+		}
+
+		// Check DND status (fail-open: nudge if we can't check)
+		if townRoot != "" {
+			shouldSend, _, _ := shouldNudgeTarget(townRoot, addr, false)
+			if !shouldSend {
+				fmt.Printf("  %s %s (DND enabled)\n", style.Dim.Render("○"), addr)
+				continue
+			}
+		}
+
+		// Send the nudge
+		if err := t.NudgeSession(sessionName, message); err != nil {
+			fmt.Printf("  %s Failed to notify %s: %v\n", style.Dim.Render("○"), addr, err)
+			continue
+		}
+
+		notified++
+	}
+
+	if notified > 0 {
+		fmt.Printf("  %s Notified %d recipient(s)\n", style.Bold.Render("📬"), notified)
+	}
+}
+
+// resolveMailAddrToSession converts a mail address to a tmux session name.
+// Returns empty string if the address cannot be resolved.
+func resolveMailAddrToSession(addr string) string {
+	// Handle special cases
+	switch addr {
+	case "mayor", "mayor/":
+		return session.MayorSessionName()
+	case "deacon", "deacon/":
+		return session.DeaconSessionName()
+	}
+
+	// Parse rig/role format
+	if !strings.Contains(addr, "/") {
+		return ""
+	}
+
+	parts := strings.SplitN(addr, "/", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+
+	rig := parts[0]
+	role := parts[1]
+
+	// Handle trailing slash (e.g., "gastown/witness/")
+	role = strings.TrimSuffix(role, "/")
+
+	switch role {
+	case "witness":
+		return session.WitnessSessionName(rig)
+	case "refinery":
+		return session.RefinerySessionName(rig)
+	default:
+		// Check for crew format: crew/<name>
+		if strings.HasPrefix(role, "crew/") {
+			crewName := strings.TrimPrefix(role, "crew/")
+			return crewSessionName(rig, crewName)
+		}
+		// Assume polecat
+		return fmt.Sprintf("gt-%s-%s", rig, role)
+	}
 }
