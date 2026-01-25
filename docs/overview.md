@@ -91,6 +91,12 @@ When issues close, the convoy lands. See [Convoys](concepts/convoy.md) for detai
 - **report:** Historical research or incident notes. These are archived in `docs/archive/` and should **not** be used as executable runbooks.
 - **example:** Walkthroughs or demos that illustrate workflows outside the core runbooks.
 
+## Writing docs? start here
+
+- Always run through the [doc_head skill](../skills/doc_head.md) before touching `docs/**/*.md` so the frontmatter stays uniform.
+- Copy one of the templates in [_templates/runbook.md](_templates/runbook.md) or [_templates/evergreen.md](_templates/evergreen.md), or run `scripts/docs_add_head_hint.sh` to remind you of the required head.
+- After the edit, run `scripts/docs_lint.sh` (or `make docs-lint`) to verify the head + sections are complete.
+
 ## Installation & deployment reference
 
 - [Installing Gas Town](INSTALLING.md)
