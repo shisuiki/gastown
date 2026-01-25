@@ -81,24 +81,58 @@ if [ -z "${GT_WEB_AUTH_TOKEN:-}" ]; then
 fi
 
 # Set up Claude credentials directory for container
-# Always sync fresh credentials from host (OAuth tokens expire)
+# Searches multiple locations for unexpired OAuth tokens
 setup_claude_creds() {
+    log "Setting up Claude credentials..."
+
     # Take ownership first (may be owned by 10001 from previous deploy)
     sudo chown -R "$(id -u):$(id -g)" "$CLAUDE_CREDS_DIR" 2>/dev/null || true
     mkdir -p "$CLAUDE_CREDS_DIR"
-    # Always copy fresh credentials if available (tokens expire frequently)
-    if [ -f "$HOME/.claude/.credentials.json" ]; then
-        cp "$HOME/.claude/.credentials.json" "$CLAUDE_CREDS_DIR/"
-        log "Synced Claude .credentials.json from host"
+
+    # Use refresh script if available (searches all credential locations)
+    local refresh_script="${GT_ROOT:-/home/shisui/gt}/scripts/refresh-canary-credentials.sh"
+    if [ -x "$refresh_script" ]; then
+        log "Using credential refresh script..."
+        if "$refresh_script" "$CLAUDE_CREDS_DIR"; then
+            log "Credentials refreshed via script"
+        else
+            log "WARNING: Credential refresh script failed"
+        fi
     else
-        log "WARNING: No Claude credentials found at $HOME/.claude/.credentials.json"
-        log "         Run 'claude --login' on host before deploying"
+        # Fallback: search common credential locations for unexpired token
+        log "Searching for unexpired OAuth credentials..."
+        local now_ms=$(($(date +%s) * 1000))
+        local best_file=""
+        local best_expiry=0
+
+        for cred_file in \
+            "$HOME/.claude/.credentials.json" \
+            "$HOME/.claude-accounts"/*/.credentials.json \
+            "$HOME/.claude-"*/.credentials.json; do
+
+            [ -f "$cred_file" ] || continue
+
+            local expiry
+            expiry=$(jq -r '.claudeAiOauth.expiresAt // 0' "$cred_file" 2>/dev/null)
+
+            # Check if token is valid (expires > 5 min from now)
+            if [ "$expiry" -gt "$((now_ms + 300000))" ] && [ "$expiry" -gt "$best_expiry" ]; then
+                best_file="$cred_file"
+                best_expiry="$expiry"
+            fi
+        done
+
+        if [ -n "$best_file" ]; then
+            cp "$best_file" "$CLAUDE_CREDS_DIR/.credentials.json"
+            local expiry_human
+            expiry_human=$(date -d "@$((best_expiry / 1000))" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "unknown")
+            log "Copied credentials from: $best_file (expires: $expiry_human)"
+        else
+            log "WARNING: No unexpired Claude credentials found"
+            log "         Mayor session will fail until manually authenticated"
+        fi
     fi
-    # Also sync .claude.json (session/config data required for auth)
-    if [ -f "$HOME/.claude.json" ]; then
-        cp "$HOME/.claude.json" "$CLAUDE_CREDS_DIR/claude.json"
-        log "Synced Claude .claude.json from host"
-    fi
+
     # CRITICAL: chown to container user uid 10001 so container can write
     sudo chown -R 10001:10001 "$CLAUDE_CREDS_DIR" || {
         log "WARNING: Could not chown $CLAUDE_CREDS_DIR to 10001 (need sudo)"
