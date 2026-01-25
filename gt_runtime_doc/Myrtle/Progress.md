@@ -51,6 +51,10 @@
 
 1. Added a summary entry for the canary workflow integration phase.
 
+### Witness patrol wisp dedupe
+
+1. Fixed patrol auto-spawn to detect hooked wisps and added wisp dedupe/anti-flood guardrails in witness patrol formula.
+
 ## 2026-01-21
 
 ### Docs UI tmpl support

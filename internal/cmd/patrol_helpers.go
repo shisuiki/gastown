@@ -52,6 +52,29 @@ func findActivePatrol(cfg PatrolConfig) (patrolID, patrolLine string, found bool
 		}
 	}
 
+	// Check for hooked patrol (auto-spawned wisps are pinned as hooked)
+	cmdHooked := exec.Command("bd", "--no-daemon", "list", "--status=hooked", "--type=epic")
+	cmdHooked.Dir = cfg.BeadsDir
+	var stdoutHooked, stderrHooked bytes.Buffer
+	cmdHooked.Stdout = &stdoutHooked
+	cmdHooked.Stderr = &stderrHooked
+
+	if err := cmdHooked.Run(); err != nil {
+		if errMsg := strings.TrimSpace(stderrHooked.String()); errMsg != "" {
+			fmt.Fprintf(os.Stderr, "bd list: %s\n", errMsg)
+		}
+	} else {
+		lines := strings.Split(stdoutHooked.String(), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, cfg.PatrolMolName) && !strings.Contains(line, "[template]") {
+				parts := strings.Fields(line)
+				if len(parts) > 0 {
+					return parts[0], line, true
+				}
+			}
+		}
+	}
+
 	// Check for open patrols with open children (active wisp)
 	cmdOpen := exec.Command("bd", "--no-daemon", "list", "--status=open", "--type=epic")
 	cmdOpen.Dir = cfg.BeadsDir
