@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Polecat Lifecycle
 
 > Understanding the three-layer architecture of polecat workers
@@ -310,3 +322,6 @@ This distinction matters for:
 - [Overview](../overview.md) - Role taxonomy and architecture
 - [Molecules](molecules.md) - Molecule execution and polecat workflow
 - [Propulsion Principle](propulsion-principle.md) - Why work triggers immediate execution
+
+## Scope
+- Scope description pending.

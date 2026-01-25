@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Beads-Native Messaging
 
 This document describes the beads-native messaging system for Gas Town, which replaces the file-based messaging configuration with persistent beads stored in the town's `.beads` directory.
@@ -199,3 +211,6 @@ gt mail group create leads gastown/crew/max gastown/crew/dennis
 # Create a group that includes other groups
 gt mail group create all-hands witnesses leads mayor/
 ```
+
+## Scope
+- Scope description pending.

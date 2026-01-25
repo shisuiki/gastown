@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Molecules
 
 Molecules are workflow templates that coordinate multi-step work in Gas Town.
@@ -205,3 +217,6 @@ gt done                        # Signal completion (syncs, submits to MQ, notifi
 3. **Check progress with `bd mol current`** - Know where you are before resuming
 4. **Squash completed molecules** - Create digests for audit trail
 5. **Burn routine wisps** - Don't accumulate ephemeral patrol data
+
+## Scope
+- Scope description pending.

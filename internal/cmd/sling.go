@@ -100,6 +100,7 @@ var (
 	slingAccount  string // --account: Claude Code account handle to use
 	slingAgent    string // --agent: override runtime agent for this sling/spawn
 	slingNoConvoy bool   // --no-convoy: skip auto-convoy creation
+	slingSelf     bool   // --self: allow slinging to yourself
 )
 
 func init() {
@@ -122,6 +123,7 @@ func init() {
 	slingCmd.Flags().StringVar(&slingAccount, "account", "", "Claude Code account handle to use")
 	slingCmd.Flags().StringVar(&slingAgent, "agent", "", "Override agent/runtime for this sling (e.g., claude, gemini, codex, or custom alias)")
 	slingCmd.Flags().BoolVar(&slingNoConvoy, "no-convoy", false, "Skip auto-convoy creation for single-issue sling")
+	slingCmd.Flags().BoolVar(&slingSelf, "self", false, "Confirm slinging to yourself (required when target resolves to current agent)")
 
 	rootCmd.AddCommand(slingCmd)
 }
@@ -321,6 +323,18 @@ func runSling(cmd *cobra.Command, args []string) error {
 		// Use self's working directory for bd commands
 		if selfWorkDir != "" {
 			hookWorkDir = selfWorkDir
+		}
+	}
+
+	// Guard against accidental self-sling unless explicitly confirmed.
+	if selfAgentID, _, _, selfErr := resolveSelfTarget(); selfErr == nil {
+		if normalizeTownIdentity(targetAgent) == normalizeTownIdentity(selfAgentID) {
+			if !slingSelf {
+				printSelfSlingWarning(beadID, targetAgent)
+				if !slingDryRun {
+					return fmt.Errorf("self-sling requires --self")
+				}
+			}
 		}
 	}
 
@@ -593,4 +607,13 @@ func runSling(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func printSelfSlingWarning(beadID, targetAgent string) {
+	style.PrintWarning("self-sling detected (target resolves to %s)", targetAgent)
+	fmt.Printf("  This attaches %s to YOUR hook and starts immediately.\n", beadID)
+	fmt.Printf("  If you meant to delegate, specify a target, e.g.:\n")
+	fmt.Printf("    gt sling %s <rig>/<agent>\n", beadID)
+	fmt.Printf("    gt sling %s crew\n", beadID)
+	fmt.Printf("  To proceed with self-sling, rerun with --self\n")
 }

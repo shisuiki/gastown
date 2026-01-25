@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Agent Identity and Attribution
 
 > Canonical format for agent identity in Gas Town
@@ -286,3 +298,6 @@ bd stats --actor=gastown/polecats/gpt-* --metric=revision-count
 ```
 
 Lower revision counts suggest higher first-pass quality.
+
+## Scope
+- Scope description pending.

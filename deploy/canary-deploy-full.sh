@@ -81,41 +81,53 @@ if [ -z "${GT_WEB_AUTH_TOKEN:-}" ]; then
 fi
 
 # Set up Claude credentials directory for container
-# This persists login across container restarts
+# Always sync fresh credentials from host (OAuth tokens expire)
 setup_claude_creds() {
-    if [ ! -d "$CLAUDE_CREDS_DIR" ]; then
-        log "Creating Claude credentials directory: $CLAUDE_CREDS_DIR"
-        mkdir -p "$CLAUDE_CREDS_DIR"
-        # Copy existing credentials if available
-        if [ -f "$HOME/.claude/.credentials.json" ]; then
-            cp "$HOME/.claude/.credentials.json" "$CLAUDE_CREDS_DIR/"
-            log "Copied existing Claude credentials"
-        fi
+    # Take ownership first (may be owned by 10001 from previous deploy)
+    sudo chown -R "$(id -u):$(id -g)" "$CLAUDE_CREDS_DIR" 2>/dev/null || true
+    mkdir -p "$CLAUDE_CREDS_DIR"
+    # Always copy fresh credentials if available (tokens expire frequently)
+    if [ -f "$HOME/.claude/.credentials.json" ]; then
+        cp "$HOME/.claude/.credentials.json" "$CLAUDE_CREDS_DIR/"
+        log "Synced Claude .credentials.json from host"
+    else
+        log "WARNING: No Claude credentials found at $HOME/.claude/.credentials.json"
+        log "         Run 'claude --login' on host before deploying"
     fi
-    # Ensure directory is accessible by container user (uid 10001)
-    chmod 755 "$CLAUDE_CREDS_DIR"
-    if [ -f "$CLAUDE_CREDS_DIR/.credentials.json" ]; then
-        chmod 644 "$CLAUDE_CREDS_DIR/.credentials.json"
+    # Also sync .claude.json (session/config data required for auth)
+    if [ -f "$HOME/.claude.json" ]; then
+        cp "$HOME/.claude.json" "$CLAUDE_CREDS_DIR/claude.json"
+        log "Synced Claude .claude.json from host"
     fi
+    # CRITICAL: chown to container user uid 10001 so container can write
+    sudo chown -R 10001:10001 "$CLAUDE_CREDS_DIR" || {
+        log "WARNING: Could not chown $CLAUDE_CREDS_DIR to 10001 (need sudo)"
+        log "         Container may have write permission issues"
+    }
 }
 
 setup_claude_creds
 
 # Set up Codex credentials directory for container
+# Always sync fresh credentials from host (tokens may expire)
 setup_codex_creds() {
-    if [ ! -d "$CODEX_CREDS_DIR" ]; then
-        log "Creating Codex credentials directory: $CODEX_CREDS_DIR"
-        mkdir -p "$CODEX_CREDS_DIR"
-        # Copy existing credentials if available
-        if [ -d "$HOME/.codex" ]; then
-            cp -r "$HOME/.codex/auth.json" "$CODEX_CREDS_DIR/" 2>/dev/null || true
-            cp -r "$HOME/.codex/config.toml" "$CODEX_CREDS_DIR/" 2>/dev/null || true
-            log "Copied existing Codex credentials"
-        fi
+    # Take ownership first (may be owned by 10001 from previous deploy)
+    sudo chown -R "$(id -u):$(id -g)" "$CODEX_CREDS_DIR" 2>/dev/null || true
+    mkdir -p "$CODEX_CREDS_DIR"
+    # Always copy fresh credentials if available
+    if [ -d "$HOME/.codex" ]; then
+        cp "$HOME/.codex/auth.json" "$CODEX_CREDS_DIR/" 2>/dev/null || true
+        cp "$HOME/.codex/config.toml" "$CODEX_CREDS_DIR/" 2>/dev/null || true
+        log "Synced Codex credentials from host"
+    else
+        log "WARNING: No Codex credentials found at $HOME/.codex"
+        log "         Run 'codex auth login' on host before deploying"
     fi
-    # Ensure directory is accessible by container user (uid 10001)
-    chmod 755 "$CODEX_CREDS_DIR"
-    chmod 644 "$CODEX_CREDS_DIR"/* 2>/dev/null || true
+    # CRITICAL: chown to container user uid 10001 so container can write
+    sudo chown -R 10001:10001 "$CODEX_CREDS_DIR" || {
+        log "WARNING: Could not chown $CODEX_CREDS_DIR to 10001 (need sudo)"
+        log "         Codex will report 'Permission denied' errors"
+    }
 }
 
 setup_codex_creds
@@ -161,6 +173,11 @@ trap rollback ERR
 
 # Start new container with full mode
 log "Starting full canary container on port $CANARY_PORT"
+# Build volume mounts - include .claude.json if it was synced
+CLAUDE_JSON_MOUNT=""
+if [ -f "$CLAUDE_CREDS_DIR/claude.json" ]; then
+    CLAUDE_JSON_MOUNT="-v $CLAUDE_CREDS_DIR/claude.json:/home/gastown/.claude.json"
+fi
 $DOCKER_CMD run -d \
     --name "$CONTAINER_NAME" \
     --restart=always \
@@ -168,6 +185,7 @@ $DOCKER_CMD run -d \
     -p "$CANARY_PORT:8080" \
     -v "$GT_ROOT:/gt" \
     -v "$CLAUDE_CREDS_DIR:/home/gastown/.claude" \
+    $CLAUDE_JSON_MOUNT \
     -v "$CODEX_CREDS_DIR:/home/gastown/.codex" \
     -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
     -e GT_WEB_ALLOW_REMOTE=1 \

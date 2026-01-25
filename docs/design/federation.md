@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Federation Architecture
 
 > **Status: Design spec - not yet implemented**
@@ -246,3 +258,6 @@ Completion cascades up. Attribution preserved.
 Federation isn't just about connecting repos - it's about treating distributed
 engineering as a first-class concern, with the same visibility and tooling
 you'd expect from a monorepo, while preserving team autonomy.
+
+## Scope
+- Scope description pending.

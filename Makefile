@@ -33,3 +33,6 @@ clean:
 
 test:
 	go test ./...
+
+docs-lint:
+	./scripts/docs_lint.sh

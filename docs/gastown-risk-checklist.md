@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Gastown Risk Checklist (Prioritized)
 
 ## P0 — Immediate Safety and Misuse Risks
@@ -27,3 +39,6 @@
 ## P2 — Tooling Clarity
 - Clarify gate/park/defer semantics across gt and bd with examples.
 - Add `gt` equivalents or alias guidance for the most common bd workflows.
+
+## Scope
+- Scope description pending.

@@ -1,3 +1,19 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "scripts/canary-docker-exec.sh"
+  - ".github/workflows/canary-deploy.yml"
+---
+
 # Canary Docker Exec Workflow
 
 This workflow describes Step 5 of the `hq-vsa3v` Canary Deploy Infrastructure epic (`hq-c85he`). The goal is to trigger post-deploy sanity checks and maintenance commands inside the canary Docker container while surfacing failures through the deployment workflow. It also documents how to validate the canary container locally or on a staging host so that the command library can be exercised before the GitHub job runs.
@@ -92,3 +108,20 @@ This mirrors the steps the workflow performs and reuses the same error handling.
 ## References
 - Step 5: Deploy trigger mechanism (Docker exec) – bead `hq-c85he`
 - Canary Deploy Infrastructure epic `hq-vsa3v`
+
+## Preconditions
+- `scripts/canary-docker-exec.sh` is executable in the repo root.
+- The canary container image is built and `gastown-canary` is ready to run on the host.
+- Required tokens (e.g., `GT_WEB_AUTH_TOKEN`) and overrides (`CANARY_COMMAND_TIMEOUT`) are available for the helper.
+
+## Steps
+1. Inspect `docker ps --filter name=gastown-canary` to ensure the container can be restarted.
+2. Run `scripts/canary-docker-exec.sh --command health --timeout 60` and confirm it returns exit `0`.
+3. Sequentially invoke `scripts/canary-docker-exec.sh --command config`, `... --command migrate`, and `... --command smoke` to refresh config, run migrations, and exercise the public endpoint.
+4. If any command fails, let the `.github/workflows/canary-deploy.yml` `rollback` job run `scripts/canary-docker-exec.sh --command rollback` with `CANARY_ROLLBACK_COMMANDS` defined.
+5. Capture key logs (`docker logs gastown-canary --tail 200`) and attach them to the current bead for traceability.
+
+## Verification
+- `scripts/canary-docker-exec.sh --command health --timeout 60`
+- `docker inspect gastown-canary --format '{{.State.Status}}'`
+- `scripts/canary-docker-exec.sh --command rollback --timeout 120 CANARY_ROLLBACK_COMMANDS='echo rollback dry run'`

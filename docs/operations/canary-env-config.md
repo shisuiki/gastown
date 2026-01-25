@@ -1,3 +1,20 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "deploy/canary/compose.sh"
+  - "deploy/canary/manifest.sh"
+  - "deploy/canary-manifest.yaml"
+---
+
 # Canary Env-Config Injection and Deploy Metadata
 
 This document defines the env-config injection method and deployment metadata
@@ -82,3 +99,19 @@ Get the latest manifest path:
 ```bash
 deploy/canary/manifest.sh latest
 ```
+
+## Preconditions
+- The env-config repo (e.g., `~/gt/env-config`) is cloned and hosts the SHA referenced by `CANARY_ENV_CONFIG_SHA`.
+- `deploy/canary/compose.sh`, `deploy/canary/manifest.sh`, and `deploy/canary-manifest.yaml` exist and are executable.
+- `CANARY_IMAGE_TAG` and `GT_WEB_AUTH_TOKEN` are exported before running the composition script.
+
+## Steps
+1. Run `deploy/canary/compose.sh --gastown-sha <sha> --env-config-sha <env_sha> --image-tag <tag>` to pin the env-config worktree and record the manifest.
+2. Confirm that `~/gt/deployments/canary/env-config/<env_sha>` exists and is populated with the expected files.
+3. Bind-mount the generated `ENV_CONFIG_PATH` into `gastown-canary` or package it into the deploy manifest used by `deploy/canary-deploy.sh`.
+4. Periodically prune old manifests with `deploy/canary/manifest.sh clean --keep 10` (or adjust `CANARY_DEPLOY_RETENTION` as needed).
+
+## Verification
+- `deploy/canary/manifest.sh list --limit 5`
+- `deploy/canary/manifest.sh latest | grep env_config_sha`
+- `test -f ~/gt/deployments/canary/last-deploy.env`

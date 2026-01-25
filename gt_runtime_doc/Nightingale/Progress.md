@@ -1,8 +1,13 @@
 # Progress
 
-- 2026-01-24: Cold-start test executed (TEST_ID coldstart-20260124-132053).
-  - External probes: PASSING (6/7); web_ui failed.
-  - Internal assessment: NO_RESPONSE.
-  - Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-132053.json
-- Follow-up issues filed: hq-t00sx (web_ui), hq-ifo2u (mayor response).
-- Manifest removal tracked in repo history (commit c874f77b).
+- 2026-01-24: DEPLOY task hq-8ynf4 (proxy fix) executed.
+  - Rebuilt gastown-canary from canary branch (7dda3265).
+  - Container healthy after 6s.
+  - API connectivity verified: curl to api.anthropic.com works.
+  - External probes: 6/7 PASSING (gt_status timeout).
+  - Internal assessment: AUTH_EXPIRED (Claude OAuth token expired).
+  - Mayor session now starts and persists (progress from previous test).
+  - Fixed .claude directory permissions again.
+  - Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260124-175829.json
+  - Results sent to mayor via reply to hq-8ynf4.
+  - Next: Manual re-authentication needed in container.

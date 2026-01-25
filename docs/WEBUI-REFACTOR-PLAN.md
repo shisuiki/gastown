@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Gas Town WebUI Refactoring Plan
 
 This document outlines the comprehensive plan to modernize the Gas Town WebUI.
@@ -346,3 +358,6 @@ internal/web/
 
 *Created: 2025-01-17*
 *Status: Draft - Pending Review*
+
+## Scope
+- Scope description pending.

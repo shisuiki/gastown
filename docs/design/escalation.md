@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Gas Town Escalation Protocol
 
 > Reference for escalation paths in Gas Town
@@ -310,3 +322,6 @@ bd close <id> --reason "Resolved by fixing X"
 
 - bd-7zka.2: Gate evaluation (uses escalation for timeouts)
 - bd-0sgd: Design issue for this extended escalation system
+
+## Scope
+- Scope description pending.

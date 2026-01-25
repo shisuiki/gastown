@@ -1,3 +1,19 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "deploy/canary-deploy.sh"
+  - "deploy/canary-rollback.sh"
+---
+
 # Canary Deploy Checklist
 
 Use this checklist when rolling the canary container.
@@ -39,3 +55,16 @@ Track canary deploys in beads so they are auditable and visible to the team.
 - [ ] Critical errors in logs (`docker logs <container>`).
 
 If rollback is required, stop the container and redeploy the previous image tag.
+
+## Steps
+1. Confirm prerequisites: `deploy/canary-deploy.sh --help` returns usage, the latest image tag exists in GHCR, and env vars such as `GT_WEB_AUTH_TOKEN`/`CANARY_PORT` are exported.
+2. Run `deploy/canary-deploy.sh` (with `VALIDATE_CANARY=1`) to build/pull the image and start `gastown-canary` with `/gt` bind-mounted.
+3. After the container is up, execute the configured validation steps (`gt version`, `curl http://localhost:8081/api/version`, `open http://localhost:8080/` in a browser if allowed) while watching container logs.
+4. Record each milestone in the canary bead: `bd update <bead-id> --status=... --note "validation step passed"`.
+5. If anything fails, stop the container, redeploy the previous image, and capture logs (`docker logs --tail 200 gastown-canary`) before closing the bead.
+
+## Verification
+- `docker ps --filter "name=gastown-canary" --format '{{.Names}}\t{{.Status}}'`
+- `curl -fsS http://localhost:8081/api/version`
+- `bd show <bead-id> --json` (validate tracking metadata exists)
+- `deploy/canary-rollback.sh --help` (ensure rollback helper is available)

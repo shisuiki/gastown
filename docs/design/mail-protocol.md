@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Gas Town Mail Protocol
 
 > Reference for inter-agent mail communication in Gas Town
@@ -359,3 +371,6 @@ flexible enough for human debugging.
 - `.beads/formulas/mol-witness-patrol.formula.toml` - Witness handling
 - `internal/mail/` - Mail routing implementation
 - `internal/protocol/` - Protocol handlers for Witness-Refinery communication
+
+## Scope
+- Scope description pending.

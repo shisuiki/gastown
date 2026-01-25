@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Dog Pool Architecture for Concurrent Shutdown Dances
 
 > Design document for gt-fsld8
@@ -493,3 +505,6 @@ Those are different from shutdown-dance dogs:
 - [x] Architecture document for Dog pool
 - [x] Clear allocation/deallocation protocol
 - [x] Failure handling for Dog crashes
+
+## Scope
+- Scope description pending.

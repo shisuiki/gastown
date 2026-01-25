@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Convoys
 
 Convoys are the primary unit for tracking batched work across rigs.
@@ -224,3 +236,6 @@ Use rig status for "what's everyone in this rig working on?"
 
 - [Propulsion Principle](propulsion-principle.md) - Worker execution model
 - [Mail Protocol](../design/mail-protocol.md) - Notification delivery
+
+## Scope
+- Scope description pending.

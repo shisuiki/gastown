@@ -1,3 +1,19 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - ".github/workflows/canary-deploy.yml"
+  - "deploy/canary-deploy.sh"
+---
+
 # Unified CI/CD Workflow
 
 This document describes the integrated CI/CD pipeline that coordinates changes across three repositories:
@@ -221,3 +237,20 @@ docker inspect gastown-canary --format '{{.Config.Labels}}'
 - [Canary Deploy Checklist](canary-deploy-checklist.md)
 - [Canary Promotion](canary-promotion.md)
 - [Canary Failure Handling](canary-failure-handling.md)
+
+## Preconditions
+- `GASTOWN_DISPATCH_TOKEN` secret exists and is scoped to trigger gastown workflows.
+- `canary` branch worktrees (`/home/shisui/gt-canary` and `/home/shisui/work/gastown`) exist and track actual repos.
+- `canary-deploy.yml`, `canary-deploy-full.sh`, and `canary-validate.sh` are present in the repo.
+
+## Steps
+1. Push changes to `canary` in GTRuntime or gastown depending on the artifact (formulas vs. application code).
+2. Allow `canary-sync.yml` (GTRuntime) to sync the worktree and dispatch `repository_dispatch` events to gastown.
+3. Let `canary-deploy.yml` pick up the push or dispatch, validate the workspace, and run deployment steps.
+4. If deployment fails, follow `docs/operations/canary-docker-exec-workflow.md` and `docs/operations/canary-failure-handling.md` for retry/alert protocols.
+5. After stabilization, promote the change with `docs/operations/canary-promotion.md` guidance.
+
+## Verification
+- `gh workflow view canary-deploy.yml --json state`
+- `cat /home/shisui/gt-canary/logs/canary-deploy.json | jq .deploy_result`
+- `deploy/canary-validate.sh --help`

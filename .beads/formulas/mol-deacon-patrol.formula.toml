@@ -595,17 +595,15 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
     # This is the non-agentic enforcement - clear dog immediately
     echo "Dog <name> session exited without DOG_DONE - auto-clearing"
 
-    # Reset dog state to idle
-    jq '.state = "idle" | del(.work)' ~/gt/deacon/dogs/<name>/.dog.json > /tmp/dog.json && \
-      mv /tmp/dog.json ~/gt/deacon/dogs/<name>/.dog.json
+    # Use gt dog clear to properly reset state
+    gt dog clear <name>
 
     # Notify Mayor about auto-clear (different from timeout)
     gt mail send mayor/ -s "DOG_EXIT <name>" \
       -m "Dog <name> session exited without DOG_DONE callback.
 Auto-cleared to idle state (non-agentic enforcement).
 Work was: <work_description>
-This may indicate: context limit, crash, or missed termination step.
-Related: hq-iltag"
+This may indicate: context limit, crash, or missed termination step."
 
     # Skip duration check for this dog - already handled
     continue
@@ -634,15 +632,13 @@ is_stuck = duration > stuck_threshold
 
 For dogs working > timeout:
 ```bash
-# NOTE: gt warrant and gt dog clear NOT YET IMPLEMENTED (tracked: hq-5r6q)
-# Manual workaround: reset dog state directly
-jq '.state = "idle" | del(.work)' ~/gt/deacon/dogs/<name>/.dog.json > /tmp/dog.json && \\
-  mv /tmp/dog.json ~/gt/deacon/dogs/<name>/.dog.json
+# Use gt dog clear to properly reset state
+gt dog clear <name>
 
 # Notify Mayor about timeout
 gt mail send mayor/ -s "DOG_TIMEOUT <name>" \\
-  -m "Dog <name> timed out. Working state with no work for <duration>.
-Manual reset applied. Please investigate root cause (tracked: hq-vggp)."
+  -m "Dog <name> timed out. Working state for <duration>.
+Reset to idle. Please investigate root cause."
 ```
 
 **Decision matrix:**

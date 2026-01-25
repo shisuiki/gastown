@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Why These Features?
 
 > Gas Town's architecture explained through enterprise AI challenges
@@ -258,3 +270,6 @@ These features aren't bolted on. They're foundational:
 
 Gas Town is built to answer the questions enterprises will ask as AI agents
 become central to their engineering workflows.
+
+## Scope
+- Scope description pending.

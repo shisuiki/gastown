@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Escalation System Design
 
 > Detailed design for the Gas Town unified escalation system.
@@ -574,3 +586,6 @@ gt-i9r20.1 (gt escalate command)
 3. **Escalation dashboard**: Web UI for escalation management
 4. **Scheduled escalations**: "Remind me in 2h if not resolved"
 5. **Escalation templates**: Pre-defined escalation types
+
+## Scope
+- Scope description pending.

@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Daemon/Boot/Deacon Watchdog Chain
 
 > Autonomous health monitoring and recovery in Gas Town.
@@ -304,3 +316,6 @@ The separation costs complexity but enables:
 2. **Fresh context** for each triage decision
 3. **Graceful degradation** when tmux unavailable
 4. **Multiple fallback** layers for reliability
+
+## Scope
+- Scope description pending.

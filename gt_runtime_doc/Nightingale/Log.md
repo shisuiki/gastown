@@ -26,3 +26,5 @@
 >> 2026-01-24 14:22:54 +0800 Confirmed canary-manifest deletion already committed (c874f77b); updated handoff docs.
 >> 2026-01-24 14:23:34 +0800 Committed and pushed runtime doc handoff updates.
 >> 2026-01-24 14:24:44 +0800 git pull --rebase blocked by unstaged runtime doc changes.
+2026-01-24T08:08:56Z - DEPLOY hq-rxziu complete: container rebuilt, external 7/7 PASSING, internal NO_RESPONSE, report sent to mayor
+2026-01-24T10:04:45Z - DEPLOY hq-8ynf4 (proxy fix) complete: external 6/7 PASSING, internal AUTH_EXPIRED, report sent

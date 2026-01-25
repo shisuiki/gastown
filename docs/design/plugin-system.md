@@ -1,3 +1,15 @@
+---
+type: evergreen
+status: active
+owner: "unowned"
+audience: dev
+applies_to:
+  repo: gastown
+  branch: main
+last_validated: "unknown"
+source_of_truth: []
+---
+
 # Plugin System Design
 
 > Design document for the Gas Town plugin system.
@@ -483,3 +495,6 @@ gt escalate --severity=medium \
 - PRIMING.md - Core design principles
 - mol-deacon-patrol.formula.toml - Patrol step plugin-run
 - ~/gt/plugins/README.md - Current plugin stub
+
+## Scope
+- Scope description pending.

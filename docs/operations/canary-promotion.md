@@ -1,3 +1,20 @@
+---
+type: runbook
+status: active
+owner: "unowned"
+audience: ops
+applies_to:
+  repo: gastown
+  branch: canary
+last_validated: "unknown"
+ttl_days: 30
+next_review: "unknown"
+source_of_truth:
+  - "deploy/canary-deploy.sh"
+  - "deploy/canary-validate.sh"
+  - "docs/MAYOR-CREW-DEPLOY.md"
+---
+
 # Canary Promotion to Main
 
 This document defines the promotion checklist from `canary` to `main` for the
@@ -62,3 +79,21 @@ git push origin HEAD
 
 Crew should report promotion status using the template in
 `docs/MAYOR-CREW-DEPLOY.md`.
+
+## Preconditions
+- `canary` branch has a 24h stability window with no P1/P2 incidents.
+- CI for the current `canary` SHA is green.
+- The deploy bead is closed, and `deploy/canary-deploy.sh`/`deploy/canary-validate.sh` last executed without critical errors.
+
+## Steps
+1. Confirm `canary` is in sync with the latest meta branch (`git checkout canary && git pull`).
+2. Verify `~/gt/logs/canary-deploy.json` shows the expected `deploy_result=success`.
+3. Create a PR from `canary` to `main` using `gh pr create --base main --head canary`.
+4. Wait for required reviews and the human approval step; avoid merging until the approver handshake is complete.
+5. Merge the PR once approvals and checks pass, then close the canary bead with notes referencing the promotion.
+
+## Verification
+- `git status -sb`
+- `gh pr view --head canary --json state,title`
+- `curl -fsS http://localhost:8081/api/version`
+- `bd show <promotion-bead-id>`

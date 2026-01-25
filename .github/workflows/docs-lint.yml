@@ -1,0 +1,20 @@
+name: Docs Lint
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'scripts/docs_lint.sh'
+  push:
+    paths:
+      - 'docs/**'
+      - 'scripts/docs_lint.sh'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Run docs lint
+        run: ./scripts/docs_lint.sh
