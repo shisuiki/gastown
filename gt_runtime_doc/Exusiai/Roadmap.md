@@ -1,21 +1,17 @@
 # Roadmap
 
 ## Phase 0: Requirements
-- Locate `gt sling` implementation and current argument parsing.
-- Define behavior for self-sling warning and confirmation flag.
-- Identify user-facing messaging and exit status expectations.
+- Pull latest deploy changes and review `deploy/gastown-web.service` and any new token requirements.
+- Identify required token name and usage in deployment flow.
 
 ## Phase 1: Implementation
-- Detect self-sling target (current agent/rig) in `gt sling`.
-- Add warning message with hint to use a confirmation flag.
-- Add confirmation flag to allow explicit self-sling.
+- Generate a secure deploy token and configure service/env as required.
+- Redeploy the web UI using the updated deployment flow.
 
 ## Phase 2: Validation
-- Verify normal sling behavior unchanged for other targets.
-- Verify self-sling without flag warns and aborts.
-- Verify self-sling with flag proceeds.
+- Verify service is running and web UI is reachable.
+- Confirm token-based auth/deploy flow is active (logs/config check).
 
 ## Acceptance criteria
-- `gt sling` warns and stops when target resolves to the current agent unless confirmation flag is provided.
-- Flag name and help text clearly communicate intent.
-- Changes are covered by runtime docs and pushed immediately.
+- Deployment uses the new token requirement and service restarts cleanly.
+- Token is generated and stored in the expected place without breaking startup.

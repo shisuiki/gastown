@@ -1,5 +1,4 @@
 # Memory
 
-- Current focus: hq-cv-wmq44 (self-sling warning + `--self` confirmation flag for `gt sling`).
-- Implemented `--self` guard + warning output and updated sling tests for self-targeted formula slings.
+- Current focus: update deploy flow with new deployment token and redeploy web UI.
 - Repo: /home/shisui/gt/TerraNomadicCity/crew/Exusiai (Gas Town).
