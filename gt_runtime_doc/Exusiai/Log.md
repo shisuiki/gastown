@@ -12,3 +12,5 @@
 >> 2026-01-26 01:20 Swapped self-sling confirmation flag to --self and updated warnings/docs/tests.
 >> 2026-01-26 01:21 Closed hq-rmwcd and hq-cv-wmq44 after completing self-sling guard.
 >> 2026-01-26 03:03 Updated roadmap/progress/memory for deploy token redeploy task.
+>> 2026-01-26 03:05 Generated deploy token, updated /etc/gastown.env, and restarted gastown-web.service.
+>> 2026-01-26 03:06 Wrote deploy-token phase summaries and updated Memory/Progress.
