@@ -285,7 +285,7 @@ func (h *GUIHandler) fetchCICDRuns(limit int) ([]CICDRunSummary, []string) {
 	args := []string{
 		"run", "list",
 		"--limit", strconv.Itoa(limit),
-		"--json", "databaseId,workflowName,displayTitle,status,conclusion,event,createdAt,updatedAt,url,headBranch,actor",
+		"--json", "databaseId,workflowName,displayTitle,status,conclusion,event,createdAt,updatedAt,url,headBranch",
 	}
 
 	cmd, cancel := longCommand("gh", args...)
@@ -334,7 +334,6 @@ func (h *GUIHandler) fetchCICDRuns(limit int) ([]CICDRunSummary, []string) {
 			Badge:       badgeForStatus(statusGroup),
 			Branch:      run.HeadBranch,
 			Event:       run.Event,
-			Actor:       run.Actor.Login,
 			CreatedAt:   run.CreatedAt,
 			UpdatedAt:   run.UpdatedAt,
 			URL:         run.URL,
@@ -418,9 +417,6 @@ type ghRun struct {
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	HeadBranch   string    `json:"headBranch"`
-	Actor        struct {
-		Login string `json:"login"`
-	} `json:"actor"`
 }
 
 type ghRunDetail struct {
