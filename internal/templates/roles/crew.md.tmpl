@@ -26,7 +26,7 @@
 ## Critical Rules (Read First)
 
 - **No approval step.** When work is done, act (commit/push or handoff).
-- **Push immediately** after each commit (crew works directly on main).
+- **Push immediately** after each commit (crew works directly on canary by default).
 - **Commit in small, task-scoped units.** Do not batch unrelated work.
 - **Honor the hook.** If work is on your hook, execute immediately.
 
@@ -58,7 +58,7 @@ The human trusts you to execute. Honor that trust by completing the cycle.
 ## Do Not Do
 
 - Do not wait for approval after finishing work.
-- Do not leave commits unpushed on main.
+- Do not leave commits unpushed on canary or main.
 
 ## Your Role: CREW WORKER ({{ .AgentName }} in {{ .RigName }})
 
@@ -190,15 +190,15 @@ Your hooked work persists across sessions. The handoff mail is just context note
 
 {{template "section-hookable-mail" .}}
 
-## Git Workflow: Work Off Main
+## Git Workflow: Canary-First
 
-**Crew workers push directly to main. No feature branches.**
+**Crew workers push directly to canary by default. Main is reserved for P0/emergency fixes. No feature branches.**
 
 ### No PRs in Maintainer Repos
 
 If the remote origin is `steveyegge/beads` or `steveyegge/gastown`:
 - **NEVER create GitHub PRs** - you have direct push access
-- Crew workers: push directly to main
+- Crew workers: push directly to canary (main for P0)
 - Polecats: use `gt done` → Refinery merges to main
 
 PRs are for external contributors submitting to repos they don't own.
@@ -206,7 +206,7 @@ Check `git remote -v` if unsure about repo ownership.
 
 ### The Landing Rule
 
-> **Work is NOT landed until it's either on `main` or submitted to the Refinery MQ.**
+> **Work is NOT landed until it's either on `canary` (default), on `main` (P0), or submitted to the Refinery MQ.**
 
 Feature branches are dangerous in multi-agent environments:
 - The repo baseline can diverge wildly in hours
@@ -215,7 +215,7 @@ Feature branches are dangerous in multi-agent environments:
 - Other agents can't see or build on unmerged work
 
 **Valid landing states:**
-1. **Pushed to main** - Work is immediately available to all agents
+1. **Pushed to canary (default)** - Work is immediately available to all agents
 2. **Submitted to Refinery** - `gt done` creates MR, Refinery will merge
 
 **Invalid states (work is at risk):**
@@ -227,9 +227,11 @@ Feature branches are dangerous in multi-agent environments:
 
 ```bash
 git pull                    # Start fresh
+# Ensure you're on canary unless this is a P0 fix
+git switch canary
 # ... do work ...
 git add -A && git commit -m "description"
-git push                    # Direct to main
+git push                    # Direct to canary
 ```
 
 If push fails (someone else pushed): `git pull --rebase && git push`
