@@ -126,7 +126,12 @@ setup_codex_creds
 
 IMAGE_TAG="gastown:canary-full-${GASTOWN_REF:0:12}"
 
+# Shared beads database - allows mail communication between container and host
+# Mount host's .beads/ into container, overriding canary's separate database
+HOST_BEADS_DIR=${HOST_BEADS_DIR:-/home/shisui/gt/.beads}
+
 log "=== Full Gas Town Canary Deployment ==="
+log "HOST_BEADS_DIR: $HOST_BEADS_DIR"
 log "Using docker: $DOCKER_CMD"
 log "GT_ROOT: $GT_ROOT"
 log "GTRuntime ref: $GTRUNTIME_REF"
@@ -154,6 +159,7 @@ rollback() {
             --restart=always \
             -p "$CANARY_PORT:8080" \
             -v "$GT_ROOT:/gt" \
+            -v "$HOST_BEADS_DIR:/gt/.beads" \
             -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
             -e GT_WEB_ALLOW_REMOTE=1 \
             "$PREVIOUS_IMAGE" >/dev/null
@@ -176,6 +182,7 @@ $DOCKER_CMD run -d \
     --add-host=host.docker.internal:host-gateway \
     -p "$CANARY_PORT:8080" \
     -v "$GT_ROOT:/gt" \
+    -v "$HOST_BEADS_DIR:/gt/.beads" \
     -v "$CLAUDE_CREDS_DIR:/home/gastown/.claude" \
     $CLAUDE_JSON_MOUNT \
     -v "$CODEX_CREDS_DIR:/home/gastown/.codex" \
