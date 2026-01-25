@@ -94,8 +94,7 @@
             <div class="card">
                 <h2>🧾 Reports</h2>
                 <div class="card-content">
-                    <div x-html="renderReport(status?.reports?.internal)"></div>
-                    <div x-html="renderReport(status?.reports?.external)"></div>
+                    <div x-html="renderReports()"></div>
                 </div>
             </div>
         </div>
@@ -275,6 +274,25 @@
                         (report.updated_at ? '<div class="text-muted" style="font-size: 0.75rem;">Updated ' + escapeHtml(report.updated_at) + '</div>' : '') +
                         (details ? '<div class="report-details" style="margin-top: 6px;">' + details + '</div>' : '') +
                         '</div>';
+                },
+
+                renderReports() {
+                    if (!this.status || !this.status.reports) {
+                        return '<p class="text-muted">No reports available</p>';
+                    }
+
+                    let reports = [];
+                    if (this.status.reports.items && this.status.reports.items.length) {
+                        reports = this.status.reports.items;
+                    } else {
+                        reports = [this.status.reports.external, this.status.reports.internal].filter(Boolean);
+                    }
+
+                    if (!reports.length) {
+                        return '<p class="text-muted">No reports available</p>';
+                    }
+
+                    return reports.map(report => this.renderReport(report)).join('');
                 },
 
                 renderWorkflowTable() {

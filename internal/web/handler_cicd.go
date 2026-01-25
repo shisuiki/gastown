@@ -44,8 +44,9 @@ type CICDStatus struct {
 }
 
 type CICDReports struct {
-	Internal CICDReport `json:"internal"`
-	External CICDReport `json:"external"`
+	Internal CICDReport   `json:"internal"`
+	External CICDReport   `json:"external"`
+	Items    []CICDReport `json:"items,omitempty"`
 }
 
 type CICDReport struct {
@@ -249,8 +250,11 @@ func (h *GUIHandler) buildCICDStatus() CICDStatus {
 		status.Summary = titleCase(status.Overall)
 	}
 
-	status.Reports.Internal = readCanaryReport()
-	status.Reports.External = readColdstartReport()
+	externalReport, internalReport := readColdstartReports()
+	canaryReport := readCanaryReport()
+	status.Reports.Internal = internalReport
+	status.Reports.External = externalReport
+	status.Reports.Items = []CICDReport{externalReport, internalReport, canaryReport}
 
 	return status
 }
@@ -637,59 +641,307 @@ func defaultCICDReport(title string) CICDReport {
 	}
 }
 
-func readColdstartReport() CICDReport {
-	report := defaultCICDReport("Cold-start tests")
+type coldstartCombined struct {
+	TestID           string            `json:"test_id"`
+	Timestamp        string            `json:"timestamp"`
+	Mode             string            `json:"mode"`
+	Summary          string            `json:"summary"`
+	External         coldstartExternal `json:"external"`
+	Internal         coldstartInternal `json:"internal"`
+	IssuesDiscovered []string          `json:"issues_discovered"`
+}
+
+type coldstartExternal struct {
+	Overall          string                 `json:"overall"`
+	NightingaleBrief string                 `json:"nightingale_brief"`
+	PassCount        int                    `json:"pass_count"`
+	FailCount        int                    `json:"fail_count"`
+	Checks           map[string]interface{} `json:"checks"`
+}
+
+type coldstartInternal struct {
+	Status     string                        `json:"status"`
+	Brief      string                        `json:"brief"`
+	MayorBrief string                        `json:"mayor_brief"`
+	Components map[string]coldstartComponent `json:"components"`
+}
+
+type coldstartComponent struct {
+	Status string `json:"status"`
+}
+
+func readColdstartReports() (CICDReport, CICDReport) {
+	externalReport := defaultCICDReport("Cold-start external probes")
+	internalReport := defaultCICDReport("Cold-start internal assessment")
 
 	root, err := cicdLogRoot()
 	if err != nil {
-		report.Summary = "Missing GT_ROOT for logs"
-		return report
+		externalReport.Summary = "Missing GT_ROOT for logs"
+		internalReport.Summary = "Missing GT_ROOT for logs"
+		return externalReport, internalReport
 	}
 
 	dir := filepath.Join(root, "logs", "coldstart-tests")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		report.Summary = "No coldstart test results found"
-		return report
+	if _, err := os.Stat(dir); err != nil {
+		externalReport.Summary = "No coldstart test results found"
+		internalReport.Summary = "No coldstart test results found"
+		return externalReport, internalReport
 	}
 
-	var latest os.DirEntry
+	combinedPath := filepath.Join(dir, "latest.json")
+	if combined, modTime, ok := loadColdstartCombined(combinedPath); ok {
+		return buildColdstartReports(combined, modTime)
+	}
+
+	if combinedPath, _ := latestColdstartCombined(dir); combinedPath != "" {
+		if combined, modTime, ok := loadColdstartCombined(combinedPath); ok {
+			return buildColdstartReports(combined, modTime)
+		}
+	}
+
+	externalPath, externalTime := latestColdstartBySuffix(dir, "-external.json")
+	internalPath, internalTime := latestColdstartBySuffix(dir, "-internal.json")
+
+	if externalPath != "" {
+		if external, ok := loadColdstartExternal(externalPath); ok {
+			externalReport = buildColdstartExternalReport(external, externalTime, "")
+		}
+	}
+
+	if internalPath != "" {
+		if internal, ok := loadColdstartInternal(internalPath); ok {
+			internalReport = buildColdstartInternalReport(internal, internalTime, nil)
+		}
+	}
+
+	if externalPath == "" && internalPath == "" {
+		externalReport.Summary = "No coldstart test results found"
+		internalReport.Summary = "No coldstart test results found"
+	}
+
+	return externalReport, internalReport
+}
+
+func loadColdstartCombined(path string) (coldstartCombined, time.Time, bool) {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return coldstartCombined{}, time.Time{}, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return coldstartCombined{}, time.Time{}, false
+	}
+	var payload coldstartCombined
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return coldstartCombined{}, time.Time{}, false
+	}
+	return payload, info.ModTime(), true
+}
+
+func loadColdstartExternal(path string) (coldstartExternal, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return coldstartExternal{}, false
+	}
+	var payload coldstartExternal
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return coldstartExternal{}, false
+	}
+	return payload, true
+}
+
+func loadColdstartInternal(path string) (coldstartInternal, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return coldstartInternal{}, false
+	}
+	var payload coldstartInternal
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return coldstartInternal{}, false
+	}
+	return payload, true
+}
+
+func latestColdstartCombined(dir string) (string, time.Time) {
+	return latestColdstartByFilter(dir, func(name string) bool {
+		if !strings.HasPrefix(name, "coldstart-") || !strings.HasSuffix(name, ".json") {
+			return false
+		}
+		return !strings.HasSuffix(name, "-external.json") && !strings.HasSuffix(name, "-internal.json")
+	})
+}
+
+func latestColdstartBySuffix(dir, suffix string) (string, time.Time) {
+	return latestColdstartByFilter(dir, func(name string) bool {
+		return strings.HasPrefix(name, "coldstart-") && strings.HasSuffix(name, suffix)
+	})
+}
+
+func latestColdstartByFilter(dir string, match func(string) bool) (string, time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", time.Time{}
+	}
+	var latestPath string
 	var latestTime time.Time
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil || info.IsDir() {
 			continue
 		}
+		if !match(entry.Name()) {
+			continue
+		}
 		if info.ModTime().After(latestTime) {
 			latestTime = info.ModTime()
-			latest = entry
+			latestPath = filepath.Join(dir, entry.Name())
 		}
 	}
+	return latestPath, latestTime
+}
 
-	if latest == nil {
-		report.Summary = "No coldstart test results found"
-		return report
+func buildColdstartReports(payload coldstartCombined, modTime time.Time) (CICDReport, CICDReport) {
+	externalReport := buildColdstartExternalReport(payload.External, modTime, payload.Summary)
+	internalReport := buildColdstartInternalReport(payload.Internal, modTime, payload.IssuesDiscovered)
+
+	if payload.Timestamp != "" {
+		externalReport.UpdatedAt = payload.Timestamp
+		internalReport.UpdatedAt = payload.Timestamp
+	}
+	return externalReport, internalReport
+}
+
+func buildColdstartExternalReport(payload coldstartExternal, modTime time.Time, fallbackSummary string) CICDReport {
+	report := defaultCICDReport("Cold-start external probes")
+	report.UpdatedAt = formatTimestamp("", modTime)
+
+	if payload.NightingaleBrief != "" {
+		report.Summary = payload.NightingaleBrief
+	} else if payload.PassCount > 0 || payload.FailCount > 0 {
+		report.Summary = fmt.Sprintf("External probes: %d passed, %d failed", payload.PassCount, payload.FailCount)
+	} else if fallbackSummary != "" {
+		report.Summary = fallbackSummary
 	}
 
-	path := filepath.Join(dir, latest.Name())
-	snippet := readFileSnippet(path, 12)
-
-	report.UpdatedAt = latestTime.Format(time.RFC3339)
-	report.Details = snippet
-	report.Summary = fmt.Sprintf("Latest run: %s", latest.Name())
-
-	content := strings.ToLower(strings.Join(snippet, " "))
-	switch {
-	case strings.Contains(content, "fail") || strings.Contains(content, "error"):
-		report.Status = "failing"
-	case strings.Contains(content, "pass") || strings.Contains(content, "success"):
-		report.Status = "passing"
-	default:
-		report.Status = "degraded"
-	}
+	report.Status = coldstartExternalStatus(payload)
 	report.Badge = badgeForStatus(report.Status)
-
+	report.Details = coldstartCheckDetails(payload.Checks)
 	return report
+}
+
+func buildColdstartInternalReport(payload coldstartInternal, modTime time.Time, issues []string) CICDReport {
+	report := defaultCICDReport("Cold-start internal assessment")
+	report.UpdatedAt = formatTimestamp("", modTime)
+
+	brief := strings.TrimSpace(payload.Brief)
+	if brief == "" {
+		brief = strings.TrimSpace(payload.MayorBrief)
+	}
+	if brief != "" {
+		report.Summary = brief
+	}
+
+	report.Status = coldstartInternalStatus(payload.Status)
+	report.Badge = badgeForStatus(report.Status)
+	report.Details = coldstartComponentDetails(payload.Components, issues)
+	return report
+}
+
+func coldstartExternalStatus(payload coldstartExternal) string {
+	overall := strings.ToLower(strings.TrimSpace(payload.Overall))
+	if overall == "failing" || overall == "failed" {
+		return "failing"
+	}
+	if payload.FailCount > 0 {
+		return "degraded"
+	}
+	if overall == "passing" || payload.PassCount > 0 {
+		return "passing"
+	}
+	return "unknown"
+}
+
+func coldstartInternalStatus(status string) string {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "fully_operational", "operational", "passing", "pass", "ok":
+		return "passing"
+	case "degraded", "warning", "partial":
+		return "degraded"
+	case "no_response", "failed", "fail", "error":
+		return "failing"
+	default:
+		return "unknown"
+	}
+}
+
+func coldstartCheckDetails(checks map[string]interface{}) []string {
+	if len(checks) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(checks))
+	for key := range checks {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	lines := make([]string, 0, len(keys))
+	for _, key := range keys {
+		status := coldstartCheckStatus(checks[key])
+		if status == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", key, status))
+		if len(lines) >= 8 {
+			break
+		}
+	}
+	return lines
+}
+
+func coldstartCheckStatus(value interface{}) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case map[string]interface{}:
+		if status, ok := typed["status"].(string); ok {
+			return status
+		}
+	}
+	return ""
+}
+
+func coldstartComponentDetails(components map[string]coldstartComponent, issues []string) []string {
+	lines := make([]string, 0, len(components)+len(issues))
+	if len(components) > 0 {
+		keys := make([]string, 0, len(components))
+		for key := range components {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			lines = append(lines, fmt.Sprintf("%s: %s", key, components[key].Status))
+			if len(lines) >= 6 {
+				break
+			}
+		}
+	}
+	for _, issue := range issues {
+		lines = append(lines, "Issue: "+issue)
+		if len(lines) >= 8 {
+			break
+		}
+	}
+	return lines
+}
+
+func formatTimestamp(raw string, fallback time.Time) string {
+	if strings.TrimSpace(raw) != "" {
+		return raw
+	}
+	if !fallback.IsZero() {
+		return fallback.Format(time.RFC3339)
+	}
+	return ""
 }
 
 func readCanaryReport() CICDReport {
