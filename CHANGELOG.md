@@ -568,7 +568,7 @@ Major release featuring the Convoy Dashboard, two-level beads architecture, and 
 ### Changed
 
 - **Handoff migrated to skills** - `gt handoff` now uses skills format (#nqtqp)
-- **Crew workers push to main** - Documentation clarifies no PR workflow for crew
+- **Crew workers push to canary by default** - Documentation clarifies no PR workflow for crew (main for P0)
 - **Session names include town** - Mayor/Deacon sessions use town-prefixed names
 - **Formula semantics clarified** - Formulas are templates, not instructions
 - **Witness reports stopped** - No more routine Mayor reports (saves tokens)

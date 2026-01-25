@@ -208,14 +208,14 @@ you (you don't exist anymore).
 If the remote origin is `steveyegge/beads` or `steveyegge/gastown`:
 - **NEVER create GitHub PRs** - you have direct push access
 - Polecats: use `gt done` → Refinery merges to main
-- Crew workers: push directly to main
+- Crew workers: push directly to canary (main for P0)
 
 PRs are for external contributors submitting to repos they don't own.
 Check `git remote -v` if unsure about repo ownership.
 
 ### The Landing Rule
 
-> **Work is NOT landed until it's on `main` OR in the Refinery MQ.**
+> **Work is NOT landed until it's on `canary` (default), on `main` (P0), or in the Refinery MQ.**
 
 Your local branch is NOT landed. You must run `gt done` to submit it to the
 merge queue. Without this step:

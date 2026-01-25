@@ -11,12 +11,15 @@ Thanks for your interest in contributing! Gas Town is experimental software, and
 
 ## Development Workflow
 
-We use a direct-to-main workflow for trusted contributors. For external contributors:
+We use a canary-first workflow for trusted contributors. For external contributors:
 
 1. Create a feature branch from `main`
 2. Make your changes
 3. Ensure tests pass: `go test ./...`
 4. Submit a pull request
+
+Trusted contributors (crew) should push to `canary` by default and promote to
+`main` after validation. Main is reserved for P0/emergency fixes.
 
 ## Code Style
 

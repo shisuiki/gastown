@@ -10,3 +10,4 @@
 - Added canary deploy workflow, scripts, and host/rollback docs; recorded env-config pin.
 - Added mayor → crew deploy request/status template and escalation rules.
 - Documented canary promotion criteria, workflow, and regression handling.
+- Audited branch policy sources; updated hooks/templates/docs to canary-first messaging.

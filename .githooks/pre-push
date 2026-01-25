@@ -1,17 +1,18 @@
 #!/bin/bash
 # Block PRs by preventing pushes to arbitrary feature branches.
-# Gas Town agents push to main (crew) or polecat/* branches (polecats).
+# Gas Town agents push to canary by default (crew), main only for P0/emergency,
+# or polecat/* branches (polecats).
 # PRs are for external contributors only.
 
 # Allowed patterns:
-#   main, beads-sync  - Direct work branches
+#   canary, main, beads-sync  - Direct work branches (canary-first)
 #   polecat/*         - Polecat working branches (Refinery merges these)
 
 while read local_ref local_sha remote_ref remote_sha; do
   branch="${remote_ref#refs/heads/}"
 
   case "$branch" in
-    main|beads-sync|polecat/*)
+    canary|main|beads-sync|polecat/*)
       # Allowed branches
       ;;
     *)
@@ -20,11 +21,12 @@ while read local_ref local_sha remote_ref remote_sha; do
       echo "Blocked push to: $branch"
       echo ""
       echo "Allowed branches:"
-      echo "  main        - Crew workers push here directly"
+      echo "  canary      - Crew workers push here by default"
+      echo "  main        - P0/emergency only (post-canary promotion)"
       echo "  polecat/*   - Polecat working branches"
       echo "  beads-sync  - Beads synchronization"
       echo ""
-      echo "Do NOT create PRs. Push to main or let Refinery merge polecat work."
+      echo "Do NOT create PRs. Push to canary (default), or main for P0; Refinery merges polecat work."
       exit 1
       ;;
   esac
