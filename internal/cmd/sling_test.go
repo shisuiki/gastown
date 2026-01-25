@@ -288,17 +288,20 @@ exit 0
 	prevVars := slingVars
 	prevDryRun := slingDryRun
 	prevNoConvoy := slingNoConvoy
+	prevConfirmSelf := slingSelf
 	t.Cleanup(func() {
 		slingOnTarget = prevOn
 		slingVars = prevVars
 		slingDryRun = prevDryRun
 		slingNoConvoy = prevNoConvoy
+		slingSelf = prevConfirmSelf
 	})
 
 	slingDryRun = false
 	slingNoConvoy = true
 	slingVars = nil
 	slingOnTarget = "gt-abc123"
+	slingSelf = true
 
 	// Prevent real tmux nudge from firing during tests (causes agent self-interruption)
 	t.Setenv("GT_TEST_NO_NUDGE", "1")
@@ -450,17 +453,20 @@ exit 0
 	prevVars := slingVars
 	prevDryRun := slingDryRun
 	prevNoConvoy := slingNoConvoy
+	prevConfirmSelf := slingSelf
 	t.Cleanup(func() {
 		slingOnTarget = prevOn
 		slingVars = prevVars
 		slingDryRun = prevDryRun
 		slingNoConvoy = prevNoConvoy
+		slingSelf = prevConfirmSelf
 	})
 
 	slingDryRun = false
 	slingNoConvoy = true
 	slingVars = nil
 	slingOnTarget = "gt-abc123"
+	slingSelf = true
 
 	// Prevent real tmux nudge from firing during tests (causes agent self-interruption)
 	t.Setenv("GT_TEST_NO_NUDGE", "1")
@@ -914,17 +920,20 @@ exit 0
 	prevVars := slingVars
 	prevDryRun := slingDryRun
 	prevNoConvoy := slingNoConvoy
+	prevConfirmSelf := slingSelf
 	t.Cleanup(func() {
 		slingOnTarget = prevOn
 		slingVars = prevVars
 		slingDryRun = prevDryRun
 		slingNoConvoy = prevNoConvoy
+		slingSelf = prevConfirmSelf
 	})
 
 	slingDryRun = false
 	slingNoConvoy = true
 	slingVars = nil
 	slingOnTarget = "gt-abc123" // The bug bead we're applying formula to
+	slingSelf = true
 
 	if err := runSling(nil, []string{"mol-polecat-work"}); err != nil {
 		t.Fatalf("runSling: %v", err)
