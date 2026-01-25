@@ -1,9 +1,7 @@
 # Memory
 
-- mol-canary-coldstart-test (hq-wisp-tro1h) completed (TEST_ID: coldstart-20260126-015044).
-- Full cold-start executed: stop → start → health check → probes → assessment.
-- Results: external 6/7 PASSING (git_repo failed), internal NO_RESPONSE.
-- Report: /home/shisui/gt/logs/coldstart-tests/coldstart-20260126-015044.json
-- Mayor session exists but Claude auth still expired (401).
-- Fixed: gt-canary beads permissions (chmod 777).
-- Notification sent to mayor with results.
+- Container-host mail fix verified working (32dc2d6f).
+- Coldstart test: external 6/7 PASSING, internal FULLY_OPERATIONAL.
+- Mayor responded to COLDSTART_PROBE successfully via shared beads mount.
+- Deploy script now auto-refreshes Claude credentials from valid host source.
+- Report: coldstart-20260126-033845 (informal test, full results sent to mayor).
