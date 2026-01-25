@@ -1,0 +1,269 @@
+# mol-swe-evo-benchmark.formula.toml
+#
+# SWE-EVO Benchmark Formula for Canary Mayor
+#
+# Executes a balanced subset of SWE-EVO tasks against the canary mayor,
+# measuring code evolution capabilities (Resolved Rate, Fix Rate) and
+# collecting friction reports for recursive self-improvement.
+#
+# Usage:
+#   bd mol wisp mol-swe-evo-benchmark
+#   # Follow the molecule steps to completion
+
+[formula]
+name = "mol-swe-evo-benchmark"
+version = "1.0.0"
+description = """
+SWE-EVO benchmark for canary-gastown mayor.
+
+Dual goals:
+1. Measure code evolution capabilities (Resolved Rate, Fix Rate)
+2. Collect friction reports for infrastructural improvement
+
+This formula executes 10 balanced SWE-EVO tasks, grades results,
+and auto-creates improvement beads from friction reports.
+"""
+
+[formula.metadata]
+author = "nightingale/crew/Nightingale"
+labels = ["benchmark", "swe-evo", "cicd"]
+priority = "P2"
+
+# Root epic description
+[root]
+title = "mol-swe-evo-benchmark"
+type = "epic"
+description = """
+SWE-EVO benchmark run for canary mayor.
+
+## Purpose
+Validate mayor's code evolution capabilities through a standardized benchmark,
+while collecting friction reports for recursive self-improvement.
+
+## Metrics
+- Resolved Rate (RR): Percentage of tasks fully resolved (all tests pass)
+- Fix Rate (FR): Percentage of previously failing tests now passing
+
+## Friction Pipeline
+Task friction reports are aggregated and auto-converted to improvement beads.
+
+## Execution
+```bash
+bd mol wisp mol-swe-evo-benchmark
+```
+"""
+
+# Step 1: Setup and task extraction
+[[steps]]
+title = "Extract SWE-EVO tasks"
+type = "task"
+description = """
+Extract balanced subset of SWE-EVO tasks for benchmarking.
+
+## Action
+```bash
+BENCHMARK_ID="swe-evo-$(date +%Y%m%d-%H%M%S)"
+TASKS_DIR="/home/shisui/gt/logs/swe-evo-tasks/$BENCHMARK_ID"
+
+nightingale/cicd/scripts/swe-evo/extract-tasks.sh "$TASKS_DIR"
+```
+
+## Verify
+- manifest.json exists with 10 tasks
+- Each task has task.json and problem.md
+"""
+depends_on = []
+
+# Step 2: Dispatch tasks to mayor
+[[steps]]
+title = "Dispatch tasks to canary mayor"
+type = "task"
+description = """
+Dispatch each task to canary mayor for execution.
+
+## Action
+For each task in manifest:
+```bash
+nightingale/cicd/scripts/swe-evo/dispatch-task.sh "$TASK_DIR" "$BENCHMARK_ID"
+```
+
+## Protocol
+- Create tracking bead for each task
+- Send BENCHMARK_TASK mail to mayor/
+- Nudge mayor to begin work
+- Tasks execute in sequence (no parallelism)
+
+## Timeouts
+Each task has 30 minute timeout (TASK_TIMEOUT=1800).
+"""
+depends_on = ["Extract SWE-EVO tasks"]
+
+# Step 3: Monitor execution
+[[steps]]
+title = "Monitor task execution"
+type = "task"
+description = """
+Monitor task execution and collect completion status.
+
+## Action
+For each dispatched task:
+1. Wait for BENCHMARK_COMPLETE mail (up to TASK_TIMEOUT)
+2. If timeout, mark task as timed out
+3. Record completion status in task directory
+
+## Polling
+Check nightingale/Nightingale inbox every 30 seconds for:
+- Subject: "BENCHMARK_COMPLETE: <task-id>"
+
+## On Completion
+Save response to task-dir/completion-status.json including:
+- STATUS: SUCCESS | PARTIAL | FAILED
+- FRICTION_REPORT: Any workflow frictions encountered
+"""
+depends_on = ["Dispatch tasks to canary mayor"]
+
+# Step 4: Grade tasks
+[[steps]]
+title = "Grade task results"
+type = "task"
+description = """
+Run tests and calculate metrics for each task.
+
+## Action
+For each completed task:
+```bash
+nightingale/cicd/scripts/swe-evo/grade-task.sh "$TASK_DIR"
+```
+
+## Metrics
+- Resolved: All tests pass (boolean)
+- Fix Rate: Proportion of fixed tests
+
+## Output
+grade-result.json in each task directory
+"""
+depends_on = ["Monitor task execution"]
+
+# Step 5: Aggregate results
+[[steps]]
+title = "Aggregate benchmark results"
+type = "task"
+description = """
+Compile all task results into final report.
+
+## Action
+```bash
+nightingale/cicd/scripts/swe-evo/aggregate-results.sh "$BENCHMARK_ID" "$TASKS_DIR"
+```
+
+## Output
+- reports/swe-evo/$BENCHMARK_ID/report.json
+- Per-task results in reports/swe-evo/$BENCHMARK_ID/tasks/
+- Friction summary
+
+## Metrics
+- Overall Resolved Rate
+- Average Fix Rate
+- Task breakdown
+"""
+depends_on = ["Grade task results"]
+
+# Step 6: Friction pipeline
+[[steps]]
+title = "Process friction reports"
+type = "task"
+description = """
+Analyze friction reports and create improvement beads.
+
+## Action
+Included in aggregate-results.sh:
+1. Parse all friction reports
+2. Categorize and rank by frequency
+3. Auto-create improvement beads for top P1 friction points
+
+## Output
+- friction-summary.md with ranked categories
+- Improvement beads in beadline
+
+## Goal
+Feed friction into recursive self-improvement cycle.
+"""
+depends_on = ["Aggregate benchmark results"]
+
+# Step 7: Generate summary
+[[steps]]
+title = "Generate human-readable summary"
+type = "task"
+description = """
+Generate final summary report.
+
+## Action
+```bash
+nightingale/cicd/scripts/swe-evo/generate-summary.sh "$BENCHMARK_ID"
+```
+
+## Output
+Formatted summary including:
+- Task execution stats
+- Resolved Rate and Fix Rate
+- Top friction points
+- Per-task results
+"""
+depends_on = ["Process friction reports"]
+
+# Step 8: Notify stakeholders
+[[steps]]
+title = "Send benchmark report"
+type = "task"
+description = """
+Send final benchmark report to mayor.
+
+## Action
+```bash
+gt mail send mayor/ -s "SWE-EVO Benchmark Complete: $BENCHMARK_ID" -m "<summary>"
+```
+
+## Include
+- Resolved Rate and Fix Rate
+- Task breakdown
+- Top friction points
+- Link to full report
+"""
+depends_on = ["Generate human-readable summary"]
+
+# Step 9: Update latest.json
+[[steps]]
+title = "Update latest.json"
+type = "task"
+description = """
+Update latest.json symlink for CI/CD panel visibility.
+
+## Action
+```bash
+ln -sf "$BENCHMARK_ID" nightingale/cicd/reports/swe-evo/latest
+cp reports/swe-evo/$BENCHMARK_ID/report.json nightingale/cicd/reports/swe-evo/latest.json
+```
+
+## Verify
+- latest.json points to current benchmark
+- CI/CD panel can read latest results
+"""
+depends_on = ["Send benchmark report"]
+
+# Step 10: Cleanup
+[[steps]]
+title = "Cleanup temporary files"
+type = "task"
+description = """
+Clean up temporary benchmark files.
+
+## Action
+- Remove staged workspace files older than 7 days
+- Archive completed benchmark manifests
+- Log benchmark completion
+
+## Preserve
+- Report files in reports/swe-evo/
+- Improvement beads
+"""
+depends_on = ["Update latest.json"]
