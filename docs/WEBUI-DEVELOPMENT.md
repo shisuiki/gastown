@@ -33,7 +33,7 @@ This document tracks WebUI development conventions and current architecture.
 - Status: `GET /api/status` builds a cached status snapshot.
 - WebSocket: `/ws/status` pushes status updates for dashboards.
 - CI/CD: `GET /api/cicd/status`, `GET /api/cicd/workflows`, `GET /api/cicd/runs/:id` (GitHub Actions via `gh`, plus canary/coldstart logs).
-- Mail: WebUI uses the mail router/mailbox APIs for listing, mark read/unread, and archive.
+- Mail: WebUI uses `GET /api/mail/view?agent=...` for queue/inbox/archive (BeadsReader + archive.jsonl), plus mail router/mailbox APIs for mark read/unread and archive actions.
 - Beads and convoys: prefer `issues.jsonl` via `BeadsReader`/convoy fetcher with BEADS_DIR-scoped CLI fallback.
 - Agent hook status: still uses `gt hook` for now (no direct hook file/state).
 - Crew: `GET /api/crew/list` for rig-scoped status, `POST /api/crew/action` for lifecycle actions.
