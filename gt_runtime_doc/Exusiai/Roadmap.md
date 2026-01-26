@@ -1,26 +1,26 @@
 # Roadmap
 
-## Phase 0: Requirements
-- Inspect mail inject implementation (commit affbd27c... and current code).
-- Reproduce/report conditions where tmux gets stuck in mail inject UI.
-- Audit mail queue/delivery flow for dropped mail.
+## Phase 0: Discovery
+- Inspect current WebUI mail templates, handlers, and API endpoints.
+- Map GT mail features to WebUI data sources (inbox, archive, queue, unread, read/unread toggle).
+- Determine whether archive restore is supported in CLI/handlers.
 
-## Phase 1: Fix inject behavior
-- Ensure inject uses prompt-style nudge, not interactive mail UI.
-- Guard against running full mail TUI inside agent pane.
-- Add safe fallback if inject fails or pane is busy.
+## Phase 1: Data model + API support
+- Implement/extend backend endpoints for: agents list + unread counts, queue/inbox/archive per agent.
+- Add endpoints for read/unread toggle, archive, and restore if supported.
+- Ensure data derived from beads/mail data directly (no CLI calls from frontend).
 
-## Phase 2: Fix queue/delivery reliability
-- Trace mail enqueue/dequeue paths and persistence.
-- Fix any missing delivery/visibility path (queue not draining, wrong dir, etc.).
-- Add logs or diagnostics to surface delivery state.
+## Phase 2: UI refactor
+- Replace mail UI layout with agent list + three-pane queue/inbox/archive.
+- Implement read/unread badges + actions; archive + restore actions.
+- Implement auto-refresh every 30s (dashboard-style) and remove bottom blocks.
 
-## Phase 3: Validation & docs
-- Verify inject delivers without blocking or leaving tmux in a TUI.
-- Verify mail sent is visible and delivered to target.
-- Update docs for new behavior and usage.
+## Phase 3: Validation + docs
+- Verify mail list content matches GT mail design and states.
+- Validate actions reflect in backend and UI updates.
+- Update docs for WebUI mail features and behavior.
 
 ## Acceptance criteria
-- Mail inject never spawns a blocking UI in tmux; it only nudges prompt text.
-- Mail delivery is reliable and observable; no silent drop.
-- Changes are documented, committed in phases, and pushed.
+- New mail UI matches requested layout and functionality.
+- All GT mail features are surfaced (queue/inbox/archive, read/unread, archive/restore if supported).
+- Auto-refresh runs every 30s, no legacy UI sections remain.

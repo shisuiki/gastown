@@ -1,4 +1,4 @@
 # Memory
 
-- Latest: mail inject now supports nudge mode with per-session markers and identity-aware scheduling; busy recipients schedule deferred inject; docs updated.
+- Current focus: refactor WebUI mail interface per new layout and full GT mail feature coverage.
 - Repo: /home/shisui/laplace/gastown-src (Gastown).
