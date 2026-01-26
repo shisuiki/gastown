@@ -19,6 +19,41 @@ source_of_truth: []
 Gas Town agents coordinate via mail messages routed through the beads system.
 Mail uses `type=message` beads with routing handled by `gt mail`.
 
+## Delivery & Notifications
+
+Mail delivery is split into **storage** (beads) and **notification** (tmux nudge).
+
+- All messages are stored in town-level beads (`~/gt/.beads`) and remain until
+  archived/closed.
+- `gt mail send` attempts an immediate tmux nudge **only if the recipient is idle**.
+- If the recipient is busy, the sender schedules a deferred reminder that fires
+  when the session has been idle for 2 minutes.
+
+### Deferred reminders
+
+Deferred delivery uses `gt mail check --inject --nudge` to avoid spawning any
+interactive UI in the recipient’s tmux pane:
+
+```
+gt mail check --inject --nudge --session <tmux-session> --identity <agent-id>
+```
+
+This command:
+- Re-checks idle state before notifying.
+- Sends a short prompt-style reminder via tmux nudge.
+- Avoids blocking the session or requiring Ctrl+C to exit.
+
+### Hook injection
+
+Claude Code session hooks can use:
+
+```
+gt mail check --inject
+```
+
+In hook mode, this prints a `<system-reminder>` block to stdout for the runtime
+to inject into context.
+
 ## Message Types
 
 ### POLECAT_DONE
