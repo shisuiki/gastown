@@ -1,4 +1,4 @@
 # Memory
 
-- Latest: gastown-sync.service healthy; repo ~/laplace/gastown-src now on main at origin/main; sync script updated with pipefail + GASTOWN_SYNC_BRANCH support.
-- Repo: /home/shisui/gt/TerraNomadicCity/crew/Exusiai (Gas Town).
+- Current focus: fix mail inject blocking UI + audit mail delivery queue reliability (hq-inc63).
+- Repo: /home/shisui/laplace/gastown-src (Gastown).

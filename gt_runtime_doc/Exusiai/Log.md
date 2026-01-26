@@ -17,3 +17,4 @@
 >> 2026-01-26 04:48 Updated roadmap/progress/memory for gastown-sync audit task.
 >> 2026-01-26 04:53 Audited gastown-sync service, moved laplace repo to main, fixed sync script pipefail, and restarted service.
 >> 2026-01-26 04:53 Wrote gastown-sync audit summaries.
+>> 2026-01-27 00:35 Updated roadmap/progress/memory for mail inject + queue audit.
