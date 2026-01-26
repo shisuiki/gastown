@@ -248,8 +248,11 @@ func notifyMailRecipients(townRoot string, recipients []string, from, subject st
 		// Check if session is idle before nudging to avoid interrupting active work
 		idleFor, err := sessionIdleDuration(sessionName)
 		if err == nil && idleFor < mailNotifyIdleThreshold {
-			// Session is busy - skip immediate nudge, let inject hook handle it
+			// Session is busy - skip immediate nudge, schedule delayed inject
 			deferred++
+			if townRoot != "" {
+				scheduleMailInjectRetry(townRoot, sessionName, addr)
+			}
 			continue
 		}
 

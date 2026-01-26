@@ -19,3 +19,4 @@
 >> 2026-01-26 04:53 Wrote gastown-sync audit summaries.
 >> 2026-01-27 00:35 Updated roadmap/progress/memory for mail inject + queue audit.
 >> 2026-01-27 01:01 Implemented mail check inject/nudge improvements and updated Progress.
+>> 2026-01-27 01:02 Added deferred mail notification scheduling when recipients are busy.
