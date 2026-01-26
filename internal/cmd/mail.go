@@ -27,6 +27,8 @@ var (
 	mailCheckInject   bool
 	mailCheckJSON     bool
 	mailCheckIdentity string
+	mailCheckNudge    bool
+	mailCheckSession  string
 	mailThreadJSON    bool
 	mailReplySubject  string
 	mailReplyMessage  string
@@ -241,11 +243,15 @@ Exit codes (--inject mode):
   0 - Always (hooks should never block)
   Output: system-reminder if mail exists, silent if no mail
 
+Use --nudge to deliver the reminder to a tmux session (background retries).
+Provide --session and --identity for deferred delivery to a specific agent.
+
 Use --identity for polecats to explicitly specify their identity.
 
 Examples:
   gt mail check                           # Simple check (auto-detect identity)
   gt mail check --inject                  # For hooks
+  gt mail check --inject --nudge --session gt-gastown-crew-max --identity gastown/crew/max
   gt mail check --identity greenplace/Toast  # Explicit polecat identity`,
 	RunE: runMailCheck,
 }
@@ -445,6 +451,8 @@ func init() {
 
 	// Check flags
 	mailCheckCmd.Flags().BoolVar(&mailCheckInject, "inject", false, "Output format for Claude Code hooks")
+	mailCheckCmd.Flags().BoolVar(&mailCheckNudge, "nudge", false, "Send reminder to tmux session instead of stdout (for background retries)")
+	mailCheckCmd.Flags().StringVar(&mailCheckSession, "session", "", "Target tmux session for --nudge mode (optional)")
 	mailCheckCmd.Flags().BoolVar(&mailCheckJSON, "json", false, "Output as JSON")
 	mailCheckCmd.Flags().StringVar(&mailCheckIdentity, "identity", "", "Explicit identity for inbox (e.g., greenplace/Toast)")
 	mailCheckCmd.Flags().StringVar(&mailCheckIdentity, "address", "", "Alias for --identity")
