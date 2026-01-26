@@ -3,398 +3,343 @@
 <head>
     {{template "head" .}}
     <title>Mail Center - Gas Town</title>
-    <style>
-        .mail-message-unread .message-subject {
-            font-weight: bold;
-        }
-        .mail-message-read .message-subject {
-            font-weight: normal;
-            opacity: 0.8;
-        }
-        .mail-message .btn-sm {
-            padding: 2px 8px;
-            font-size: 0.75rem;
-        }
-        .mail-indicator {
-            user-select: none;
-        }
-    </style>
 </head>
 <body>
     {{template "nav" .}}
 
     <div class="container">
-        <div class="card" style="margin-bottom: 20px;">
-            <h2>📬 Mail Center</h2>
-            <div class="mail-controls">
-                <div class="mail-control">
-                    <label class="text-muted" style="font-size: 0.8rem;">View Inbox For:</label>
-                    <select id="mail-agent-select" onchange="loadAgentMail()" class="input-field" style="margin-top: 5px;"></select>
-                </div>
-                <div class="mail-control">
-                    <label class="text-muted" style="font-size: 0.8rem;">Send To:</label>
-                    <select id="mail-to-select" class="input-field" style="margin-top: 5px;"></select>
-                </div>
-            </div>
-            <div id="mail-inbox" class="mail-inbox">
-                <p class="text-muted">Loading agents...</p>
-            </div>
-            <div class="mail-limit-row">
-                <div id="mail-limit-info" class="text-muted" style="font-size: 0.8rem;"></div>
-                <button id="mail-load-more" class="btn btn-secondary btn-sm" onclick="loadMoreMail()" style="display: none;">Load more</button>
-            </div>
-            <div class="mail-compose">
-                <input type="text" id="mail-subject" placeholder="Subject" class="input-field">
-                <textarea id="mail-body" placeholder="Message body..." rows="4" class="input-field"></textarea>
-                <button onclick="sendMailToAgent()" class="btn btn-primary">Send Mail</button>
-                <div id="mail-result" style="font-size: 0.8rem;" class="text-muted"></div>
-            </div>
+        <div class="card mail-header">
+            <h2>Mail Center</h2>
+            <p class="text-muted">Auto-refreshes every 30 seconds.</p>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <h2>⚡ Quick Actions</h2>
-                <div class="mail-quick-actions">
-                    <button onclick="quickMessageToMayor()" class="btn btn-primary">
-                        📨 Message Mayor
-                    </button>
-                    <button onclick="refreshInbox()" class="btn btn-secondary">
-                        🔄 Refresh Inbox
-                    </button>
-                    <p class="text-muted" style="font-size: 0.8rem; margin-top: 10px;">
-                        Use the Mail Center above to compose and send messages to any agent.
-                    </p>
+        <div class="mail-layout">
+            <div class="card mail-agents-panel">
+                <div class="mail-panel-header">
+                    <div>
+                        <h3>Agents</h3>
+                        <div class="text-muted" id="mail-last-updated">—</div>
+                    </div>
+                </div>
+                <div id="mail-agents-list" class="mail-agents-list">
+                    <p class="text-muted">Loading agents...</p>
                 </div>
             </div>
-            <div class="card">
-                <h2>📊 Mail Stats</h2>
-                <div id="mail-stats"><p class="text-muted">Select an agent to view stats</p></div>
+
+            <div class="mail-content">
+                <div class="card mail-column">
+                    <div class="mail-column-header">
+                        <div>
+                            <h3>Queue</h3>
+                            <div class="text-muted" id="mail-queue-count">0 messages</div>
+                        </div>
+                    </div>
+                    <div id="mail-queue-list" class="mail-column-body">
+                        <p class="mail-empty">Select an agent to view queue items.</p>
+                    </div>
+                </div>
+
+                <div class="card mail-column">
+                    <div class="mail-column-header">
+                        <div>
+                            <h3>Inbox</h3>
+                            <div class="text-muted" id="mail-inbox-count">0 messages</div>
+                        </div>
+                    </div>
+                    <div id="mail-inbox-list" class="mail-column-body">
+                        <p class="mail-empty">Select an agent to view inbox.</p>
+                    </div>
+                </div>
+
+                <div class="card mail-column">
+                    <div class="mail-column-header">
+                        <div>
+                            <h3>Archive</h3>
+                            <div class="text-muted" id="mail-archive-count">0 messages</div>
+                        </div>
+                    </div>
+                    <div id="mail-archive-list" class="mail-column-body">
+                        <p class="mail-empty">Select an agent to view archive.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     {{template "scripts" .}}
     <script>
-        // ================================================================
-        // Mail Page JavaScript
-        // ================================================================
+        const mailLimit = 200;
+        const refreshIntervalMs = 30000;
+        let agents = [];
+        let selectedAgent = '';
+        let refreshInFlight = false;
 
-        const mailLimitStep = 50;
-        let mailLimit = mailLimitStep;
-        let lastAgent = '';
+        function formatTimestamp(ts) {
+            if (!ts) return '-';
+            const date = new Date(ts);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString();
+        }
 
-        async function loadAgentsList() {
+        function truncateText(text, maxLen) {
+            if (!text) return '';
+            if (text.length <= maxLen) return text;
+            return text.slice(0, maxLen - 1) + '…';
+        }
+
+        function updateLastUpdated() {
+            const el = document.getElementById('mail-last-updated');
+            if (!el) return;
+            el.textContent = 'Updated ' + new Date().toLocaleTimeString();
+        }
+
+        async function loadAgents() {
             try {
                 const res = await fetch('/api/agents/list');
-                const agents = await res.json();
-
-                const viewSelect = document.getElementById('mail-agent-select');
-                const sendSelect = document.getElementById('mail-to-select');
-
-                viewSelect.innerHTML = '';
-                sendSelect.innerHTML = '';
-
-                agents.forEach(agent => {
-                    const optionView = document.createElement('option');
-                    optionView.value = agent.address;
-                    optionView.textContent = agent.name + ' (' + agent.type + ')';
-                    viewSelect.appendChild(optionView);
-
-                    const optionSend = document.createElement('option');
-                    optionSend.value = agent.address;
-                    optionSend.textContent = agent.name + ' (' + agent.type + ')';
-                    sendSelect.appendChild(optionSend);
-                });
-
-                loadAgentMail();
-            } catch (e) {
-                document.getElementById('mail-inbox').innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
-            }
-        }
-
-        async function loadAgentMail() {
-            const agent = document.getElementById('mail-agent-select').value;
-            const inbox = document.getElementById('mail-inbox');
-            const stats = document.getElementById('mail-stats');
-            const limitInfo = document.getElementById('mail-limit-info');
-            const loadMoreBtn = document.getElementById('mail-load-more');
-
-            if (agent !== lastAgent) {
-                mailLimit = mailLimitStep;
-                lastAgent = agent;
-            }
-
-            inbox.innerHTML = '<p class="text-muted">Loading...</p>';
-
-            try {
-                const res = await fetch('/api/mail/all?agent=' + encodeURIComponent(agent) + '&limit=' + mailLimit);
                 const data = await res.json();
-
-                if (data.raw) {
-                    inbox.innerHTML = '<pre style="white-space: pre-wrap; color: #e2e8f0; margin: 0;">' + escapeHtml(data.raw) + '</pre>';
-                    if (limitInfo) limitInfo.textContent = '';
-                    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
-                } else if (data.messages && Array.isArray(data.messages)) {
-                    const total = data.total ?? data.messages.length;
-                    const showing = data.messages.length;
-                    const unread = data.unread ?? 0;
-                    if (data.messages.length === 0) {
-                        inbox.innerHTML = '<p class="text-muted">No messages</p>';
-                    } else {
-                        inbox.innerHTML = data.messages.map(renderMessage).join('');
-                    }
-                    stats.innerHTML = '<p>Agent: <strong>' + escapeHtml(agent) + '</strong></p>' +
-                        '<p>Messages: <strong>' + total + '</strong></p>' +
-                        '<p>Unread: <strong>' + unread + '</strong></p>';
-                    if (limitInfo) {
-                        limitInfo.textContent = total ? ('Showing ' + showing + ' of ' + total) : '';
-                    }
-                    if (loadMoreBtn) {
-                        loadMoreBtn.style.display = data.has_more ? 'inline-flex' : 'none';
-                    }
-                } else {
-                    inbox.innerHTML = '<p class="text-muted">No messages for ' + escapeHtml(agent) + '</p>';
-                    if (limitInfo) limitInfo.textContent = '';
-                    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
-                }
+                agents = Array.isArray(data) ? data : [];
             } catch (e) {
-                inbox.innerHTML = '<p class="text-danger">Error: ' + e.message + '</p>';
-                if (limitInfo) limitInfo.textContent = '';
-                if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+                agents = [];
             }
+
+            if (!selectedAgent && agents.length > 0) {
+                selectedAgent = agents[0].address;
+            }
+
+            if (selectedAgent && agents.length > 0) {
+                const exists = agents.some(agent => agent.address === selectedAgent);
+                if (!exists) {
+                    selectedAgent = agents[0].address;
+                }
+            }
+
+            renderAgentsList();
         }
 
-        async function sendMailToAgent() {
-            const to = document.getElementById('mail-to-select').value;
-            const subject = document.getElementById('mail-subject').value.trim();
-            const body = document.getElementById('mail-body').value.trim();
-            const result = document.getElementById('mail-result');
+        function renderAgentsList() {
+            const list = document.getElementById('mail-agents-list');
+            if (!list) return;
 
-            if (!subject) {
-                result.innerHTML = '<span class="text-danger">Please enter a subject</span>';
+            if (!agents.length) {
+                list.innerHTML = '<p class="mail-empty">No agents available.</p>';
                 return;
             }
 
-            result.innerHTML = '<span class="text-warning">Sending...</span>';
+            list.innerHTML = agents.map(agent => {
+                const unread = typeof agent.unread === 'number' ? agent.unread : 0;
+                const queueCount = typeof agent.queue_count === 'number' ? agent.queue_count : 0;
+                const isActive = agent.address === selectedAgent;
+                const badges = [
+                    '<span class="mail-badge mail-badge-unread">Unread ' + unread + '</span>'
+                ];
+                if (queueCount > 0) {
+                    badges.push('<span class="mail-badge mail-badge-queue">Queue ' + queueCount + '</span>');
+                }
+                return (
+                    '<div class="mail-agent-item' + (isActive ? ' active' : '') + '" onclick="selectAgent(\'' +
+                    escapeHtml(agent.address) + '\')">' +
+                        '<div class="mail-agent-title">' +
+                            '<span class="mail-agent-name">' + escapeHtml(agent.name || agent.address) + '</span>' +
+                            '<span class="mail-agent-type">' + escapeHtml(agent.type || '') + '</span>' +
+                        '</div>' +
+                        '<div class="mail-agent-badges">' + badges.join('') + '</div>' +
+                    '</div>'
+                );
+            }).join('');
+        }
+
+        function selectAgent(address) {
+            if (!address || address === selectedAgent) {
+                return;
+            }
+            selectedAgent = address;
+            renderAgentsList();
+            loadAgentView();
+        }
+
+        function setCountText(elementId, showing, total, hasMore) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            if (total === 0) {
+                el.textContent = '0 messages';
+                return;
+            }
+            let text = showing + ' of ' + total;
+            if (hasMore) {
+                text += ' (limited)';
+            }
+            el.textContent = text;
+        }
+
+        function renderQueueList(messages, total, hasMore) {
+            const list = document.getElementById('mail-queue-list');
+            if (!list) return;
+            setCountText('mail-queue-count', messages.length, total, hasMore);
+            if (!messages.length) {
+                list.innerHTML = '<p class="mail-empty">No queued messages.</p>';
+                return;
+            }
+            list.innerHTML = messages.map(msg => {
+                const queueName = msg.queue ? 'Queue: ' + msg.queue : 'Queue item';
+                return (
+                    '<div class="mail-message-card">' +
+                        '<div class="mail-message-title">' + escapeHtml(queueName) + '</div>' +
+                        '<div class="mail-message-meta">' +
+                            'From: ' + escapeHtml(msg.from || 'unknown') + ' · ' +
+                            escapeHtml(formatTimestamp(msg.timestamp)) +
+                        '</div>' +
+                        '<div class="mail-message-body">' + escapeHtml(truncateText(msg.subject || 'No subject', 120)) + '</div>' +
+                        '<div class="mail-message-body">' + escapeHtml(truncateText(msg.body || '', 240)) + '</div>' +
+                    '</div>'
+                );
+            }).join('');
+        }
+
+        function renderInboxList(messages, total, hasMore) {
+            const list = document.getElementById('mail-inbox-list');
+            if (!list) return;
+            setCountText('mail-inbox-count', messages.length, total, hasMore);
+            if (!messages.length) {
+                list.innerHTML = '<p class="mail-empty">No inbox messages.</p>';
+                return;
+            }
+            list.innerHTML = messages.map(msg => {
+                const isRead = msg.read === true;
+                const stateLabel = isRead ? 'Already Read' : 'Unread';
+                const stateClass = isRead ? 'read' : 'unread';
+                return (
+                    '<div class="mail-message-card">' +
+                        '<div class="mail-message-title">' +
+                            '<span class="mail-state ' + stateClass + '">[' + stateLabel + ']</span>' +
+                            escapeHtml(msg.subject || 'No subject') +
+                        '</div>' +
+                        '<div class="mail-message-meta">' +
+                            'From: ' + escapeHtml(msg.from || 'unknown') + ' · ' +
+                            escapeHtml(formatTimestamp(msg.timestamp)) +
+                        '</div>' +
+                        '<div class="mail-message-body">' + escapeHtml(truncateText(msg.body || '', 280)) + '</div>' +
+                        '<div class="mail-message-actions">' +
+                            '<button class="btn btn-sm ' + (isRead ? 'btn-secondary' : 'btn-primary') + '" onclick="toggleRead(\'' +
+                                escapeHtml(msg.id) + '\', ' + isRead + ')">' + (isRead ? 'Mark Unread' : 'Mark Read') + '</button>' +
+                            '<button class="btn btn-sm btn-danger" onclick="archiveMessage(\'' + escapeHtml(msg.id) + '\')">Archive</button>' +
+                        '</div>' +
+                    '</div>'
+                );
+            }).join('');
+        }
+
+        function renderArchiveList(messages, total, hasMore) {
+            const list = document.getElementById('mail-archive-list');
+            if (!list) return;
+            setCountText('mail-archive-count', messages.length, total, hasMore);
+            if (!messages.length) {
+                list.innerHTML = '<p class="mail-empty">No archived messages.</p>';
+                return;
+            }
+            list.innerHTML = messages.map(msg => {
+                return (
+                    '<div class="mail-message-card">' +
+                        '<div class="mail-message-title">' + escapeHtml(msg.subject || 'No subject') + '</div>' +
+                        '<div class="mail-message-meta">' +
+                            'From: ' + escapeHtml(msg.from || 'unknown') + ' · ' +
+                            escapeHtml(formatTimestamp(msg.timestamp)) +
+                        '</div>' +
+                        '<div class="mail-message-body">' + escapeHtml(truncateText(msg.body || '', 260)) + '</div>' +
+                    '</div>'
+                );
+            }).join('');
+        }
+
+        async function loadAgentView() {
+            if (!selectedAgent) {
+                return;
+            }
+
+            const queueList = document.getElementById('mail-queue-list');
+            const inboxList = document.getElementById('mail-inbox-list');
+            const archiveList = document.getElementById('mail-archive-list');
+
+            if (queueList) queueList.innerHTML = '<p class="mail-empty">Loading...</p>';
+            if (inboxList) inboxList.innerHTML = '<p class="mail-empty">Loading...</p>';
+            if (archiveList) archiveList.innerHTML = '<p class="mail-empty">Loading...</p>';
 
             try {
-                const res = await fetch('/api/mail/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to, subject, body })
-                });
+                const res = await fetch('/api/mail/view?agent=' + encodeURIComponent(selectedAgent) + '&limit=' + mailLimit);
                 const data = await res.json();
 
-                if (data.success) {
-                    result.innerHTML = '<span class="text-success">✓ Mail sent to ' + escapeHtml(to) + '</span>';
-                    document.getElementById('mail-subject').value = '';
-                    document.getElementById('mail-body').value = '';
-                    setTimeout(() => { result.innerHTML = ''; loadAgentMail(); }, 2000);
-                } else {
-                    result.innerHTML = '<span class="text-danger">Failed: ' + (data.error || 'Unknown error') + '</span>';
+                if (data.error) {
+                    const msg = '<p class="mail-empty">Error: ' + escapeHtml(data.error) + '</p>';
+                    if (queueList) queueList.innerHTML = msg;
+                    if (inboxList) inboxList.innerHTML = msg;
+                    if (archiveList) archiveList.innerHTML = msg;
+                    return;
                 }
+
+                renderQueueList(Array.isArray(data.queue) ? data.queue : [], data.queue_total || 0, data.queue_has_more);
+                renderInboxList(Array.isArray(data.inbox) ? data.inbox : [], data.inbox_total || 0, data.inbox_has_more);
+                renderArchiveList(Array.isArray(data.archive) ? data.archive : [], data.archive_total || 0, data.archive_has_more);
             } catch (e) {
-                result.innerHTML = '<span class="text-danger">Error: ' + e.message + '</span>';
+                const msg = '<p class="mail-empty">Error: ' + escapeHtml(e.message) + '</p>';
+                if (queueList) queueList.innerHTML = msg;
+                if (inboxList) inboxList.innerHTML = msg;
+                if (archiveList) archiveList.innerHTML = msg;
             }
         }
 
-        function quickMessageToMayor() {
-            const sendSelect = document.getElementById('mail-to-select');
-            for (let i = 0; i < sendSelect.options.length; i++) {
-                if (sendSelect.options[i].value === 'mayor/' ||
-                    sendSelect.options[i].text.toLowerCase().includes('mayor')) {
-                    sendSelect.selectedIndex = i;
-                    break;
-                }
-            }
-            document.getElementById('mail-subject').focus();
-            document.getElementById('mail-result').innerHTML = '<span class="text-link">Recipient set to Mayor - compose your message above</span>';
-        }
-
-        function refreshInbox() {
-            loadAgentMail();
-        }
-
-        function loadMoreMail() {
-            mailLimit += mailLimitStep;
-            loadAgentMail();
-        }
-
-        // Render a single message with read/unread toggle
-        function renderMessage(m) {
-            const isRead = m.read === true;
-            const readClass = isRead ? 'mail-message-read' : 'mail-message-unread';
-            const indicator = isRead ? '○' : '●';
-            return '<div class="mail-message ' + readClass + '" data-id="' + escapeHtml(m.id) + '" style="border-bottom: 1px solid #333; padding: 12px 0;">' +
-                '<div style="display: flex; align-items: flex-start; gap: 8px;">' +
-                '<div class="mail-indicator" style="font-size: 1.2rem; cursor: pointer;" onclick="toggleReadStatus(\'' + escapeHtml(m.id) + '\', ' + isRead + ')" title="Click to toggle read status">' + indicator + '</div>' +
-                '<div style="flex: 1;">' +
-                '<div class="message-subject text-link" style="cursor: pointer;" onclick="markAsRead(\'' + escapeHtml(m.id) + '\')" title="Click to mark as read">' + escapeHtml(m.subject || 'No subject') + '</div>' +
-                '<div style="font-size: 0.8rem;" class="text-secondary">From: ' + escapeHtml(m.from || 'unknown') + '</div>' +
-                '<div style="margin-top: 8px; color: #e2e8f0;">' + escapeHtml(m.body || m.content || '') + '</div>' +
-                '<div style="margin-top: 8px; display: flex; gap: 8px;">' +
-                '<button onclick="markAsRead(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm ' + (isRead ? 'btn-secondary' : 'btn-primary') + '">Mark Read</button>' +
-                '<button onclick="markAsUnread(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm ' + (isRead ? 'btn-primary' : 'btn-secondary') + '">Mark Unread</button>' +
-                '<button onclick="archiveMessage(\'' + escapeHtml(m.id) + '\')" class="btn btn-sm btn-danger" title="Archive (remove from inbox)">Archive</button>' +
-                '</div>' +
-                '</div>' +
-                '</div>' +
-                '</div>';
-        }
-
-        // Track pending operations to prevent rapid toggles
-        const pendingReadOps = new Set();
-
-        // Helper to update unread count in stats without full refresh
-        function updateUnreadCount(delta) {
-            const stats = document.getElementById('mail-stats');
-            if (!stats) return;
-            const unreadEl = stats.querySelector('p:last-child strong');
-            if (unreadEl) {
-                const current = parseInt(unreadEl.textContent, 10) || 0;
-                unreadEl.textContent = Math.max(0, current + delta);
-            }
-        }
-
-        // Helper to update message DOM element for read state
-        function updateMessageReadState(messageEl, isRead) {
-            if (!messageEl) return;
-
-            // Update classes
-            messageEl.classList.toggle('mail-message-unread', !isRead);
-            messageEl.classList.toggle('mail-message-read', isRead);
-
-            // Update indicator
-            const indicator = messageEl.querySelector('.mail-indicator');
-            if (indicator) {
-                indicator.textContent = isRead ? '○' : '●';
-            }
-
-            // Update button styling - Mark Read and Mark Unread buttons
-            const buttons = messageEl.querySelectorAll('.btn-sm');
-            buttons.forEach(btn => {
-                if (btn.textContent === 'Mark Read') {
-                    btn.classList.toggle('btn-primary', !isRead);
-                    btn.classList.toggle('btn-secondary', isRead);
-                } else if (btn.textContent === 'Mark Unread') {
-                    btn.classList.toggle('btn-primary', isRead);
-                    btn.classList.toggle('btn-secondary', !isRead);
-                }
-            });
-        }
-
-        async function markAsRead(id) {
-            // Prevent rapid toggles on same message
-            if (pendingReadOps.has(id)) return;
-
-            const agent = document.getElementById('mail-agent-select').value;
-            const messageEl = document.querySelector('.mail-message[data-id="' + id + '"]');
-
-            // Check if already read (message may have been removed or state already correct)
-            if (!messageEl || messageEl.classList.contains('mail-message-read')) return;
-
-            // Optimistically update DOM
-            pendingReadOps.add(id);
-            updateMessageReadState(messageEl, true);
-            updateUnreadCount(-1);
-
+        async function toggleRead(id, isRead) {
+            if (!id || !selectedAgent) return;
+            const endpoint = isRead ? '/api/mail/mark-unread' : '/api/mail/mark-read';
             try {
-                const res = await fetch('/api/mail/mark-read', {
+                const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, agent })
+                    body: JSON.stringify({ id, agent: selectedAgent })
                 });
                 const data = await res.json();
                 if (!data.success) {
-                    // Revert optimistic update on failure
-                    updateMessageReadState(messageEl, false);
-                    updateUnreadCount(1);
-                    alert('Failed to mark as read: ' + (data.error || 'Unknown error'));
+                    alert('Failed: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
-                // Revert optimistic update on error, full refresh to recover
-                loadAgentMail();
                 alert('Error: ' + e.message);
-            } finally {
-                pendingReadOps.delete(id);
             }
-        }
-
-        async function markAsUnread(id) {
-            // Prevent rapid toggles on same message
-            if (pendingReadOps.has(id)) return;
-
-            const agent = document.getElementById('mail-agent-select').value;
-            const messageEl = document.querySelector('.mail-message[data-id="' + id + '"]');
-
-            // Check if already unread (message may have been removed or state already correct)
-            if (!messageEl || messageEl.classList.contains('mail-message-unread')) return;
-
-            // Optimistically update DOM
-            pendingReadOps.add(id);
-            updateMessageReadState(messageEl, false);
-            updateUnreadCount(1);
-
-            try {
-                const res = await fetch('/api/mail/mark-unread', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, agent })
-                });
-                const data = await res.json();
-                if (!data.success) {
-                    // Revert optimistic update on failure
-                    updateMessageReadState(messageEl, true);
-                    updateUnreadCount(-1);
-                    alert('Failed to mark as unread: ' + (data.error || 'Unknown error'));
-                }
-            } catch (e) {
-                // Revert optimistic update on error, full refresh to recover
-                loadAgentMail();
-                alert('Error: ' + e.message);
-            } finally {
-                pendingReadOps.delete(id);
-            }
+            await refreshAll();
         }
 
         async function archiveMessage(id) {
-            const agent = document.getElementById('mail-agent-select').value;
-            if (!confirm('Archive this message? It will be removed from your inbox.')) {
+            if (!id || !selectedAgent) return;
+            if (!confirm('Archive this message? It will be removed from the inbox.')) {
                 return;
             }
             try {
                 const res = await fetch('/api/mail/archive', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, agent })
+                    body: JSON.stringify({ id, agent: selectedAgent })
                 });
                 const data = await res.json();
-                if (data.success) {
-                    loadAgentMail(); // refresh inbox
-                } else {
-                    alert('Failed to archive: ' + (data.error || 'Unknown error'));
+                if (!data.success) {
+                    alert('Failed: ' + (data.error || 'Unknown error'));
                 }
             } catch (e) {
                 alert('Error: ' + e.message);
             }
+            await refreshAll();
         }
 
-        async function toggleReadStatus(id, isRead) {
-            // Determine current read state from DOM instead of using passed parameter
-            // (the passed isRead may be stale after optimistic updates)
-            const messageEl = document.querySelector('.mail-message[data-id="' + id + '"]');
-            if (!messageEl) return;
-
-            const currentlyRead = messageEl.classList.contains('mail-message-read');
-            if (currentlyRead) {
-                await markAsUnread(id);
-            } else {
-                await markAsRead(id);
+        async function refreshAll() {
+            if (refreshInFlight) return;
+            refreshInFlight = true;
+            try {
+                await loadAgents();
+                await loadAgentView();
+                updateLastUpdated();
+            } finally {
+                refreshInFlight = false;
             }
         }
 
-        // Initialize
-        loadAgentsList();
+        refreshAll();
+        setInterval(refreshAll, refreshIntervalMs);
     </script>
 </body>
 </html>
