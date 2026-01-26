@@ -642,9 +642,11 @@ type coldstartCombined struct {
 	Timestamp        string            `json:"timestamp"`
 	Mode             string            `json:"mode"`
 	Summary          string            `json:"summary"`
-	External         coldstartExternal `json:"external"`
-	Internal         coldstartInternal `json:"internal"`
+	External         coldstartExternal `json:"external_assessment"`
+	Internal         coldstartInternal `json:"internal_assessment"`
 	IssuesDiscovered []string          `json:"issues_discovered"`
+	Difficulties     []string          `json:"difficulties"`
+	Recommendations  []string          `json:"recommendations"`
 }
 
 type coldstartExternal struct {
@@ -664,6 +666,7 @@ type coldstartInternal struct {
 
 type coldstartComponent struct {
 	Status string `json:"status"`
+	Note   string `json:"note,omitempty"`
 }
 
 func readColdstartReports() (CICDReport, CICDReport) {
@@ -798,7 +801,16 @@ func latestColdstartByFilter(dir string, match func(string) bool) (string, time.
 
 func buildColdstartReports(payload coldstartCombined, modTime time.Time) (CICDReport, CICDReport) {
 	externalReport := buildColdstartExternalReport(payload.External, modTime, payload.Summary)
-	internalReport := buildColdstartInternalReport(payload.Internal, modTime, payload.IssuesDiscovered)
+
+	// Combine issues from various fields
+	issues := payload.IssuesDiscovered
+	if len(issues) == 0 {
+		issues = payload.Difficulties
+	}
+	if len(issues) == 0 {
+		issues = payload.Recommendations
+	}
+	internalReport := buildColdstartInternalReport(payload.Internal, modTime, issues)
 
 	if payload.Timestamp != "" {
 		externalReport.UpdatedAt = payload.Timestamp
