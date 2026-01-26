@@ -76,7 +76,13 @@ func runMailCheck(cmd *cobra.Command, args []string) error {
 	// Inject mode: delay until the tmux session has been idle long enough
 	if mailCheckInject {
 		if unread == 0 {
-			clearMailInjectMarkers(workDir, mailCheckSession, address)
+			sessionName := mailCheckSession
+			if sessionName == "" && os.Getenv("TMUX") != "" {
+				if detected, err := currentTmuxSessionName(); err == nil {
+					sessionName = detected
+				}
+			}
+			clearMailInjectMarkers(workDir, sessionName, address)
 			return nil
 		}
 		sessionName, ok := canInjectMail(mailCheckSession)

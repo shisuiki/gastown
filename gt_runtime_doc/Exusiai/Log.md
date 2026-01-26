@@ -22,3 +22,4 @@
 >> 2026-01-27 01:02 Added deferred mail notification scheduling when recipients are busy.
 >> 2026-01-27 01:03 Documented mail delivery/inject behavior.
 >> 2026-01-27 01:04 Wrote mail system audit summaries and updated Memory.
+>> 2026-01-27 01:05 Adjusted inject marker cleanup for no-unread case.
