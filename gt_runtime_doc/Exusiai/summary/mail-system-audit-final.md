@@ -3,6 +3,7 @@
 ## What changed
 - Mail injection now supports a nudge path for background retries and uses per-session markers with explicit identities.
 - Busy-session notifications schedule deferred injects rather than silently waiting.
+- Marker cleanup now removes stale pending retries when inbox is empty.
 - Mail delivery/inject behavior is documented in the mail protocol design doc.
 
 ## Why
