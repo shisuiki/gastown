@@ -5,9 +5,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/git"
 	"github.com/steveyegge/gastown/internal/mail"
@@ -19,6 +22,27 @@ import (
 type MailPageData struct {
 	Title      string
 	ActivePage string
+}
+
+type MailAgentSummary struct {
+	Address    string `json:"address"`
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Unread     int    `json:"unread"`
+	QueueCount int    `json:"queue_count"`
+	HasQueue   bool   `json:"has_queue"`
+}
+
+type queueConfig struct {
+	Name         string
+	ClaimPattern string
+}
+
+type mailIndex struct {
+	messagesByIdentity map[string][]*mail.Message
+	unreadByIdentity   map[string]int
+	queueMessages      map[string][]*mail.Message
+	queueConfigs       []queueConfig
 }
 
 // handleMail serves the mail center page.
@@ -157,6 +181,20 @@ func (h *GUIHandler) handleAPIMailAll(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+// handleAPIMailAgentView returns queue/inbox/archive data for a specific agent.
+func (h *GUIHandler) handleAPIMailAgentView(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	agent := r.URL.Query().Get("agent")
+	if agent == "" {
+		agent = "mayor/"
+	}
+
+	limit := parseLimitParam(r, 200)
+	result := h.fetchMailAgentView(agent, limit)
+	json.NewEncoder(w).Encode(result)
+}
+
 // sanitizeAgentKey converts agent address to safe cache key.
 func sanitizeAgentKey(agent string) string {
 	safe := ""
@@ -246,8 +284,8 @@ func buildMailResponse(agent string, messages []*mail.Message, limit int) map[st
 func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Use stale-while-revalidate (agents list changes rarely, 60s TTL)
-	cached := h.cache.GetStaleOrRefresh("mail_agents", 60*time.Second, func() interface{} {
+	// Use stale-while-revalidate (agents list + counts refresh frequently)
+	cached := h.cache.GetStaleOrRefresh("mail_agents", 15*time.Second, func() interface{} {
 		return h.fetchAgentsList()
 	})
 
@@ -258,16 +296,16 @@ func (h *GUIHandler) handleAPIAgentsList(w http.ResponseWriter, r *http.Request)
 
 	// No cache - fetch synchronously
 	result := h.fetchAgentsList()
-	h.cache.Set("mail_agents", result, 60*time.Second)
+	h.cache.Set("mail_agents", result, 15*time.Second)
 	json.NewEncoder(w).Encode(result)
 }
 
 // fetchAgentsList gets available agents for mail.
-func (h *GUIHandler) fetchAgentsList() []map[string]string {
-	agents := []map[string]string{
-		{"address": "overseer", "name": "Overseer", "type": "overseer"},
-		{"address": "mayor/", "name": "Mayor", "type": "mayor"},
-		{"address": "deacon/", "name": "Deacon", "type": "deacon"},
+func (h *GUIHandler) fetchAgentsList() []MailAgentSummary {
+	agents := []MailAgentSummary{
+		{Address: "overseer", Name: "Overseer", Type: "overseer"},
+		{Address: "mayor/", Name: "Mayor", Type: "mayor"},
+		{Address: "deacon/", Name: "Deacon", Type: "deacon"},
 	}
 
 	townRoot, err := workspace.FindFromCwdOrError()
@@ -290,36 +328,49 @@ func (h *GUIHandler) fetchAgentsList() []map[string]string {
 	for _, rigEntry := range rigs {
 		for _, crew := range rigEntry.Crew {
 			name := rigEntry.Name + "/" + crew
-			agents = append(agents, map[string]string{
-				"address": name + "/",
-				"name":    name,
-				"type":    "crew",
+			agents = append(agents, MailAgentSummary{
+				Address: name + "/",
+				Name:    name,
+				Type:    "crew",
 			})
 		}
 
 		for _, polecat := range rigEntry.Polecats {
 			name := rigEntry.Name + "/" + polecat
-			agents = append(agents, map[string]string{
-				"address": name + "/",
-				"name":    name,
-				"type":    "polecat",
+			agents = append(agents, MailAgentSummary{
+				Address: name + "/",
+				Name:    name,
+				Type:    "polecat",
 			})
 		}
 
 		if rigEntry.HasWitness {
-			agents = append(agents, map[string]string{
-				"address": rigEntry.Name + "/witness/",
-				"name":    rigEntry.Name + " Witness",
-				"type":    "witness",
+			agents = append(agents, MailAgentSummary{
+				Address: rigEntry.Name + "/witness/",
+				Name:    rigEntry.Name + " Witness",
+				Type:    "witness",
 			})
 		}
 		if rigEntry.HasRefinery {
-			agents = append(agents, map[string]string{
-				"address": rigEntry.Name + "/refinery/",
-				"name":    rigEntry.Name + " Refinery",
-				"type":    "refinery",
+			agents = append(agents, MailAgentSummary{
+				Address: rigEntry.Name + "/refinery/",
+				Name:    rigEntry.Name + " Refinery",
+				Type:    "refinery",
 			})
 		}
+	}
+
+	index, err := h.buildMailIndex()
+	if err != nil {
+		return agents
+	}
+
+	for i := range agents {
+		identity := mailAddressToIdentity(agents[i].Address)
+		agents[i].Unread = index.unreadByIdentity[identity]
+		queueCount := index.queueCountForAgent(agents[i].Address)
+		agents[i].QueueCount = queueCount
+		agents[i].HasQueue = queueCount > 0
 	}
 
 	return agents
@@ -490,4 +541,253 @@ func (h *GUIHandler) mailboxForAgent(agent string) (*mail.Mailbox, error) {
 		return nil, err
 	}
 	return router.GetMailbox(agent)
+}
+
+func (h *GUIHandler) fetchMailAgentView(agent string, limit int) map[string]interface{} {
+	index, err := h.buildMailIndex()
+	if err != nil {
+		return map[string]interface{}{
+			"agent":  agent,
+			"error":  err.Error(),
+			"inbox":  []*mail.Message{},
+			"queue":  []*mail.Message{},
+			"archive": []*mail.Message{},
+		}
+	}
+
+	identity := mailAddressToIdentity(agent)
+	inboxAll := append([]*mail.Message(nil), index.messagesByIdentity[identity]...)
+	sort.Slice(inboxAll, func(i, j int) bool {
+		return inboxAll[i].Timestamp.After(inboxAll[j].Timestamp)
+	})
+	inbox, inboxHasMore := applyMessageLimit(inboxAll, limit)
+
+	queueAll := index.queueMessagesForAgent(agent)
+	queue, queueHasMore := applyMessageLimit(queueAll, limit)
+
+	archiveAll := []*mail.Message{}
+	if mailbox, err := h.mailboxForAgent(agent); err == nil {
+		if archived, err := mailbox.ListArchived(); err == nil {
+			archiveAll = append(archiveAll, archived...)
+		}
+	}
+	sort.Slice(archiveAll, func(i, j int) bool {
+		return archiveAll[i].Timestamp.After(archiveAll[j].Timestamp)
+	})
+	archive, archiveHasMore := applyMessageLimit(archiveAll, limit)
+
+	return map[string]interface{}{
+		"agent":           agent,
+		"inbox":           inbox,
+		"inbox_total":     len(inboxAll),
+		"inbox_unread":    index.unreadByIdentity[identity],
+		"inbox_has_more":  inboxHasMore,
+		"queue":           queue,
+		"queue_total":     len(queueAll),
+		"queue_has_more":  queueHasMore,
+		"archive":         archive,
+		"archive_total":   len(archiveAll),
+		"archive_has_more": archiveHasMore,
+	}
+}
+
+func applyMessageLimit(messages []*mail.Message, limit int) ([]*mail.Message, bool) {
+	if limit <= 0 || len(messages) <= limit {
+		return messages, false
+	}
+	return messages[:limit], true
+}
+
+func (h *GUIHandler) buildMailIndex() (*mailIndex, error) {
+	townRoot, err := workspace.FindFromCwdOrError()
+	if err != nil {
+		return nil, err
+	}
+	beadsDir := beads.ResolveBeadsDir(townRoot)
+	reader, err := NewBeadsReaderWithBeadsDir(townRoot, beadsDir)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, err := reader.ListBeads(BeadFilter{Type: "message", Limit: -1, IncludeEphemeral: true})
+	if err != nil {
+		return nil, err
+	}
+
+	index := &mailIndex{
+		messagesByIdentity: make(map[string][]*mail.Message),
+		unreadByIdentity:   make(map[string]int),
+		queueMessages:      make(map[string][]*mail.Message),
+	}
+
+	queueBeads, err := reader.ListBeads(BeadFilter{Type: "queue", Limit: -1})
+	if err == nil {
+		for _, issue := range queueBeads {
+			fields := beads.ParseQueueFields(issue.Description)
+			name := strings.TrimSpace(fields.Name)
+			if name == "" {
+				name = strings.TrimPrefix(issue.ID, "hq-q-")
+				name = strings.TrimPrefix(name, "gt-q-")
+			}
+			if name == "" {
+				continue
+			}
+			index.queueConfigs = append(index.queueConfigs, queueConfig{
+				Name:         name,
+				ClaimPattern: fields.ClaimPattern,
+			})
+		}
+	}
+
+	seenByIdentity := make(map[string]map[string]bool)
+
+	for _, bead := range messages {
+		if bead.Status != "open" && bead.Status != "hooked" {
+			continue
+		}
+
+		bm := mail.BeadsMessage{
+			ID:          bead.ID,
+			Title:       bead.Title,
+			Description: bead.Description,
+			Assignee:    bead.Assignee,
+			Priority:    bead.Priority,
+			Status:      bead.Status,
+			CreatedAt:   bead.CreatedAt,
+			Labels:      bead.Labels,
+			Wisp:        bead.Ephemeral,
+		}
+		bm.ParseLabels()
+		msg := bm.ToMessage()
+
+		assignee := strings.TrimSpace(bm.Assignee)
+		if assignee != "" && !strings.HasPrefix(assignee, "queue:") && !strings.HasPrefix(assignee, "channel:") && !strings.HasPrefix(assignee, "announce:") {
+			identity := normalizeIdentity(assignee)
+			addMessageToIndex(index, seenByIdentity, identity, msg)
+		}
+
+		for _, cc := range bm.GetCC() {
+			identity := normalizeIdentity(cc)
+			addMessageToIndex(index, seenByIdentity, identity, msg)
+		}
+
+		if bm.IsQueueMessage() && bm.GetClaimedBy() == "" {
+			queueName := bm.GetQueue()
+			if queueName != "" {
+				index.queueMessages[queueName] = append(index.queueMessages[queueName], msg)
+			}
+		}
+	}
+
+	for identity, messages := range index.messagesByIdentity {
+		sort.Slice(messages, func(i, j int) bool {
+			return messages[i].Timestamp.After(messages[j].Timestamp)
+		})
+		index.messagesByIdentity[identity] = messages
+	}
+
+	for queueName, messages := range index.queueMessages {
+		sort.Slice(messages, func(i, j int) bool {
+			return messages[i].Timestamp.Before(messages[j].Timestamp)
+		})
+		index.queueMessages[queueName] = messages
+	}
+
+	return index, nil
+}
+
+func addMessageToIndex(index *mailIndex, seenByIdentity map[string]map[string]bool, identity string, msg *mail.Message) {
+	if identity == "" || msg == nil || msg.ID == "" {
+		return
+	}
+	if seenByIdentity[identity] == nil {
+		seenByIdentity[identity] = make(map[string]bool)
+	}
+	if seenByIdentity[identity][msg.ID] {
+		return
+	}
+	seenByIdentity[identity][msg.ID] = true
+	index.messagesByIdentity[identity] = append(index.messagesByIdentity[identity], msg)
+	if !msg.Read {
+		index.unreadByIdentity[identity]++
+	}
+}
+
+func normalizeIdentity(identity string) string {
+	if identity == "mayor" {
+		return "mayor/"
+	}
+	if identity == "deacon" {
+		return "deacon/"
+	}
+	return identity
+}
+
+func mailAddressToIdentity(address string) string {
+	if address == "overseer" {
+		return "overseer"
+	}
+	if address == "mayor" || address == "mayor/" {
+		return "mayor/"
+	}
+	if address == "deacon" || address == "deacon/" {
+		return "deacon/"
+	}
+	if strings.HasSuffix(address, "/") {
+		address = strings.TrimSuffix(address, "/")
+	}
+	parts := strings.Split(address, "/")
+	if len(parts) == 3 && (parts[1] == "crew" || parts[1] == "polecats") {
+		return parts[0] + "/" + parts[2]
+	}
+	return address
+}
+
+func addressForClaimPattern(address string) string {
+	if address == "overseer" || address == "mayor/" || address == "deacon/" {
+		return address
+	}
+	return strings.TrimSuffix(address, "/")
+}
+
+func (index *mailIndex) queueCountForAgent(agentAddr string) int {
+	if index == nil {
+		return 0
+	}
+	addr := addressForClaimPattern(agentAddr)
+	count := 0
+	for _, queue := range index.queueConfigs {
+		if beads.MatchClaimPattern(queue.ClaimPattern, addr) {
+			count += len(index.queueMessages[queue.Name])
+		}
+	}
+	return count
+}
+
+func (index *mailIndex) queueMessagesForAgent(agentAddr string) []*mail.Message {
+	if index == nil {
+		return []*mail.Message{}
+	}
+	addr := addressForClaimPattern(agentAddr)
+	seen := make(map[string]bool)
+	var messages []*mail.Message
+	for _, queue := range index.queueConfigs {
+		if !beads.MatchClaimPattern(queue.ClaimPattern, addr) {
+			continue
+		}
+		for _, msg := range index.queueMessages[queue.Name] {
+			if msg == nil || msg.ID == "" || seen[msg.ID] {
+				continue
+			}
+			seen[msg.ID] = true
+			messages = append(messages, msg)
+		}
+	}
+	if len(messages) == 0 {
+		return []*mail.Message{}
+	}
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Timestamp.Before(messages[j].Timestamp)
+	})
+	return messages
 }
