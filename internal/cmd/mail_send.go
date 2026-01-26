@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/beads"
@@ -16,6 +17,11 @@ import (
 	"github.com/steveyegge/gastown/internal/tmux"
 	"github.com/steveyegge/gastown/internal/workspace"
 )
+
+// mailNotifyIdleThreshold is how long a session must be idle before we nudge.
+// If the session is busy, we skip the nudge and let gt mail check --inject handle it.
+// This prevents interrupting active work with "[Request interrupted by user]".
+const mailNotifyIdleThreshold = 2 * time.Minute
 
 func runMailSend(cmd *cobra.Command, args []string) error {
 	var to string
@@ -208,11 +214,16 @@ func generateThreadID() string {
 // notifyMailRecipients sends tmux notifications to mail recipients.
 // This is called when --notify flag is set on mail send.
 // Errors are logged but don't fail the mail send operation.
+//
+// IMPORTANT: We check if the recipient is idle before nudging to avoid
+// interrupting active work. If the session is busy (< 2 min idle), we
+// skip the immediate nudge - the recipient's gt mail check --inject hook
+// will notify them when they become idle.
 func notifyMailRecipients(townRoot string, recipients []string, from, subject string) {
 	t := tmux.NewTmux()
 	message := fmt.Sprintf("[mail from %s] %s", from, subject)
 
-	var notified int
+	var notified, deferred int
 	for _, addr := range recipients {
 		sessionName := resolveMailAddrToSession(addr)
 		if sessionName == "" {
@@ -234,7 +245,15 @@ func notifyMailRecipients(townRoot string, recipients []string, from, subject st
 			}
 		}
 
-		// Send the nudge
+		// Check if session is idle before nudging to avoid interrupting active work
+		idleFor, err := sessionIdleDuration(sessionName)
+		if err == nil && idleFor < mailNotifyIdleThreshold {
+			// Session is busy - skip immediate nudge, let inject hook handle it
+			deferred++
+			continue
+		}
+
+		// Session is idle (or we couldn't check) - send the nudge
 		if err := t.NudgeSession(sessionName, message); err != nil {
 			fmt.Printf("  %s Failed to notify %s: %v\n", style.Dim.Render("○"), addr, err)
 			continue
@@ -245,6 +264,9 @@ func notifyMailRecipients(townRoot string, recipients []string, from, subject st
 
 	if notified > 0 {
 		fmt.Printf("  %s Notified %d recipient(s)\n", style.Bold.Render("📬"), notified)
+	}
+	if deferred > 0 {
+		fmt.Printf("  %s %d recipient(s) busy - will be notified when idle\n", style.Dim.Render("○"), deferred)
 	}
 }
 
