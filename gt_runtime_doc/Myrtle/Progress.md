@@ -1,5 +1,11 @@
 # Progress Log
 
+## 2026-01-27
+
+### WebUI mail test isolation
+
+1. Stubbed `bd` in web UI tests to avoid creating real mail beads (Hello/Hi).
+
 ## 2026-01-22
 
 ### Container build - Dockerfile + docs

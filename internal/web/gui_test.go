@@ -18,6 +18,7 @@ func setupFakeGT(t *testing.T) {
 	t.Helper()
 
 	dir := t.TempDir()
+	bdPath := filepath.Join(dir, "bd")
 	scriptPath := filepath.Join(dir, "gt")
 	script := `#!/bin/sh
 cmd="$1"
@@ -54,7 +55,38 @@ esac
 echo "unknown command" >&2
 exit 1
 `
+	bdScript := `#!/bin/sh
+# Minimal bd stub to avoid touching real beads during web tests.
+cmd="$1"
+shift
+
+# Skip global flags (bd --no-daemon --allow-stale ...)
+while [ "$cmd" = "--no-daemon" ] || [ "$cmd" = "--allow-stale" ]; do
+  cmd="$1"
+  shift
+done
+
+case "$cmd" in
+  create)
+    echo "hq-test"
+    exit 0
+    ;;
+  config)
+    exit 0
+    ;;
+  list|show|update|close|reopen)
+    echo "[]"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(bdPath, []byte(bdScript), 0o755); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
