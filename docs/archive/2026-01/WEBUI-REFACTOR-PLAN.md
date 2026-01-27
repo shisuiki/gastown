@@ -1,6 +1,6 @@
 ---
-type: evergreen
-status: active
+type: report
+status: archived
 owner: "unowned"
 audience: dev
 applies_to:
@@ -10,7 +10,9 @@ last_validated: "unknown"
 source_of_truth: []
 ---
 
-# Gas Town WebUI Refactoring Plan
+# Gas Town WebUI Refactoring Plan (Archived)
+
+> **Note**: This plan was largely completed. Phase 1 (shared components) was implemented with `base.html`, `gastown.css`, `gastown.js`, and `terminal.js`. Archived 2026-01-27.
 
 This document outlines the comprehensive plan to modernize the Gas Town WebUI.
 

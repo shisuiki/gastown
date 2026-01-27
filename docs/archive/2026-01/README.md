@@ -12,14 +12,13 @@ source_of_truth: []
 
 # Archived Docs (January 2026)
 
-The following documents were moved here to declutter the active docs surface:
+Historical documents moved here to declutter the active docs surface:
 
 - `FAILURE_MODES_REPORT.md` – historical failure investigation report and root-cause analysis.
 - `gastown-research-report.md` – crew research output, no longer part of the core docs.
 - `gastown-webui-report.md` – historical WebUI research notes.
 - `DOG-TIMEOUT-FIX-REPORT.md` – mayor-generated report about dog timeouts in Canary infrastructure.
-
-Each archived file now resides in this folder, and the original paths retain small stubs that point back here.
+- `WEBUI-REFACTOR-PLAN.md` – WebUI refactoring plan; Phase 1 (shared components) completed.
 
 ## Scope
-- Scope description pending.
+Historical reference only. These documents are not actively maintained.
