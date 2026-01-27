@@ -30,23 +30,30 @@ RUN apk add --no-cache \
 # Install Claude CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-ENV GT_ROOT=/gt
+# Use home directory structure like host
 ENV HOME=/home/gastown
+ENV GT_ROOT=/home/gastown/gt
 ENV PATH="/home/gastown/.npm-global/bin:$PATH"
-WORKDIR /gt
+
+WORKDIR /home/gastown
 
 COPY --from=builder /src/gt /usr/local/bin/gt
 COPY --from=builder /go/bin/bd /usr/local/bin/bd
+COPY deploy/canary-entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Create necessary directories
-RUN mkdir -p /home/gastown/.config /home/gastown/.claude \
-    && chown -R gastown:gastown /home/gastown
+# Create directory structure matching host layout
+RUN mkdir -p /home/gastown/gt \
+             /home/gastown/.claude \
+             /home/gastown/.config/claude-code \
+    && chown -R gastown:gastown /home/gastown \
+    && chmod +x /usr/local/bin/entrypoint.sh
 
 USER gastown
+WORKDIR /home/gastown/gt
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/usr/local/bin/gt", "version"]
 
-ENTRYPOINT ["/usr/local/bin/gt"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["gui", "--port", "8080"]
