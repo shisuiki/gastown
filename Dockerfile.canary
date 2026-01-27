@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+# Canary Gas Town Dockerfile - includes bash, tmux, claude for testing
+FROM golang:1.24-alpine AS builder
+
+RUN apk add --no-cache git make
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+RUN make build
+RUN go install github.com/steveyegge/beads/cmd/bd@latest
+
+FROM alpine:3.20
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    bash \
+    tmux \
+    git \
+    curl \
+    jq \
+    nodejs \
+    npm \
+    && addgroup -S gastown \
+    && adduser -S -G gastown -u 10001 -s /bin/bash gastown
+
+# Install Claude CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+ENV GT_ROOT=/gt
+ENV HOME=/home/gastown
+ENV PATH="/home/gastown/.npm-global/bin:$PATH"
+WORKDIR /gt
+
+COPY --from=builder /src/gt /usr/local/bin/gt
+COPY --from=builder /go/bin/bd /usr/local/bin/bd
+
+# Create necessary directories
+RUN mkdir -p /home/gastown/.config /home/gastown/.claude \
+    && chown -R gastown:gastown /home/gastown
+
+USER gastown
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/usr/local/bin/gt", "version"]
+
+ENTRYPOINT ["/usr/local/bin/gt"]
+CMD ["gui", "--port", "8080"]
