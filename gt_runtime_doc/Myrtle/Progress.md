@@ -155,3 +155,4 @@
 - Updated WEBUI-DEPLOY docs with GT_WEB_*_PROXY env vars.
 - Ran `go test ./internal/web/...` (ok).
 - Committed and pushed runtime docs + gh proxy fix.
+- Closed hq-73h5f and ran `bd sync`.

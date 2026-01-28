@@ -17,4 +17,4 @@
 ## Phase 4: Land + Sync
 - [x] Commit + push
 - [x] Update Progress + Memory
-- [ ] `bd sync` and close bead if done
+- [x] `bd sync` and close bead if done
