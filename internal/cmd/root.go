@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/steveyegge/gastown/internal/config"
 	"github.com/steveyegge/gastown/internal/style"
 	"github.com/steveyegge/gastown/internal/version"
 	"github.com/steveyegge/gastown/internal/workspace"
@@ -62,7 +63,7 @@ func persistentPreRun(cmd *cobra.Command, args []string) error {
 	return CheckBeadsVersion()
 }
 
-// warnIfTownRootOffMain prints a warning if the town root is not on main branch.
+// warnIfTownRootOffMain prints a warning if the town root is not on the configured default branch.
 // This is a non-blocking warning to help catch accidental branch switches.
 func warnIfTownRootOffMain() {
 	// Find town root (silently - don't error if not in workspace)
@@ -86,13 +87,19 @@ func warnIfTownRootOffMain() {
 	}
 
 	branch := strings.TrimSpace(string(out))
-	if branch == "" || branch == "main" || branch == "master" {
+	if branch == "" {
+		return
+	}
+
+	// Check against configurable default branch (not hardcoded main/master)
+	if config.IsTownDefaultBranch(townRoot, branch) {
 		return
 	}
 
 	// Town root is on wrong branch - warn the user
-	fmt.Fprintf(os.Stderr, "\n%s Town root is on branch '%s' (should be 'main')\n",
-		style.Bold.Render("⚠️  WARNING:"), branch)
+	defaultBranch := config.GetTownDefaultBranch(townRoot)
+	fmt.Fprintf(os.Stderr, "\n%s Town root is on branch '%s' (should be '%s')\n",
+		style.Bold.Render("⚠️  WARNING:"), branch, defaultBranch)
 	fmt.Fprintf(os.Stderr, "   This can cause gt commands to fail. Run: %s\n\n",
 		style.Dim.Render("gt doctor --fix"))
 }
