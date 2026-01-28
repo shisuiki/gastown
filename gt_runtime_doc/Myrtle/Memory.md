@@ -1,39 +1,20 @@
-# Myrtle Memory - WebUI Workflow Refactoring
+# Myrtle Memory - WebUI CI/CD GitHub API Connectivity (hq-73h5f)
 
 ## Current Task
-Refactoring WebUI workflow page to be Jira-like with full beads functionality.
+Fix WebUI CI/CD GitHub API connectivity where `gh` calls time out due to DNS/proxy mismatch in systemd service.
 
-## Key Discoveries
+## Key Findings
+- `gh run list` in WebUI resolves `api.github.com` to `198.18.0.4` and times out.
+- Shell `gh` works because proxy env vars are set; systemd service lacks them.
+- Root cause likely DNS interception from `Meta` interface + no proxy in `gastown-gui.service`.
 
-### Data Locations
-- **Beads storage**: `~/gt/.beads/` (SQLite + JSONL hybrid)
-- **Convoys**: Same beads system with `issue_type=convoy`
-- **Routes**: `~/gt/.beads/routes.jsonl` (prefix routing)
+## Implementation Plan
+- Add `ghCommand` helper that injects proxy env overrides for `gh` calls only.
+- Env vars: `GT_WEB_HTTP_PROXY`, `GT_WEB_HTTPS_PROXY`, `GT_WEB_ALL_PROXY`, `GT_WEB_NO_PROXY`.
+- Update WebUI docs with proxy env config for `gastown-gui.service`.
 
-### Bead Types (9 total)
-- task (427), message (267), event (114), convoy (56), epic (29)
-- bug (27), feature (14), agent (6), molecule (5)
-
-### Current Issues
-1. Hook shows 0 because `gt hook` runs without agent context
-2. Convoy progress 0/0 - tracking calculation issues
-3. Data fetching via CLI is slow - should read directly from beads
-
-### File Structure
-- `internal/web/handler_workflow.go` - Workflow API handlers
-- `internal/web/templates/workflow.html` - Frontend template
-- `internal/web/fetcher.go` - Convoy/Agent fetching logic
-- `internal/web/static/js/gastown.js` - Shared JS utilities
-
-### Key APIs Needed
-- `/api/beads` - List all beads with filtering
-- `/api/beads/{id}` - Single bead detail
-- `/api/beads/{id}/actions` - Bead operations (sling, close, etc.)
-- `/api/agents/hooks` - All agent hooks status
-- `/api/convoys` - Convoy list with correct progress
-
-## Design Decisions
-1. Read directly from beads.db SQLite for performance
-2. Use Alpine.js for reactive UI (already in use)
-3. Jira-like board view with status columns
-4. Agent dropdown for sling/assign operations
+## Files Touched
+- `internal/web/command.go`: new `ghCommand` + env override helpers
+- `internal/web/handler_cicd.go`: use `ghCommand`
+- `internal/web/fetcher.go`: use `ghCommand` for PR list
+- `docs/WEBUI-DEPLOY.md`: document proxy env vars

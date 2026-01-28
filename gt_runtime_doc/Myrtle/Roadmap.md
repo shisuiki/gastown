@@ -1,40 +1,20 @@
-# Roadmap: WebUI Workflow Refactoring
+# Roadmap: WebUI CI/CD GitHub API Connectivity (hq-73h5f)
 
-## Phase 1: Data Layer (Current)
-- [x] Research current implementation
-- [x] Research beads data structure
-- [x] Research bd/gt CLI tools
-- [ ] Create direct beads.db reader
-- [ ] Fix convoy progress calculation
-- [ ] Implement per-agent hook fetching
+## Phase 1: Triage + Root Cause
+- [x] Reproduce WebUI CI/CD failure (gh run list timeouts)
+- [x] Identify network/DNS differences between service and shell
+- [x] Confirm proxy/env gaps in service runtime
 
-## Phase 2: Core UI Components
-- [ ] Beads list view with filtering (by type, status, priority)
-- [ ] Bead detail page with full info
-- [ ] Agent hooks overview (per-agent)
-- [ ] Convoy detail page with clickable beads
+## Phase 2: Fix
+- [x] Implement proxy/env propagation for `gh` calls in WebUI
+- [ ] Add safe fallback or helpful error when GH API unreachable
 
-## Phase 3: Bead Operations
-- [ ] Create new bead form
-- [ ] Update bead (status, priority, assignee)
-- [ ] Sling bead to agent
-- [ ] Close/reopen bead
-- [ ] Add dependencies
+## Phase 3: Docs + Validation
+- [x] Update WebUI deploy docs with required proxy/DNS env
+- [ ] Add/adjust tests if needed
+- [x] Verify behavior locally (targeted go test)
 
-## Phase 4: Board View (Jira-like)
-- [ ] Kanban board by status (open/in_progress/closed)
-- [ ] Drag-and-drop status change
-- [ ] Quick filters (my work, ready, blocked)
-- [ ] Search functionality
-
-## Phase 5: Polish
-- [ ] Keyboard shortcuts
-- [ ] Bulk operations
-- [ ] Real-time updates via SSE
-- [ ] Mobile responsive improvements
-
-## Success Criteria
-- All bd CLI operations available in WebUI
-- Faster than CLI (direct DB access)
-- Intuitive Jira-like interface
-- Per-agent hook visibility
+## Phase 4: Land + Sync
+- [ ] Commit + push
+- [x] Update Progress + Memory
+- [ ] `bd sync` and close bead if done

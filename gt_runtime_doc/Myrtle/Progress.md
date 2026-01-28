@@ -147,3 +147,10 @@
 - [x] Understood beads data structure (9 types, SQLite + JSONL)
 - [x] Understood convoy system (special bead with `tracks` dependencies)
 - [x] Documentation created in gt_runtime_doc/Myrtle/
+
+## 2026-01-28
+
+- Reset roadmap/progress for hq-73h5f.
+- Added gh proxy env overrides for WebUI GitHub API calls (CI/CD + merge queue).
+- Updated WEBUI-DEPLOY docs with GT_WEB_*_PROXY env vars.
+- Ran `go test ./internal/web/...` (ok).
