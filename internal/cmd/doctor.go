@@ -163,6 +163,12 @@ func isDogContext() bool {
 	if role == "dog" || role == "boot" {
 		return true
 	}
+	if actor := os.Getenv("BD_ACTOR"); strings.Contains(actor, "deacon/dogs/") {
+		return true
+	}
+	if roleHome := os.Getenv("GT_ROLE_HOME"); strings.Contains(roleHome, string(filepath.Separator)+"deacon"+string(filepath.Separator)+"dogs"+string(filepath.Separator)) {
+		return true
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return false
