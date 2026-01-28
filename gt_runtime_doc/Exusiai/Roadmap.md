@@ -1,26 +1,24 @@
 # Roadmap
 
 ## Phase 0: Discovery
-- Inspect current WebUI mail templates, handlers, and API endpoints.
-- Map GT mail features to WebUI data sources (inbox, archive, queue, unread, read/unread toggle).
-- Determine whether archive restore is supported in CLI/handlers.
+- Locate mol-session-gc formula and the command it invokes.
+- Trace dog/deacon execution path for formulas and timeouts.
+- Identify slow or blocking steps (e.g., doctor/fix, bd operations).
 
-## Phase 1: Data model + API support
-- Implement/extend backend endpoints for: agents list + unread counts, queue/inbox/archive per agent.
-- Add endpoints for read/unread toggle, archive, and restore if supported.
-- Ensure data derived from beads/mail data directly (no CLI calls from frontend).
+## Phase 1: Root-cause analysis
+- Determine why session-gc exceeds 10m (CPU-bound scan, blocking CLI, missing timeouts).
+- Check whether timeouts are enforced in dog runner vs. only deacon supervision.
 
-## Phase 2: UI refactor
-- Replace mail UI layout with agent list + three-pane queue/inbox/archive.
-- Implement read/unread badges + actions; archive + restore actions.
-- Implement auto-refresh every 30s (dashboard-style) and remove bottom blocks.
+## Phase 2: Fixes
+- Implement hard timeouts for session-gc execution path.
+- Optimize/skip known slow operations in session-gc or doctor.
+- Add logging/metrics to surface which step exceeded time limit.
 
-## Phase 3: Validation + docs
-- Verify mail list content matches GT mail design and states.
-- Validate actions reflect in backend and UI updates.
-- Update docs for WebUI mail features and behavior.
+## Phase 3: Validation & docs
+- Run local reproduction (dry-run) and ensure session-gc completes quickly.
+- Update docs/notes about mail-session-gc behavior and timeouts.
 
 ## Acceptance criteria
-- New mail UI matches requested layout and functionality.
-- All GT mail features are surfaced (queue/inbox/archive, read/unread, archive/restore if supported).
-- Auto-refresh runs every 30s, no legacy UI sections remain.
+- mol-session-gc no longer hangs >10m in dog runs.
+- Timeouts are enforced by code (not only formula instructions).
+- Deacon stability is not impacted by dog timeouts.
