@@ -11,4 +11,3 @@
 - Added mayor → crew deploy request/status template and escalation rules.
 - Documented canary promotion criteria, workflow, and regression handling.
 - Audited branch policy sources; updated hooks/templates/docs to canary-first messaging.
-- Added CI/CD canary agent activity monitor (tmux sessions + metrics) with WebUI updates; tests `go test ./internal/web/...`.

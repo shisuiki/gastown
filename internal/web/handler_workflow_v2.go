@@ -286,7 +286,7 @@ func (h *GUIHandler) handleAPIBeadAction(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 
 	var req struct {
-		Action   string `json:"action"` // "sling", "close", "reopen", "update"
+		Action   string `json:"action"`   // "sling", "close", "reopen", "update"
 		BeadID   string `json:"bead_id"`
 		Target   string `json:"target,omitempty"`   // For sling: target agent
 		Status   string `json:"status,omitempty"`   // For update
