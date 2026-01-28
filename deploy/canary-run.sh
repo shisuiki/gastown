@@ -26,6 +26,11 @@ HOST_GT_LIVE="${HOST_GT_LIVE:-$HOME/gt}"
 HOST_CLAUDE_DIR="$HOME/.claude"
 HOST_CLAUDE_CODE_DIR="$HOME/.config/claude-code"
 
+# Proxy settings (for Claude API access)
+PROXY_HOST="${PROXY_HOST:-172.17.0.1}"
+PROXY_PORT="${PROXY_PORT:-7890}"
+PROXY_URL="http://${PROXY_HOST}:${PROXY_PORT}"
+
 log() {
     echo "[canary-run] $*"
 }
@@ -78,6 +83,11 @@ start_container() {
         -e GT_WEB_ALLOW_REMOTE=1 \
         -e GT_ROOT=/home/gastown/gt \
         -e HOME=/home/gastown \
+        -e HTTP_PROXY="${PROXY_URL}" \
+        -e HTTPS_PROXY="${PROXY_URL}" \
+        -e http_proxy="${PROXY_URL}" \
+        -e https_proxy="${PROXY_URL}" \
+        -e NO_PROXY="localhost,127.0.0.1" \
         "$image" \
         gui --port 8080
 
