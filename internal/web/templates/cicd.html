@@ -52,6 +52,27 @@
             gap: 10px;
             flex-wrap: wrap;
         }
+        .agent-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .agent-metric {
+            background: rgba(15, 23, 42, 0.35);
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .agent-metric .label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .agent-metric .value {
+            font-size: 1.1rem;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body x-data="cicdPage()" class="cicd-page">
@@ -95,6 +116,25 @@
                 <h2>🧾 Reports</h2>
                 <div class="card-content">
                     <div x-html="renderReports()"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid" style="margin-top: 20px;">
+            <div class="card">
+                <h2>🛰️ Canary Agent Activity</h2>
+                <div class="card-content">
+                    <template x-if="status && status.agent_activity">
+                        <div>
+                            <p class="text-muted">Host: <span x-text="status.agent_activity.host || '-'"></span></p>
+                            <p class="text-muted" style="margin-top: 4px;" x-text="agentUpdatedLabel()"></p>
+                            <div class="agent-metrics" x-html="renderAgentMetrics()"></div>
+                            <div class="cicd-table" x-html="renderAgentTable()"></div>
+                        </div>
+                    </template>
+                    <template x-if="!status || !status.agent_activity">
+                        <p class="text-muted">Loading agent activity…</p>
+                    </template>
                 </div>
             </div>
         </div>
@@ -244,6 +284,11 @@
                     return 'Updated ' + this.formatTime(this.status.updated_at);
                 },
 
+                agentUpdatedLabel() {
+                    if (!this.status || !this.status.agent_activity || !this.status.agent_activity.updated_at) return '';
+                    return 'Updated ' + this.formatTime(this.status.agent_activity.updated_at);
+                },
+
                 renderRecentRuns() {
                     if (!this.status || !this.status.recent_runs || this.status.recent_runs.length === 0) {
                         return '<p class="text-muted">No recent runs</p>';
@@ -293,6 +338,54 @@
                     }
 
                     return reports.map(report => this.renderReport(report)).join('');
+                },
+
+                activityBadge(color) {
+                    switch ((color || '').toLowerCase()) {
+                        case 'green': return 'badge-green';
+                        case 'yellow': return 'badge-yellow';
+                        case 'red': return 'badge-red';
+                        default: return 'badge-yellow';
+                    }
+                },
+
+                renderAgentMetrics() {
+                    const info = this.status?.agent_activity;
+                    if (!info || !info.metrics) {
+                        return '<div class="text-muted">No metrics available</div>';
+                    }
+                    const m = info.metrics;
+                    const recent = (m.recent_completed || []).map(item =>
+                        '<div class="text-muted">' + escapeHtml(item.id || '') + ' ' + escapeHtml(item.title || '') + '</div>'
+                    ).join('');
+
+                    return [
+                        '<div class="agent-metric"><div class="label">In Progress</div><div class="value">' + (m.in_progress ?? 0) + '</div></div>',
+                        '<div class="agent-metric"><div class="label">Hooked</div><div class="value">' + (m.hooked ?? 0) + '</div></div>',
+                        '<div class="agent-metric"><div class="label">Errors</div><div class="value">' + (m.error_count ?? 0) + '</div></div>',
+                        '<div class="agent-metric"><div class="label">Timeouts</div><div class="value">' + (m.timeout_count ?? 0) + '</div></div>',
+                        '<div class="agent-metric"><div class="label">Mail</div><div class="value">' + (m.mail_unread ?? 0) + ' / ' + (m.mail_total ?? 0) + '</div></div>',
+                        '<div class="agent-metric"><div class="label">Recent Completed</div><div class="value">' + (recent || '<span class=\"text-muted\">none</span>') + '</div></div>'
+                    ].join('');
+                },
+
+                renderAgentTable() {
+                    const info = this.status?.agent_activity;
+                    if (!info || !info.sessions || info.sessions.length === 0) {
+                        return '<p class="text-muted">No active sessions</p>';
+                    }
+                    const rows = info.sessions.map(session => {
+                        const badge = this.activityBadge(session.activity_color);
+                        const status = session.status || 'unknown';
+                        return '<tr>' +
+                            '<td>' + escapeHtml(session.agent || session.session_id || '-') + '</td>' +
+                            '<td class="text-muted">' + escapeHtml(session.role || '-') + '</td>' +
+                            '<td><span class="badge ' + badge + '">' + escapeHtml(status) + '</span></td>' +
+                            '<td class="text-muted">' + escapeHtml(this.formatTime(session.last_activity)) + '</td>' +
+                            '<td class="text-muted">' + escapeHtml(session.activity_age || '') + '</td>' +
+                            '</tr>';
+                    }).join('');
+                    return '<table><tr><th>Agent</th><th>Role</th><th>Status</th><th>Last Activity</th><th>Age</th></tr>' + rows + '</table>';
                 },
 
                 renderWorkflowTable() {

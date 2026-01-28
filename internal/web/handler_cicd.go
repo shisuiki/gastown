@@ -40,6 +40,7 @@ type CICDStatus struct {
 	RecentRuns []CICDRunSummary      `json:"recent_runs"`
 	Workflows  []CICDWorkflowSummary `json:"workflows"`
 	Reports    CICDReports           `json:"reports"`
+	AgentInfo  CICDAgentActivity     `json:"agent_activity"`
 	Errors     []string              `json:"errors,omitempty"`
 }
 
@@ -56,6 +57,42 @@ type CICDReport struct {
 	Summary   string   `json:"summary"`
 	UpdatedAt string   `json:"updated_at,omitempty"`
 	Details   []string `json:"details,omitempty"`
+}
+
+type CICDAgentActivity struct {
+	UpdatedAt time.Time          `json:"updated_at"`
+	Host      string             `json:"host,omitempty"`
+	Sessions  []CICDAgentSession `json:"sessions"`
+	Metrics   CICDAgentMetrics   `json:"metrics"`
+	Errors    []string           `json:"errors,omitempty"`
+	Warnings  []string           `json:"warnings,omitempty"`
+}
+
+type CICDAgentSession struct {
+	SessionID     string    `json:"session_id"`
+	Agent         string    `json:"agent"`
+	Role          string    `json:"role"`
+	Status        string    `json:"status"`
+	LastActivity  time.Time `json:"last_activity"`
+	ActivityAge   string    `json:"activity_age"`
+	ActivityColor string    `json:"activity_color"`
+	StatusHint    string    `json:"status_hint,omitempty"`
+}
+
+type CICDAgentMetrics struct {
+	InProgress      int              `json:"in_progress"`
+	Hooked          int              `json:"hooked"`
+	RecentCompleted []CICDRecentTask `json:"recent_completed"`
+	ErrorCount      int              `json:"error_count"`
+	TimeoutCount    int              `json:"timeout_count"`
+	MailUnread      int              `json:"mail_unread"`
+	MailTotal       int              `json:"mail_total"`
+}
+
+type CICDRecentTask struct {
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	ClosedAt time.Time `json:"closed_at"`
 }
 
 type CICDWorkflowSummary struct {
@@ -255,8 +292,191 @@ func (h *GUIHandler) buildCICDStatus() CICDStatus {
 	status.Reports.Internal = internalReport
 	status.Reports.External = externalReport
 	status.Reports.Items = []CICDReport{externalReport, internalReport, canaryReport}
+	status.AgentInfo = h.buildCICDAgentActivity()
 
 	return status
+}
+
+func (h *GUIHandler) buildCICDAgentActivity() CICDAgentActivity {
+	activity := CICDAgentActivity{
+		UpdatedAt: time.Now(),
+	}
+
+	if host, err := os.Hostname(); err == nil {
+		activity.Host = host
+	}
+
+	agents, err := h.fetcher.FetchAgents()
+	if err != nil {
+		activity.Errors = append(activity.Errors, fmt.Sprintf("agent session scan failed: %v", err))
+	}
+
+	if len(agents) == 0 {
+		activity.Warnings = append(activity.Warnings, "No active tmux sessions detected")
+	}
+
+	sessions := make([]CICDAgentSession, 0, len(agents))
+	for _, agent := range agents {
+		sessions = append(sessions, CICDAgentSession{
+			SessionID:     agent.SessionID,
+			Agent:         formatAgentLabel(agent),
+			Role:          agent.AgentType,
+			Status:        agentStatusFromColor(agent.LastActivity.ColorClass),
+			LastActivity:  agent.LastActivity.LastActivity,
+			ActivityAge:   agent.LastActivity.FormattedAge,
+			ActivityColor: agent.LastActivity.ColorClass,
+			StatusHint:    agent.StatusHint,
+		})
+	}
+
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].Agent < sessions[j].Agent
+	})
+
+	activity.Sessions = sessions
+	activity.Metrics = h.buildAgentMetrics()
+
+	return activity
+}
+
+func (h *GUIHandler) buildAgentMetrics() CICDAgentMetrics {
+	metrics := CICDAgentMetrics{}
+
+	reader, err := NewBeadsReader("")
+	if err != nil {
+		return metrics
+	}
+
+	if inProgress, err := reader.ListBeads(BeadFilter{Status: "in_progress", Limit: -1}); err == nil {
+		for _, b := range inProgress {
+			if isWorkBead(b) {
+				metrics.InProgress++
+			}
+		}
+	}
+
+	if hooked, err := reader.ListBeads(BeadFilter{Status: "hooked", Limit: -1}); err == nil {
+		for _, b := range hooked {
+			if isWorkBead(b) {
+				metrics.Hooked++
+			}
+		}
+	}
+
+	if closed, err := reader.ListBeads(BeadFilter{Status: "closed", Limit: -1}); err == nil {
+		work := make([]Bead, 0, len(closed))
+		for _, b := range closed {
+			if isWorkBead(b) {
+				work = append(work, b)
+			}
+		}
+		sort.Slice(work, func(i, j int) bool {
+			return beadClosedTime(work[i]).After(beadClosedTime(work[j]))
+		})
+		limit := 5
+		if len(work) < limit {
+			limit = len(work)
+		}
+		metrics.RecentCompleted = make([]CICDRecentTask, 0, limit)
+		for i := 0; i < limit; i++ {
+			metrics.RecentCompleted = append(metrics.RecentCompleted, CICDRecentTask{
+				ID:       work[i].ID,
+				Title:    work[i].Title,
+				ClosedAt: beadClosedTime(work[i]),
+			})
+		}
+	}
+
+	if checkpoint, ok := readCanaryCheckpoint(); ok {
+		metrics.TimeoutCount = checkpoint.Metrics.DogTimeout
+		metrics.ErrorCount = checkpoint.Metrics.SessionDeathsAbnormal
+	}
+
+	mail := h.getMailStatus()
+	metrics.MailUnread = mail.Unread
+	metrics.MailTotal = mail.Total
+
+	return metrics
+}
+
+func formatAgentLabel(agent AgentRow) string {
+	switch agent.AgentType {
+	case "mayor":
+		return "mayor/"
+	case "deacon":
+		return "deacon/"
+	case "witness":
+		return fmt.Sprintf("%s/witness", agent.Rig)
+	case "refinery":
+		return fmt.Sprintf("%s/refinery", agent.Rig)
+	case "crew":
+		return fmt.Sprintf("%s/crew/%s", agent.Rig, agent.Name)
+	case "polecat":
+		return fmt.Sprintf("%s/polecats/%s", agent.Rig, agent.Name)
+	case "boot":
+		return "boot/"
+	default:
+		return agent.SessionID
+	}
+}
+
+func agentStatusFromColor(color string) string {
+	switch strings.ToLower(color) {
+	case "green":
+		return "running"
+	case "yellow":
+		return "idle"
+	case "red":
+		return "stale"
+	default:
+		return "unknown"
+	}
+}
+
+func isWorkBead(b Bead) bool {
+	switch b.Type {
+	case "agent", "role", "rig", "convoy", "event", "gate", "message", "merge-request", "molecule":
+		return false
+	default:
+		return true
+	}
+}
+
+func beadClosedTime(b Bead) time.Time {
+	if b.ClosedAt != nil {
+		return *b.ClosedAt
+	}
+	return b.UpdatedAt
+}
+
+func readCanaryCheckpoint() (canaryCheckpoint, bool) {
+	root, err := cicdLogRoot()
+	if err != nil {
+		return canaryCheckpoint{}, false
+	}
+
+	dir := filepath.Join(root, "logs", "canary-validation")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return canaryCheckpoint{}, false
+	}
+
+	latestPath, _ := latestCheckpoint(entries, dir)
+	if latestPath == "" {
+		return canaryCheckpoint{}, false
+	}
+
+	data, err := os.ReadFile(latestPath)
+	if err != nil {
+		return canaryCheckpoint{}, false
+	}
+
+	checkpoint, err := parseCheckpointJSON(data)
+	if err != nil {
+		return canaryCheckpoint{}, false
+	}
+
+	return checkpoint, true
 }
 
 func (h *GUIHandler) fetchCICDRunsCached(limit int) ([]CICDRunSummary, []string) {
@@ -285,7 +505,7 @@ func (h *GUIHandler) fetchCICDRuns(limit int) ([]CICDRunSummary, []string) {
 	args := []string{
 		"run", "list",
 		"--limit", strconv.Itoa(limit),
-		"--json", "databaseId,workflowName,displayTitle,status,conclusion,event,createdAt,updatedAt,url,headBranch",
+		"--json", "databaseId,workflowName,displayTitle,status,conclusion,event,createdAt,updatedAt,url,headBranch,actor",
 	}
 
 	cmd, cancel := longCommand("gh", args...)
@@ -334,6 +554,7 @@ func (h *GUIHandler) fetchCICDRuns(limit int) ([]CICDRunSummary, []string) {
 			Badge:       badgeForStatus(statusGroup),
 			Branch:      run.HeadBranch,
 			Event:       run.Event,
+			Actor:       run.Actor.Login,
 			CreatedAt:   run.CreatedAt,
 			UpdatedAt:   run.UpdatedAt,
 			URL:         run.URL,
@@ -417,6 +638,9 @@ type ghRun struct {
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	HeadBranch   string    `json:"headBranch"`
+	Actor        struct {
+		Login string `json:"login"`
+	} `json:"actor"`
 }
 
 type ghRunDetail struct {
