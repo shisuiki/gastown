@@ -14,6 +14,7 @@ var (
 	doctorVerbose         bool
 	doctorRig             string
 	doctorRestartSessions bool
+	doctorProfile         string
 )
 
 var doctorCmd = &cobra.Command{
@@ -81,7 +82,8 @@ Patrol checks:
   - patrol-roles-have-prompts Verify role prompts exist
 
 Use --fix to attempt automatic fixes for issues that support it.
-Use --rig to check a specific rig instead of the entire workspace.`,
+Use --rig to check a specific rig instead of the entire workspace.
+Use --profile session-gc to run only the fast session cleanup checks.`,
 	RunE: runDoctor,
 }
 
@@ -90,6 +92,7 @@ func init() {
 	doctorCmd.Flags().BoolVarP(&doctorVerbose, "verbose", "v", false, "Show detailed output")
 	doctorCmd.Flags().StringVar(&doctorRig, "rig", "", "Check specific rig only")
 	doctorCmd.Flags().BoolVar(&doctorRestartSessions, "restart-sessions", false, "Restart patrol sessions when fixing stale settings (use with --fix)")
+	doctorCmd.Flags().StringVar(&doctorProfile, "profile", "full", "Check profile (full or session-gc)")
 	rootCmd.AddCommand(doctorCmd)
 }
 
@@ -111,80 +114,89 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// Create doctor and register checks
 	d := doctor.NewDoctor()
 
-	// Register workspace-level checks first (fundamental)
-	d.RegisterAll(doctor.WorkspaceChecks()...)
+	if doctorProfile != "" && doctorProfile != "full" {
+		switch doctorProfile {
+		case "session-gc":
+			d.RegisterAll(doctor.SessionGCChecks()...)
+		default:
+			return fmt.Errorf("unknown doctor profile: %s", doctorProfile)
+		}
+	} else {
+		// Register workspace-level checks first (fundamental)
+		d.RegisterAll(doctor.WorkspaceChecks()...)
 
-	d.Register(doctor.NewGlobalStateCheck())
+		d.Register(doctor.NewGlobalStateCheck())
 
-	// Register built-in checks
-	d.Register(doctor.NewStaleBinaryCheck())
-	d.Register(doctor.NewSqlite3Check())
-	d.Register(doctor.NewTownGitCheck())
-	d.Register(doctor.NewTownRootBranchCheck())
-	d.Register(doctor.NewPreCheckoutHookCheck())
-	d.Register(doctor.NewDaemonCheck())
-	d.Register(doctor.NewRepoFingerprintCheck())
-	d.Register(doctor.NewBootHealthCheck())
-	d.Register(doctor.NewBeadsDatabaseCheck())
-	d.Register(doctor.NewCustomTypesCheck())
-	d.Register(doctor.NewRoleLabelCheck())
-	d.Register(doctor.NewFormulaCheck())
-	d.Register(doctor.NewBdDaemonCheck())
-	d.Register(doctor.NewPrefixConflictCheck())
-	d.Register(doctor.NewPrefixMismatchCheck())
-	d.Register(doctor.NewRoutesCheck())
-	d.Register(doctor.NewRigRoutesJSONLCheck())
-	d.Register(doctor.NewOrphanSessionCheck())
-	d.Register(doctor.NewZombieSessionCheck())
-	d.Register(doctor.NewOrphanProcessCheck())
-	d.Register(doctor.NewWispGCCheck())
-	d.Register(doctor.NewBranchCheck())
-	d.Register(doctor.NewBeadsSyncOrphanCheck())
-	d.Register(doctor.NewCloneDivergenceCheck())
-	d.Register(doctor.NewIdentityCollisionCheck())
-	d.Register(doctor.NewLinkedPaneCheck())
-	d.Register(doctor.NewThemeCheck())
-	d.Register(doctor.NewCrashReportCheck())
-	d.Register(doctor.NewEnvVarsCheck())
+		// Register built-in checks
+		d.Register(doctor.NewStaleBinaryCheck())
+		d.Register(doctor.NewSqlite3Check())
+		d.Register(doctor.NewTownGitCheck())
+		d.Register(doctor.NewTownRootBranchCheck())
+		d.Register(doctor.NewPreCheckoutHookCheck())
+		d.Register(doctor.NewDaemonCheck())
+		d.Register(doctor.NewRepoFingerprintCheck())
+		d.Register(doctor.NewBootHealthCheck())
+		d.Register(doctor.NewBeadsDatabaseCheck())
+		d.Register(doctor.NewCustomTypesCheck())
+		d.Register(doctor.NewRoleLabelCheck())
+		d.Register(doctor.NewFormulaCheck())
+		d.Register(doctor.NewBdDaemonCheck())
+		d.Register(doctor.NewPrefixConflictCheck())
+		d.Register(doctor.NewPrefixMismatchCheck())
+		d.Register(doctor.NewRoutesCheck())
+		d.Register(doctor.NewRigRoutesJSONLCheck())
+		d.Register(doctor.NewOrphanSessionCheck())
+		d.Register(doctor.NewZombieSessionCheck())
+		d.Register(doctor.NewOrphanProcessCheck())
+		d.Register(doctor.NewWispGCCheck())
+		d.Register(doctor.NewBranchCheck())
+		d.Register(doctor.NewBeadsSyncOrphanCheck())
+		d.Register(doctor.NewCloneDivergenceCheck())
+		d.Register(doctor.NewIdentityCollisionCheck())
+		d.Register(doctor.NewLinkedPaneCheck())
+		d.Register(doctor.NewThemeCheck())
+		d.Register(doctor.NewCrashReportCheck())
+		d.Register(doctor.NewEnvVarsCheck())
 
-	// Patrol system checks
-	d.Register(doctor.NewPatrolMoleculesExistCheck())
-	d.Register(doctor.NewPatrolHooksWiredCheck())
-	d.Register(doctor.NewPatrolNotStuckCheck())
-	d.Register(doctor.NewPatrolPluginsAccessibleCheck())
-	d.Register(doctor.NewPatrolRolesHavePromptsCheck())
-	d.Register(doctor.NewAgentBeadsCheck())
-	d.Register(doctor.NewRigBeadsCheck())
-	d.Register(doctor.NewRoleBeadsCheck())
+		// Patrol system checks
+		d.Register(doctor.NewPatrolMoleculesExistCheck())
+		d.Register(doctor.NewPatrolHooksWiredCheck())
+		d.Register(doctor.NewPatrolNotStuckCheck())
+		d.Register(doctor.NewPatrolPluginsAccessibleCheck())
+		d.Register(doctor.NewPatrolRolesHavePromptsCheck())
+		d.Register(doctor.NewAgentBeadsCheck())
+		d.Register(doctor.NewRigBeadsCheck())
+		d.Register(doctor.NewRoleBeadsCheck())
 
-	// NOTE: StaleAttachmentsCheck removed - staleness detection belongs in Deacon molecule
+		// NOTE: StaleAttachmentsCheck removed - staleness detection belongs in Deacon molecule
 
-	// Config architecture checks
-	d.Register(doctor.NewSettingsCheck())
-	d.Register(doctor.NewSessionHookCheck())
-	d.Register(doctor.NewRuntimeGitignoreCheck())
-	d.Register(doctor.NewLegacyGastownCheck())
-	d.Register(doctor.NewClaudeSettingsCheck())
+		// Config architecture checks
+		d.Register(doctor.NewSettingsCheck())
+		d.Register(doctor.NewSessionHookCheck())
+		d.Register(doctor.NewRuntimeGitignoreCheck())
+		d.Register(doctor.NewLegacyGastownCheck())
+		d.Register(doctor.NewClaudeSettingsCheck())
 
-	// Priming subsystem check
-	d.Register(doctor.NewPrimingCheck())
+		// Priming subsystem check
+		d.Register(doctor.NewPrimingCheck())
 
-	// Crew workspace checks
-	d.Register(doctor.NewCrewStateCheck())
-	d.Register(doctor.NewCrewWorktreeCheck())
-	d.Register(doctor.NewCommandsCheck())
+		// Crew workspace checks
+		d.Register(doctor.NewCrewStateCheck())
+		d.Register(doctor.NewCrewWorktreeCheck())
+		d.Register(doctor.NewCommandsCheck())
 
-	// Lifecycle hygiene checks
-	d.Register(doctor.NewLifecycleHygieneCheck())
+		// Lifecycle hygiene checks
+		d.Register(doctor.NewLifecycleHygieneCheck())
 
-	// Hook attachment checks
-	d.Register(doctor.NewHookAttachmentValidCheck())
-	d.Register(doctor.NewHookSingletonCheck())
-	d.Register(doctor.NewOrphanedAttachmentsCheck())
+		// Hook attachment checks
+		d.Register(doctor.NewHookAttachmentValidCheck())
+		d.Register(doctor.NewHookSingletonCheck())
+		d.Register(doctor.NewOrphanedAttachmentsCheck())
 
-	// Rig-specific checks (only when --rig is specified)
-	if doctorRig != "" {
-		d.RegisterAll(doctor.RigChecks()...)
+		// Rig-specific checks (only when --rig is specified)
+		if doctorRig != "" {
+			d.RegisterAll(doctor.RigChecks()...)
+		}
 	}
 
 	// Run checks
