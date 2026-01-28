@@ -680,7 +680,7 @@ func readColdstartReports() (CICDReport, CICDReport) {
 		return externalReport, internalReport
 	}
 
-	dir := filepath.Join(root, "logs", "coldstart-tests")
+	dir := filepath.Join(root, "logs", "tests", "coldstart")
 	if _, err := os.Stat(dir); err != nil {
 		externalReport.Summary = "No coldstart test results found"
 		internalReport.Summary = "No coldstart test results found"
