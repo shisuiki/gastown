@@ -16,3 +16,5 @@
 >> 2026-01-27 02:28:20 Implemented mail backend aggregation + UI refactor + docs update
 >> 2026-01-27 02:34:47 Ran go test ./internal/web
 >> 2026-01-28 16:27:42 Update roadmap/progress/memory for hq-04n0l
+>> 2026-01-28 16:43:44 Added doctor cleanup profile and dog-context detection; updated session-gc formula
+>> 2026-01-28 16:43:44 Ran go test ./internal/cmd -run TestDoctor
