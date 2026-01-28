@@ -414,6 +414,7 @@ gt install [path]            # Create town
 gt install --git             # With git init
 gt doctor                    # Health check
 gt doctor --fix              # Auto-repair
+gt doctor --profile cleanup  # Fast cleanup profile (session-gc)
 ```
 
 ### Configuration
