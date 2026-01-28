@@ -89,7 +89,7 @@ Use timeouts to prevent this step from blocking dog execution.
 
 **1. Run doctor in preview mode (2-minute timeout):**
 ```bash
-timeout 120 gt doctor -v 2>&1 || echo "Doctor preview timed out"
+timeout 120 gt doctor -v --profile cleanup 2>&1 || echo "Doctor preview timed out"
 # Shows what would be cleaned, doesn't do it
 ```
 
@@ -137,7 +137,7 @@ Skip slow operations entirely (beads duplicate cleanup takes 30+ minutes).
 
 **1. Run doctor with fix (5-minute timeout):**
 ```bash
-timeout 300 gt doctor --fix 2>&1 || echo "Doctor timed out or failed, continuing..."
+timeout 300 gt doctor --fix --profile cleanup 2>&1 || echo "Doctor timed out or failed, continuing..."
 # This handles sessions, processes, and wisps
 # If it times out, continue with partial cleanup
 ```
@@ -186,7 +186,7 @@ Keep verification quick - dog timeout buffer is limited at this point.
 
 **1. Quick doctor verify (60s timeout):**
 ```bash
-timeout 60 gt doctor -v 2>&1 | head -50 || echo "Verify timed out"
+timeout 60 gt doctor -v --profile cleanup 2>&1 | head -50 || echo "Verify timed out"
 # Should show no issues (or fewer issues)
 ```
 
