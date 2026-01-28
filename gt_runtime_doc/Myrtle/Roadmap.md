@@ -9,7 +9,7 @@
 - [x] Add UI indicator with color coding + tooltip
 
 ## Phase 3: Validate + Land
-- [ ] Verify CI/CD page output
+- [x] Verify CI/CD page output
 - [x] Update runtime docs
-- [ ] Commit + push
-- [ ] bd sync + close bead
+- [x] Commit + push
+- [x] bd sync + close bead
