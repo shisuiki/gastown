@@ -66,6 +66,10 @@ Environment=GT_WEB_POST_SAVE_HOOK=/home/shisui/gt/scripts/webui-git-sync.sh
 Environment=GT_WEB_GIT_FAILOVER_TARGET=TerraNomadicCity
 Environment=GT_WEB_GIT_AUTHOR_NAME=Gastown WebUI
 Environment=GT_WEB_GIT_AUTHOR_EMAIL=shisuiki@users.noreply.github.com
+Environment=GT_WEB_HTTPS_PROXY=http://127.0.0.1:7890
+Environment=GT_WEB_HTTP_PROXY=http://127.0.0.1:7890
+Environment=GT_WEB_ALL_PROXY=socks5://127.0.0.1:7890
+Environment=GT_WEB_NO_PROXY=localhost,127.0.0.1
 
 [Install]
 WantedBy=multi-user.target
@@ -130,7 +134,21 @@ in `gastown-gui.service` if you want a custom hook:
 If the hook is not set, the WebUI runs `git add`, `git commit`, and `git push`
 directly. On failure it creates a bead and slings it to the configured target.
 
-### 4. Webhook Server (Optional)
+### 5. GitHub API Proxy (gh CLI)
+
+The CI/CD page and merge queue fetch GitHub data using the `gh` CLI. Systemd
+services do not inherit your shell proxy settings, so configure proxy env vars
+for the WebUI service when GitHub DNS is intercepted or blocked:
+
+- `GT_WEB_HTTP_PROXY`
+- `GT_WEB_HTTPS_PROXY`
+- `GT_WEB_ALL_PROXY`
+- `GT_WEB_NO_PROXY`
+
+These env vars are passed through to `gh` and set both the uppercase and
+lowercase proxy variants to match common tooling expectations.
+
+### 6. Webhook Server (Optional)
 
 `~/gt/scripts/gastown-webhook.py` provides a webhook endpoint for GitHub Actions:
 

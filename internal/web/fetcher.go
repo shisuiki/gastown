@@ -571,7 +571,7 @@ type prResponse struct {
 // fetchPRsForRepo fetches open PRs for a single repo.
 func (f *LiveConvoyFetcher) fetchPRsForRepo(repoFull, repoShort string) ([]MergeQueueRow, error) {
 	// #nosec G204 -- gh is a trusted CLI, repo is from hardcoded list
-	cmd, cancel := longCommand("gh", "pr", "list",
+	cmd, cancel := ghCommand("pr", "list",
 		"--repo", repoFull,
 		"--state", "open",
 		"--json", "number,title,url,mergeable,statusCheckRollup")

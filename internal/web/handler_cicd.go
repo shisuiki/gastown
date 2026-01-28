@@ -288,7 +288,7 @@ func (h *GUIHandler) fetchCICDRuns(limit int) ([]CICDRunSummary, []string) {
 		"--json", "databaseId,workflowName,displayTitle,status,conclusion,event,createdAt,updatedAt,url,headBranch",
 	}
 
-	cmd, cancel := longCommand("gh", args...)
+	cmd, cancel := ghCommand(args...)
 	defer cancel()
 	cmd.Dir = repoRoot
 
@@ -349,7 +349,7 @@ func (h *GUIHandler) fetchCICDRunDetail(runID int64) (CICDRunDetail, error) {
 		return CICDRunDetail{}, err
 	}
 
-	cmd, cancel := longCommand("gh", "run", "view", strconv.FormatInt(runID, 10),
+	cmd, cancel := ghCommand("run", "view", strconv.FormatInt(runID, 10),
 		"--json", "databaseId,workflowName,displayTitle,status,conclusion,event,createdAt,updatedAt,url,headBranch,jobs")
 	defer cancel()
 	cmd.Dir = repoRoot
