@@ -100,6 +100,9 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/issues", h.handleAPIIssues)
 	h.mux.HandleFunc("/api/agents", h.handleAPIRoleBeads)
 
+	// Health check endpoint
+	h.mux.HandleFunc("/api/health", h.handleAPIHealth)
+
 	// Mayor API routes
 	h.mux.HandleFunc("/api/mayor/terminal", h.handleAPIMayorTerminal)
 	h.mux.HandleFunc("/api/mayor/status", h.handleAPIMayorStatus)
