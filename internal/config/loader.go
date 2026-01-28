@@ -422,6 +422,33 @@ func NewMayorConfig() *MayorConfig {
 	}
 }
 
+// GetTownDefaultBranch returns the configured default branch for the town.
+// Falls back to constants.BranchMain ("main") if not configured.
+// townRoot is the path to the town directory (e.g., ~/gt).
+func GetTownDefaultBranch(townRoot string) string {
+	configPath := constants.MayorConfigPath(townRoot)
+	config, err := LoadMayorConfig(configPath)
+	if err != nil || config.DefaultBranch == "" {
+		return constants.BranchMain
+	}
+	return config.DefaultBranch
+}
+
+// IsTownDefaultBranch checks if a branch name is the town's default branch.
+// Accepts both the configured default branch and legacy "master" for backwards compatibility.
+// townRoot is the path to the town directory (e.g., ~/gt).
+func IsTownDefaultBranch(townRoot, branch string) bool {
+	defaultBranch := GetTownDefaultBranch(townRoot)
+	if branch == defaultBranch {
+		return true
+	}
+	// Accept "master" as equivalent to "main" for backwards compatibility
+	if defaultBranch == constants.BranchMain && branch == "master" {
+		return true
+	}
+	return false
+}
+
 // DaemonPatrolConfigPath returns the path to the daemon patrol config file.
 func DaemonPatrolConfigPath(townRoot string) string {
 	return filepath.Join(townRoot, constants.DirMayor, DaemonPatrolConfigFileName)

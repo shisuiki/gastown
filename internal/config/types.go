@@ -27,6 +27,7 @@ type MayorConfig struct {
 	Daemon          *DaemonConfig    `json:"daemon,omitempty"`            // daemon settings
 	Deacon          *DeaconConfig    `json:"deacon,omitempty"`            // deacon settings
 	DefaultCrewName string           `json:"default_crew_name,omitempty"` // default crew name for new rigs
+	DefaultBranch   string           `json:"default_branch,omitempty"`    // town root branch (default: "main")
 }
 
 // CurrentTownSettingsVersion is the current schema version for TownSettings.
