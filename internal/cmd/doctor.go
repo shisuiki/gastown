@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/gastown/internal/doctor"
@@ -14,6 +16,7 @@ var (
 	doctorVerbose         bool
 	doctorRig             string
 	doctorRestartSessions bool
+	doctorProfile         string
 )
 
 var doctorCmd = &cobra.Command{
@@ -90,6 +93,7 @@ func init() {
 	doctorCmd.Flags().BoolVarP(&doctorVerbose, "verbose", "v", false, "Show detailed output")
 	doctorCmd.Flags().StringVar(&doctorRig, "rig", "", "Check specific rig only")
 	doctorCmd.Flags().BoolVar(&doctorRestartSessions, "restart-sessions", false, "Restart patrol sessions when fixing stale settings (use with --fix)")
+	doctorCmd.Flags().StringVar(&doctorProfile, "profile", "", "Doctor profile: full (default) or cleanup (fast session-gc)")
 	rootCmd.AddCommand(doctorCmd)
 }
 
@@ -111,6 +115,70 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	// Create doctor and register checks
 	d := doctor.NewDoctor()
 
+	profile := resolveDoctorProfile()
+	switch profile {
+	case "cleanup":
+		registerCleanupChecks(d)
+	case "full":
+		registerFullChecks(d, ctx)
+	default:
+		return fmt.Errorf("unknown doctor profile: %s", profile)
+	}
+
+	// Run checks
+	var report *doctor.Report
+	if doctorFix {
+		report = d.Fix(ctx)
+	} else {
+		report = d.Run(ctx)
+	}
+
+	// Print report
+	report.Print(os.Stdout, doctorVerbose)
+
+	// Exit with error code if there are errors
+	if report.HasErrors() {
+		return fmt.Errorf("doctor found %d error(s)", report.Summary.Errors)
+	}
+
+	return nil
+}
+
+func resolveDoctorProfile() string {
+	profile := strings.TrimSpace(doctorProfile)
+	if profile == "" {
+		profile = strings.TrimSpace(os.Getenv("GT_DOCTOR_PROFILE"))
+	}
+	if profile == "" && isDogContext() {
+		profile = "cleanup"
+	}
+	if profile == "" {
+		profile = "full"
+	}
+	return strings.ToLower(profile)
+}
+
+func isDogContext() bool {
+	role := strings.ToLower(strings.TrimSpace(os.Getenv("GT_ROLE")))
+	if role == "dog" || role == "boot" {
+		return true
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	needle := string(filepath.Separator) + "deacon" + string(filepath.Separator) + "dogs" + string(filepath.Separator)
+	return strings.Contains(cwd, needle)
+}
+
+func registerCleanupChecks(d *doctor.Doctor) {
+	d.Register(doctor.NewOrphanSessionCheck())
+	d.Register(doctor.NewZombieSessionCheck())
+	d.Register(doctor.NewOrphanProcessCheck())
+	d.Register(doctor.NewWispGCCheck())
+}
+
+func registerFullChecks(d *doctor.Doctor, ctx *doctor.CheckContext) {
 	// Register workspace-level checks first (fundamental)
 	d.RegisterAll(doctor.WorkspaceChecks()...)
 
@@ -183,25 +251,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	d.Register(doctor.NewOrphanedAttachmentsCheck())
 
 	// Rig-specific checks (only when --rig is specified)
-	if doctorRig != "" {
+	if ctx.RigName != "" {
 		d.RegisterAll(doctor.RigChecks()...)
 	}
-
-	// Run checks
-	var report *doctor.Report
-	if doctorFix {
-		report = d.Fix(ctx)
-	} else {
-		report = d.Run(ctx)
-	}
-
-	// Print report
-	report.Print(os.Stdout, doctorVerbose)
-
-	// Exit with error code if there are errors
-	if report.HasErrors() {
-		return fmt.Errorf("doctor found %d error(s)", report.Summary.Errors)
-	}
-
-	return nil
 }
