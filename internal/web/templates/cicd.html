@@ -12,6 +12,12 @@
             gap: 15px;
             flex-wrap: wrap;
         }
+        .cicd-freshness {
+            margin-top: 6px;
+        }
+        .cicd-freshness .badge {
+            font-size: 0.75rem;
+        }
         .cicd-filters {
             display: flex;
             gap: 12px;
@@ -83,6 +89,12 @@
             <div>
                 <h1 style="font-size: 1.2rem; color: #e2e8f0;">CI/CD</h1>
                 <p class="text-muted" x-text="status?.summary || 'Loading CI/CD status…'"></p>
+                <div class="cicd-freshness" x-show="coldstartFreshnessLabel()">
+                    <span class="badge"
+                          :class="coldstartFreshnessClass()"
+                          x-text="coldstartFreshnessLabel()"
+                          :title="coldstartFreshnessTitle()"></span>
+                </div>
             </div>
             <div>
                 <span class="badge" :class="badgeClass(status?.overall_status)" x-text="badgeLabel(status?.overall_status)"></span>
@@ -277,6 +289,73 @@
                     const date = new Date(value);
                     if (isNaN(date.getTime())) return value;
                     return date.toLocaleString();
+                },
+                formatAge(ms) {
+                    if (!Number.isFinite(ms) || ms < 0) return '';
+                    const minutes = Math.floor(ms / 60000);
+                    if (minutes < 60) {
+                        return minutes <= 1 ? '1 minute ago' : minutes + ' minutes ago';
+                    }
+                    const hours = Math.floor(minutes / 60);
+                    if (hours < 24) {
+                        return hours === 1 ? '1 hour ago' : hours + ' hours ago';
+                    }
+                    const days = Math.floor(hours / 24);
+                    return days === 1 ? '1 day ago' : days + ' days ago';
+                },
+                coldstartReport() {
+                    if (!this.status || !this.status.reports) return null;
+                    let reports = [];
+                    if (this.status.reports.items && this.status.reports.items.length) {
+                        reports = this.status.reports.items;
+                    } else {
+                        reports = [this.status.reports.external, this.status.reports.internal].filter(Boolean);
+                    }
+                    return reports.find(report => {
+                        const title = (report?.title || '').toLowerCase();
+                        return title.includes('cold-start') || title.includes('coldstart');
+                    }) || null;
+                },
+                coldstartFreshness() {
+                    const report = this.coldstartReport();
+                    if (!report || !report.updated_at) {
+                        return {
+                            label: 'Last cold-start test: unknown',
+                            badge: 'badge-yellow',
+                            title: 'No cold-start timestamp available'
+                        };
+                    }
+                    const date = new Date(report.updated_at);
+                    if (isNaN(date.getTime())) {
+                        return {
+                            label: 'Last cold-start test: ' + report.updated_at,
+                            badge: 'badge-yellow',
+                            title: report.updated_at
+                        };
+                    }
+                    const ageMs = Date.now() - date.getTime();
+                    const ageHours = ageMs / 3600000;
+                    let badge = 'badge-red';
+                    if (ageHours < 6) badge = 'badge-green';
+                    else if (ageHours < 24) badge = 'badge-yellow';
+                    const ageLabel = this.formatAge(ageMs) || 'just now';
+                    return {
+                        label: 'Last cold-start test: ' + ageLabel,
+                        badge,
+                        title: this.formatTime(report.updated_at)
+                    };
+                },
+                coldstartFreshnessLabel() {
+                    const freshness = this.coldstartFreshness();
+                    return freshness.label;
+                },
+                coldstartFreshnessClass() {
+                    const freshness = this.coldstartFreshness();
+                    return freshness.badge;
+                },
+                coldstartFreshnessTitle() {
+                    const freshness = this.coldstartFreshness();
+                    return freshness.title;
                 },
 
                 updatedLabel() {
