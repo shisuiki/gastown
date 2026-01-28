@@ -15,6 +15,6 @@
 - [x] Verify behavior locally (targeted go test)
 
 ## Phase 4: Land + Sync
-- [ ] Commit + push
+- [x] Commit + push
 - [x] Update Progress + Memory
 - [ ] `bd sync` and close bead if done
