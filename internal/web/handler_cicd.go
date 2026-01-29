@@ -1219,6 +1219,72 @@ func interfaceToCICDRuns(value interface{}) []CICDRunSummary {
 	return runs
 }
 
+// handleAPICICDReport accepts external CI/CD report JSON via POST.
+// Scripts (coldstart probes, SWE-EVO benchmarks) push results here so the
+// WebUI can display them regardless of where the scripts run.
+func (h *GUIHandler) handleAPICICDReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1MB limit
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Validate JSON
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	root, err := cicdLogRoot()
+	if err != nil {
+		http.Error(w, "Cannot determine log root: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Determine report type from the payload
+	reportType := "unknown"
+	if _, ok := parsed["external_assessment"]; ok {
+		reportType = "coldstart"
+	} else if _, ok := parsed["metrics"]; ok {
+		reportType = "swe-evo"
+	}
+
+	var destDir string
+	switch reportType {
+	case "coldstart":
+		destDir = filepath.Join(root, "logs", "tests", "coldstart")
+	case "swe-evo":
+		destDir = filepath.Join(root, "logs", "swe-evo")
+	default:
+		destDir = filepath.Join(root, "logs", "cicd")
+	}
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		http.Error(w, "Failed to create report dir", http.StatusInternalServerError)
+		return
+	}
+
+	latestPath := filepath.Join(destDir, "latest.json")
+	if err := os.WriteFile(latestPath, body, 0644); err != nil {
+		http.Error(w, "Failed to write report", http.StatusInternalServerError)
+		return
+	}
+
+	// Invalidate CI/CD status cache so next poll picks up new data
+	h.cache.Invalidate("cicd_status")
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"status":"ok","type":%q,"path":%q}`, reportType, latestPath)
+}
+
 func parseIntQuery(r *http.Request, key string, fallback int) int {
 	raw := strings.TrimSpace(r.URL.Query().Get(key))
 	if raw == "" {

@@ -120,6 +120,9 @@ rollback() {
       -v "$GT_ROOT:/gt" \
       -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
       -e GT_WEB_ALLOW_REMOTE=1 \
+      -e GT_MAIL_BRIDGE_HOST_URL="http://host.docker.internal:8080" \
+      -e GT_ENV=canary \
+      --add-host=host.docker.internal:host-gateway \
       "$PREVIOUS_IMAGE" >/dev/null
     log "Rollback complete"
   else
@@ -160,6 +163,9 @@ $DOCKER_CMD run -d \
   -v "$GT_ROOT:/gt" \
   -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
   -e GT_WEB_ALLOW_REMOTE=1 \
+  -e GT_MAIL_BRIDGE_HOST_URL="http://host.docker.internal:8080" \
+  -e GT_ENV=canary \
+  --add-host=host.docker.internal:host-gateway \
   --label "gastown_ref=$GASTOWN_REF" \
   --label "gtruntime_ref=$GTRUNTIME_REF" \
   --label "env_config_ref=$ENV_CONFIG_REF" \
