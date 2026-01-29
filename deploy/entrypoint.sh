@@ -18,7 +18,7 @@ wait_for_session() {
     local waited=0
     log "Waiting for session $session (max ${max_wait}s)..."
     while [ $waited -lt $max_wait ]; do
-        if tmux has-session -t "$session" 2>/dev/null; then
+        if su-exec gastown tmux has-session -t "$session" 2>/dev/null; then
             log "Session $session ready after ${waited}s"
             return 0
         fi
@@ -112,23 +112,32 @@ run_full_mode() {
     wait_for_session "hq-mayor" 30
 
     # Phase 5: Bootstrap execution infrastructure (rig + crew)
+    # gt rig add creates its own directory under /gt, which is a bind mount owned by host user.
+    # Temporarily make /gt group-writable so gastown can create the rig directory.
     log "Phase 5: Bootstrapping execution infrastructure..."
-    if ! su-exec gastown gt rig list --json 2>/dev/null | jq -e '.rigs | length > 0' >/dev/null 2>&1; then
-        log "No rigs configured — adding bench rig..."
+    if ! su-exec gastown gt rig list --json 2>/dev/null | grep -q '"bench"'; then
+        log "No bench rig — adding..."
+        # Remove stale directory if exists from previous failed attempt
+        rm -rf /gt/bench 2>/dev/null || true
+        # Temporarily allow gastown to write to /gt
+        chmod g+w /gt
+        chgrp gastown /gt
         su-exec gastown gt rig add bench https://github.com/shisuiki/gastown.git --prefix bn || {
             log "WARNING: Failed to add bench rig (non-fatal)"
         }
+        # Restore original permissions
+        chmod g-w /gt
     else
-        log "Rig(s) already configured, skipping"
+        log "Bench rig exists, skipping"
     fi
 
-    if ! su-exec gastown gt crew list --json 2>/dev/null | jq -e 'length > 0' >/dev/null 2>&1; then
-        log "No crew configured — adding worker crew..."
+    if ! su-exec gastown gt crew list --rig bench --json 2>/dev/null | jq -e 'length > 0' >/dev/null 2>&1; then
+        log "No crew in bench rig — adding worker crew..."
         su-exec gastown gt crew add worker --rig bench || {
             log "WARNING: Failed to add worker crew (non-fatal)"
         }
     else
-        log "Crew already configured, skipping"
+        log "Crew already configured in bench rig, skipping"
     fi
     log "Execution infrastructure bootstrap complete"
 

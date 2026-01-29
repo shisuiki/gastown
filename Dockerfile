@@ -45,7 +45,7 @@ EXPOSE 8080
 
 # Health check verifies daemon + deacon are running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD /usr/local/bin/gt daemon status && tmux has-session -t hq-deacon 2>/dev/null
+    CMD su-exec gastown /usr/local/bin/gt daemon status && su-exec gastown tmux has-session -t hq-deacon 2>/dev/null
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["full"]
