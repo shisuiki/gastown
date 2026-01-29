@@ -241,7 +241,7 @@ docker inspect gastown-canary --format '{{.Config.Labels}}'
 ## Preconditions
 - `GASTOWN_DISPATCH_TOKEN` secret exists and is scoped to trigger gastown workflows.
 - `canary` branch worktrees (`/home/shisui/gt-canary` and `/home/shisui/work/gastown`) exist and track actual repos.
-- `canary-deploy.yml`, `canary-deploy-full.sh`, and `canary-validate.sh` are present in the repo.
+- `canary-deploy.yml`, `canary-deploy.sh`, and `canary-validate.sh` are present in the repo.
 
 ## Steps
 1. Push changes to `canary` in GTRuntime or gastown depending on the artifact (formulas vs. application code).

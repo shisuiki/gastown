@@ -10,7 +10,6 @@ last_validated: "unknown"
 ttl_days: 30
 next_review: "unknown"
 source_of_truth:
-  - "deploy/canary-deploy-full.sh"
   - "deploy/canary-deploy.sh"
 ---
 
@@ -31,7 +30,7 @@ The Gas Town canary container runs a full agent infrastructure:
 
 | Action | Command |
 |--------|---------|
-| Deploy/redeploy | `GT_WEB_AUTH_TOKEN=<token> ./deploy/canary-deploy-full.sh` |
+| Deploy/redeploy | `GT_WEB_AUTH_TOKEN=<token> ./deploy/canary-deploy.sh` |
 | Enter container | `docker exec -it gastown-canary bash` |
 | View logs | `docker logs gastown-canary` |
 | Check status | `docker exec gastown-canary gt status` |
@@ -45,14 +44,14 @@ The Gas Town canary container runs a full agent infrastructure:
 ```bash
 cd /home/shisui/work/gastown
 export GT_WEB_AUTH_TOKEN="your-secret-token"
-./deploy/canary-deploy-full.sh
+./deploy/canary-deploy.sh
 ```
 
 The script will:
-1. Build the Docker image from `Dockerfile.full`
+1. Build the Docker image
 2. Set up credential directories for Claude and Codex
 3. Stop any existing container
-4. Start a new container with full mode
+4. Start a new container
 5. Wait for health check to pass
 6. Verify all components are running
 
@@ -74,7 +73,7 @@ export GT_ROOT=/path/to/gtruntime
 export CLAUDE_CREDS_DIR=/path/to/claude/creds
 export CODEX_CREDS_DIR=/path/to/codex/creds
 export HTTP_PROXY=http://proxy:port
-./deploy/canary-deploy-full.sh
+./deploy/canary-deploy.sh
 ```
 
 ## Container Operations
@@ -158,7 +157,7 @@ If the new container fails health check during deployment, the script automatica
        -v /home/shisui/.codex-canary:/home/gastown/.codex \
        -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
        -e GT_WEB_ALLOW_REMOTE=1 \
-       gastown:canary-full-<previous-sha> full
+       gastown:canary-<previous-sha> full
    ```
 
 ### Rollback from State File
@@ -199,12 +198,12 @@ docker exec gastown-canary codex --version
 ```
 
 ## Preconditions
-- `deploy/canary-deploy-full.sh` or `deploy/canary-deploy.sh` is available and executable.
+- `deploy/canary-deploy.sh` is available and executable.
 - GT root tokens (`GT_WEB_AUTH_TOKEN`, `GT_ROOT`, `CLAUDE_CREDS_DIR`, `CODEX_CREDS_DIR`) are exported.
 - Docker daemon runs on the host and the `gastown-canary` image exists.
 
 ## Steps
-1. Run `deploy/canary-deploy-full.sh` to build the full container image and start `gastown-canary`.
+1. Run `deploy/canary-deploy.sh` to build the full container image and start `gastown-canary`.
 2. Use `docker exec gastown-canary gt status` and `docker logs gastown-canary --tail 200` to confirm services are healthy.
 3. Attach to the container for maintenance: `docker exec -it gastown-canary bash`.
 4. If redeploying, run the deploy script again with overrides (`CANARY_PORT`, credential directories) and watch for automatic rollback.
@@ -213,7 +212,7 @@ docker exec gastown-canary codex --version
 ## Verification
 - `docker ps --filter \"name=gastown-canary\"`
 - `curl -fsS http://localhost:8081/_/health`
-- `./deploy/canary-deploy-full.sh --help`
+- `./deploy/canary-deploy.sh --help`
 
 **Re-authenticate (if needed):**
 ```bash

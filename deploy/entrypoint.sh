@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# entrypoint-full.sh - Full Gas Town container entrypoint
+# entrypoint.sh - Gas Town container entrypoint
 #
 # Starts mayor daemon, deacon, and optional web UI in orchestrated sequence.
 # Designed for canary testing with full agent infrastructure.

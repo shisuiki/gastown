@@ -8,7 +8,7 @@ applies_to:
   branch: main
 last_validated: "unknown"
 source_of_truth:
-  - "deploy/canary-deploy-full.sh"
+  - "deploy/canary-deploy.sh"
   - "container-usage.md"
 ---
 
@@ -85,7 +85,7 @@ The gastown repository also lives at `TerraNomadicCity/mayor/rig` in the broader
 - Port: 8081 (internal) → 443 (external)
 - Branch: `canary`
 - Mode: Full (daemon + deacon + web UI)
-- Deploy script: `deploy/canary-deploy-full.sh`
+- Deploy script: `deploy/canary-deploy.sh`
 
 ## Environment Configuration
 

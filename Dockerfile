@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# Gas Town Dockerfile - full instance with mayor, deacon, witness, refinery
 FROM golang:1.24-alpine AS builder
 
 RUN apk add --no-cache git make
@@ -13,20 +14,38 @@ RUN go install github.com/steveyegge/beads/cmd/bd@latest
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates \
+# Install runtime dependencies including tmux for session management
+RUN apk add --no-cache \
+    ca-certificates \
+    bash \
+    tmux \
+    git \
+    curl \
+    jq \
+    nodejs \
+    npm \
     && addgroup -S gastown \
-    && adduser -S -G gastown -u 10001 gastown
+    && adduser -S -G gastown -u 10001 -s /bin/bash gastown \
+    && npm install -g @anthropic-ai/claude-code @openai/codex
 
 ENV GT_ROOT=/gt
+ENV HOME=/home/gastown
 WORKDIR /gt
 
 COPY --from=builder /src/gt /usr/local/bin/gt
 COPY --from=builder /go/bin/bd /usr/local/bin/bd
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# Create necessary directories
+RUN mkdir -p /home/gastown/.gt /home/gastown/.config \
+    && chown -R gastown:gastown /home/gastown
 
 USER gastown
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/usr/local/bin/gt", "version"]
+# Health check verifies daemon + deacon are running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+    CMD /usr/local/bin/gt daemon status && tmux has-session -t hq-deacon 2>/dev/null
 
-ENTRYPOINT ["/usr/local/bin/gt"]
-CMD ["gui", "--port", "8080"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["full"]
