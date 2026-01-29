@@ -166,15 +166,9 @@ setup_codex_creds
 
 IMAGE_TAG="gastown:canary-${GASTOWN_REF:0:12}"
 
-# Shared beads database - allows mail communication between container and host
-# Mount host's .beads/ into container, overriding canary's separate database
-HOST_BEADS_DIR=${HOST_BEADS_DIR:-/home/shisui/gt/.beads}
-
 log "=== Gas Town Canary Deployment ==="
-log "HOST_BEADS_DIR: $HOST_BEADS_DIR"
 log "Using docker: $DOCKER_CMD"
 log "GT_ROOT: $GT_ROOT"
-log "HOST_BEADS_DIR: $HOST_BEADS_DIR"
 log "GTRuntime ref: $GTRUNTIME_REF"
 log "Gastown ref: $GASTOWN_REF"
 
@@ -198,11 +192,16 @@ rollback() {
         $DOCKER_CMD run -d \
             --name "$CONTAINER_NAME" \
             --restart=always \
+            --add-host=host.docker.internal:host-gateway \
             -p "$CANARY_PORT:8080" \
             -v "$GT_ROOT:/gt" \
-            -v "$HOST_BEADS_DIR:/gt/.beads" \
+            -v "$CLAUDE_CREDS_DIR:/home/gastown/.claude" \
+            -v "$CODEX_CREDS_DIR:/home/gastown/.codex" \
             -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
             -e GT_WEB_ALLOW_REMOTE=1 \
+            -e GT_MAIL_BRIDGE_HOST_URL="http://host.docker.internal:8080" \
+            -e GT_ENV=canary \
+            -e GT_ROOT=/gt \
             "$PREVIOUS_IMAGE" >/dev/null
         log "Rollback complete"
     fi
@@ -223,12 +222,13 @@ $DOCKER_CMD run -d \
     --add-host=host.docker.internal:host-gateway \
     -p "$CANARY_PORT:8080" \
     -v "$GT_ROOT:/gt" \
-    -v "$HOST_BEADS_DIR:/gt/.beads" \
     -v "$CLAUDE_CREDS_DIR:/home/gastown/.claude" \
     $CLAUDE_JSON_MOUNT \
     -v "$CODEX_CREDS_DIR:/home/gastown/.codex" \
     -e GT_WEB_AUTH_TOKEN="$GT_WEB_AUTH_TOKEN" \
     -e GT_WEB_ALLOW_REMOTE=1 \
+    -e GT_MAIL_BRIDGE_HOST_URL="http://host.docker.internal:8080" \
+    -e GT_ENV=canary \
     -e GT_ROOT=/gt \
     -e HTTP_PROXY="$HTTP_PROXY" \
     -e HTTPS_PROXY="$HTTPS_PROXY" \

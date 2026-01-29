@@ -49,9 +49,15 @@ run_full_mode() {
     git config --global --add safe.directory /gt || true
     su-exec gastown git config --global --add safe.directory /gt || true
 
-    # Initialize beads if needed
-    if [ -d "/gt/.beads" ] && [ ! -f "/home/gastown/.config/beads/config.json" ]; then
-        log "Initializing beads..."
+    # Initialize container-local beads DB if not present
+    # The container owns its own .beads — never shared with the host
+    if [ ! -f "/gt/.beads/beads.db" ]; then
+        log "Initializing container-local beads DB..."
+        mkdir -p /gt/.beads
+        chown -R gastown:gastown /gt/.beads
+        su-exec gastown bd init /gt/.beads 2>/dev/null || true
+    fi
+    if [ ! -f "/home/gastown/.config/beads/config.json" ]; then
         mkdir -p /home/gastown/.config/beads
         chown -R gastown:gastown /home/gastown/.config/beads
         su-exec gastown bd init /gt/.beads 2>/dev/null || true

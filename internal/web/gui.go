@@ -132,6 +132,7 @@ func NewGUIHandler(fetcher ConvoyFetcher) (*GUIHandler, error) {
 	h.mux.HandleFunc("/api/cicd/status", h.handleAPICICDStatus)
 	h.mux.HandleFunc("/api/cicd/workflows", h.handleAPICICDWorkflows)
 	h.mux.HandleFunc("/api/cicd/runs/", h.handleAPICICDRunDetail)
+	h.mux.HandleFunc("/api/cicd/report", h.handleAPICICDReport)
 
 	// Crew API routes
 	h.mux.HandleFunc("/api/crew/list", h.handleAPICrewList)
