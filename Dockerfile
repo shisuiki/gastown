@@ -22,6 +22,7 @@ RUN apk add --no-cache \
     git \
     curl \
     jq \
+    su-exec \
     nodejs \
     npm \
     && addgroup -S gastown \
@@ -40,7 +41,6 @@ COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN mkdir -p /home/gastown/.gt /home/gastown/.config \
     && chown -R gastown:gastown /home/gastown
 
-USER gastown
 EXPOSE 8080
 
 # Health check verifies daemon + deacon are running

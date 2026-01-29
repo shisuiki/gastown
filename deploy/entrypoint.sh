@@ -12,22 +12,6 @@ log() {
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [entrypoint] $*"
 }
 
-wait_for_daemon() {
-    local max_wait=${1:-60}
-    local waited=0
-    log "Waiting for daemon (max ${max_wait}s)..."
-    while [ $waited -lt $max_wait ]; do
-        if gt daemon status >/dev/null 2>&1; then
-            log "Daemon ready after ${waited}s"
-            return 0
-        fi
-        sleep 1
-        ((waited++))
-    done
-    log "ERROR: Daemon not ready after ${max_wait}s"
-    return 1
-}
-
 wait_for_session() {
     local session=$1
     local max_wait=${2:-30}
@@ -45,41 +29,6 @@ wait_for_session() {
     return 1
 }
 
-start_daemon() {
-    log "Starting gt daemon..."
-    gt daemon start || {
-        log "Daemon start returned non-zero, checking status..."
-        sleep 2
-        if gt daemon status >/dev/null 2>&1; then
-            log "Daemon is running despite start error"
-            return 0
-        fi
-        return 1
-    }
-}
-
-start_deacon() {
-    log "Starting deacon..."
-    gt deacon start || {
-        log "Deacon start command completed"
-    }
-    wait_for_session "hq-deacon" 30
-}
-
-start_mayor() {
-    log "Starting mayor session..."
-    gt mayor start || {
-        log "Mayor start command completed"
-    }
-    wait_for_session "hq-mayor" 30
-}
-
-start_web_ui() {
-    log "Starting web UI on port 8080..."
-    # Run in foreground to keep container alive
-    exec gt gui --port 8080
-}
-
 run_full_mode() {
     log "=== Starting Full Gas Town Instance ==="
     log "GT_ROOT: ${GT_ROOT:-/gt}"
@@ -88,52 +37,115 @@ run_full_mode() {
     # Ensure we're in GT_ROOT
     cd "${GT_ROOT:-/gt}"
 
-    # Fix git safe.directory for mounted volume
+    # Phase 0: Fix permissions (runs as root before user switch)
+    log "Phase 0: Fixing ownership for gastown user..."
+    chown -R gastown:gastown /gt/mayor 2>/dev/null || true
+    chown -R gastown:gastown /gt/.beads 2>/dev/null || true
+    chown -R gastown:gastown /home/gastown 2>/dev/null || true
+    log "Ownership fixed"
+
+    # Fix git safe.directory for mounted volume (as root and as gastown)
     log "Configuring git safe.directory..."
     git config --global --add safe.directory /gt || true
+    su-exec gastown git config --global --add safe.directory /gt || true
 
     # Initialize beads if needed
     if [ -d "/gt/.beads" ] && [ ! -f "/home/gastown/.config/beads/config.json" ]; then
         log "Initializing beads..."
         mkdir -p /home/gastown/.config/beads
-        bd init /gt/.beads 2>/dev/null || true
+        chown -R gastown:gastown /home/gastown/.config/beads
+        su-exec gastown bd init /gt/.beads 2>/dev/null || true
     fi
 
     # Initialize tmux server with a holder session
     # Note: tmux start-server alone doesn't persist - we need a session
     log "Initializing tmux server..."
-    if ! tmux has-session -t gt-holder 2>/dev/null; then
-        tmux new-session -d -s gt-holder -x 120 -y 30 "while true; do sleep 3600; done"
+    if ! su-exec gastown tmux has-session -t gt-holder 2>/dev/null; then
+        su-exec gastown tmux new-session -d -s gt-holder -x 120 -y 30 "while true; do sleep 3600; done"
         log "Created tmux holder session"
     fi
 
-    # Start daemon first
-    start_daemon
-    wait_for_daemon 60
+    # Phase 1: Start daemon first
+    log "Phase 1: Starting daemon..."
+    su-exec gastown gt daemon start || {
+        log "Daemon start returned non-zero, checking status..."
+        sleep 2
+        if su-exec gastown gt daemon status >/dev/null 2>&1; then
+            log "Daemon is running despite start error"
+        else
+            log "ERROR: Daemon failed to start"
+            return 1
+        fi
+    }
+    # Wait for daemon
+    local max_wait=60 waited=0
+    log "Waiting for daemon (max ${max_wait}s)..."
+    while [ $waited -lt $max_wait ]; do
+        if su-exec gastown gt daemon status >/dev/null 2>&1; then
+            log "Daemon ready after ${waited}s"
+            break
+        fi
+        sleep 1
+        ((waited++))
+    done
+    if [ $waited -ge $max_wait ]; then
+        log "ERROR: Daemon not ready after ${max_wait}s"
+        return 1
+    fi
 
-    # Start deacon (handles patrol, witness/refinery management)
-    start_deacon
+    # Phase 2: Start deacon
+    log "Phase 2: Starting deacon..."
+    su-exec gastown gt deacon start || {
+        log "Deacon start command completed"
+    }
+    wait_for_session "hq-deacon" 30
 
     # Give deacon time to initialize patrol
     log "Allowing deacon patrol initialization..."
     sleep 5
 
-    # Start mayor session (handles coordination and probe responses)
-    start_mayor
+    # Phase 3: Start mayor session
+    log "Phase 3: Starting mayor..."
+    su-exec gastown gt mayor start || {
+        log "Mayor start command completed"
+    }
+    wait_for_session "hq-mayor" 30
+
+    # Phase 5: Bootstrap execution infrastructure (rig + crew)
+    log "Phase 5: Bootstrapping execution infrastructure..."
+    if ! su-exec gastown gt rig list --json 2>/dev/null | jq -e '.rigs | length > 0' >/dev/null 2>&1; then
+        log "No rigs configured — adding bench rig..."
+        su-exec gastown gt rig add bench https://github.com/shisuiki/gastown.git --prefix bn || {
+            log "WARNING: Failed to add bench rig (non-fatal)"
+        }
+    else
+        log "Rig(s) already configured, skipping"
+    fi
+
+    if ! su-exec gastown gt crew list --json 2>/dev/null | jq -e 'length > 0' >/dev/null 2>&1; then
+        log "No crew configured — adding worker crew..."
+        su-exec gastown gt crew add worker --rig bench || {
+            log "WARNING: Failed to add worker crew (non-fatal)"
+        }
+    else
+        log "Crew already configured, skipping"
+    fi
+    log "Execution infrastructure bootstrap complete"
 
     # Show status
     log "=== Gas Town Status ==="
-    gt status || true
+    su-exec gastown gt status || true
 
     log "=== Full Gas Town Ready ==="
 
     # Start web UI in foreground (keeps container alive)
-    start_web_ui
+    log "Starting web UI on port 8080..."
+    exec su-exec gastown gt gui --port 8080
 }
 
 run_gui_only() {
     log "Starting GUI-only mode..."
-    exec gt gui --port 8080
+    exec su-exec gastown gt gui --port 8080
 }
 
 # Main
