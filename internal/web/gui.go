@@ -224,7 +224,9 @@ func (h *GUIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if isStateChangingMethod(r.Method) && !validateCSRF(r) {
+		// CSRF check: exempt Bearer-auth API calls (token proves intent)
+		isBearerAuth := r.Header.Get("Authorization") == "Bearer "+authConfig.token
+		if isStateChangingMethod(r.Method) && !isBearerAuth && !validateCSRF(r) {
 			log.Printf("CSRF failed: missing or invalid token from %s for %s", r.RemoteAddr, r.URL.Path)
 			http.Error(w, "Forbidden: invalid CSRF token", http.StatusForbidden)
 			return
